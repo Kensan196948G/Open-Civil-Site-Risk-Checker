@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  :root{
+    --bg:#e6e9ee;--surface:#ffffff;--surface-2:#fbfcfd;--surface-3:#f4f6f8;--surface-4:#eef0f3;
+    --border:#d3d8e0;--border-2:#e8ebf0;--border-3:#dde2e9;
+    --text:#1d2733;--text-strong:#27313d;--text-2:#5b6573;--text-3:#8a929e;--text-4:#9aa2ae;
+    --accent:#15616d;--accent-soft:#e6f0f1;--accent-border:#b6cdd1;
+    --chrome:#16202e;--chrome-2:#1b2737;--chrome-3:#1f2c3d;--chrome-border:#0b1119;
+    --chrome-text:#ffffff;--chrome-text-2:#aeb9c8;--chrome-text-3:#8b97a8;--chrome-text-4:#6f7c8e;
+    --scroll:#c2c8d2;--shadow:rgba(20,40,70,.08);--map-legend:#ffffff;
+    --warn-bg:#fbf4e6;--warn-border:#ecd9ad;--warn-text:#8a6d1f;--warn-text-2:#7a6a3f;
+    --err-bg:#f7e7e4;--err-border:#e3b5ad;--err-text:#a5341f;
+    --ok-bg:#e3f0e8;--ok-text:#2f6f4f;
+  }
+  :root[data-ocsrc-theme='dark']{
+    --bg:#0e1621;--surface:#16212e;--surface-2:#1a2734;--surface-3:#1f2c3b;--surface-4:#111c28;
+    --border:#2a3a4e;--border-2:#223142;--border-3:#28384b;
+    --text:#e7ecf2;--text-strong:#f1f5f9;--text-2:#a4b0bf;--text-3:#76828f;--text-4:#5d6b7e;
+    --accent:#2f9fb0;--accent-soft:#12303a;--accent-border:#1e4c57;
+    --chrome:#0a121c;--chrome-2:#0d1825;--chrome-3:#16202e;--chrome-border:#060c14;
+    --chrome-text:#e7ecf2;--chrome-text-2:#9fabba;--chrome-text-3:#7d8a9c;--chrome-text-4:#5d6b7e;
+    --scroll:#2a3a4e;--shadow:rgba(0,0,0,.45);--map-legend:#1a2734;
+    --warn-bg:#2e2613;--warn-border:#4a3d1c;--warn-text:#d6b15a;--warn-text-2:#c2a76a;
+    --err-bg:#331a1a;--err-border:#5a2a26;--err-text:#e8897e;
+    --ok-bg:#16301f;--ok-text:#5fc08c;
+  }
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:5px;border:2px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-track{background:transparent}
+  .leaflet-container{font-family:'Noto Sans JP',sans-serif;background:var(--surface-3)}
+  :root[data-ocsrc-theme='dark'] .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.93) contrast(.92)}
+  @keyframes ocsrc-spin{to{transform:rotate(360deg)}}
+  @keyframes ocsrc-slide{from{transform:translateX(28px);opacity:0}to{transform:translateX(0);opacity:1}}
+  @keyframes ocsrc-fade{from{opacity:0}to{opacity:1}}
+</style>
+</helmet>
+<div style="display:flex;flex-direction:column;height:100vh;width:100vw;font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);overflow:hidden">
+
+  <header style="display:flex;align-items:center;gap:14px;height:56px;padding:0 18px;background:var(--chrome);color:var(--chrome-text);flex:none;border-bottom:1px solid var(--chrome-border);z-index:50">
+    <div style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;background:var(--accent);border-radius:5px;font-weight:700;font-size:15px;letter-spacing:-.5px;color:#fff">○</div>
+    <div style="display:flex;flex-direction:column;line-height:1.15">
+      <span style="font-size:14.5px;font-weight:700;letter-spacing:.2px">Open Civil Site Risk Checker</span>
+      <span style="font-size:11px;color:var(--chrome-text-3);font-weight:400">工事候補地リスクチェッカー</span>
+    </div>
+    <div style="flex:1"></div>
+    <sc-if value="{{ ranOnce }}">
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--chrome-3);border:1px solid var(--chrome-border);border-radius:6px;max-width:330px">
+        <span style="font-size:11px;color:#15a3b8;font-weight:700">地点</span>
+        <span style="font-size:12px;color:var(--chrome-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ location.address }}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--chrome-text-3)">{{ location.coordLabel }}</span>
+      </div>
+    </sc-if>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;line-height:1.3">
+      <span style="font-size:9.5px;color:var(--chrome-text-4);letter-spacing:.3px">取得日時</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--chrome-text-2)">{{ fetchedAt }}</span>
+    </div>
+    <button onClick="{{ toggleTheme }}" title="テーマ切替" style="display:flex;align-items:center;gap:7px;padding:6px 12px;background:var(--chrome-3);border:1px solid var(--chrome-border);border-radius:7px;color:var(--chrome-text-2);cursor:pointer;font-family:'Noto Sans JP',sans-serif;font-size:11.5px;font-weight:500">
+      <span style="font-size:13px;line-height:1">{{ themeIcon }}</span><span>{{ themeLabel }}</span>
+    </button>
+    <div style="display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--chrome-3);border-radius:20px;border:1px solid var(--chrome-border)">
+      <span style="width:7px;height:7px;border-radius:50%;background:#3fb27f"></span>
+      <span style="font-size:11px;color:var(--chrome-text-2)">editor</span>
+    </div>
+  </header>
+
+  <div style="display:flex;flex:1;min-height:0">
+
+    <nav style="width:222px;flex:none;background:var(--chrome-2);display:flex;flex-direction:column;border-right:1px solid var(--chrome-border)">
+      <div style="padding:14px 16px 8px;font-size:10px;letter-spacing:1.5px;color:var(--chrome-text-4);font-weight:700">ワークフロー</div>
+      <sc-for list="{{ navItems }}" as="nav" hint-placeholder-count="7">
+        <button onClick="{{ nav.onClick }}" style="{{ nav.style }}">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;opacity:.7;width:46px;text-align:left;flex:none">{{ nav.code }}</span>
+          <span style="flex:1;text-align:left">{{ nav.label }}</span>
+          <sc-if value="{{ nav.badge }}"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:9px;min-width:20px;text-align:center">{{ nav.badge }}</span></sc-if>
+        </button>
+      </sc-for>
+      <div style="flex:1"></div>
+      <div style="margin:14px;padding:11px 12px;background:var(--chrome-3);border:1px solid var(--chrome-border);border-radius:7px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><span style="color:#d98324;font-size:13px">⚠</span><span style="font-size:10.5px;font-weight:700;color:var(--chrome-text-2)">判定は断定しません</span></div>
+        <p style="margin:0;font-size:10.5px;line-height:1.6;color:var(--chrome-text-3)">本ツールは公開データに基づく初期調査支援です。施工可否・安全性・法的適合性を断定するものではありません。</p>
+      </div>
+    </nav>
+
+    <main style="flex:1;position:relative;min-width:0;background:var(--bg)">
+
+      <!-- ============ SCR-000 ダッシュボード ============ -->
+      <sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ true }}">
+      <div data-screen-label="SCR-000 ダッシュボード" style="position:absolute;inset:0;overflow:auto;background:var(--bg)">
+        <div style="max-width:1200px;margin:0 auto;padding:28px 30px 56px">
+          <div style="display:flex;align-items:flex-end;gap:14px;margin-bottom:22px">
+            <div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);letter-spacing:1px;font-weight:600">SCR-000</div>
+              <h1 style="margin:3px 0 4px;font-size:23px;font-weight:700">ダッシュボード</h1>
+              <p style="margin:0;font-size:12.5px;color:var(--text-2)">調査案件の一覧と確認優先度の集計。各案件は公開データに基づく初期確認結果です。</p>
+            </div>
+            <div style="flex:1"></div>
+            <button onClick="{{ goInput }}" style="display:flex;align-items:center;gap:7px;padding:11px 18px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif;box-shadow:0 2px 6px var(--shadow)">＋ 新規調査</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:16px">
+            <sc-for list="{{ kpiCards }}" as="k" hint-placeholder-count="4">
+              <div style="background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:16px 17px;box-shadow:0 1px 3px var(--shadow)">
+                <div style="font-size:11.5px;color:var(--text-3);font-weight:500;margin-bottom:9px">{{ k.label }}</div>
+                <div style="display:flex;align-items:baseline;gap:7px">
+                  <span style="font-size:30px;font-weight:700;font-family:'JetBrains Mono',monospace;color:{{ k.color }};line-height:1">{{ k.value }}</span>
+                  <span style="font-size:12px;color:var(--text-3)">{{ k.unit }}</span>
+                </div>
+                <div style="font-size:11px;color:var(--text-2);margin-top:7px">{{ k.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:18px 20px;margin-bottom:16px;box-shadow:0 1px 3px var(--shadow)">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <h2 style="margin:0;font-size:14px;font-weight:700">全案件の確認優先度分布</h2>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-3)">合計 {{ aggTotal }} 件の確認項目</span>
+            </div>
+            <div style="display:flex;height:30px;border-radius:7px;overflow:hidden;margin-bottom:14px">
+              <sc-for list="{{ aggBar }}" as="seg" hint-placeholder-count="4">
+                <div style="width:{{ seg.pct }};background:{{ seg.color }};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;min-width:0">{{ seg.label }}</div>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:22px;flex-wrap:wrap">
+              <sc-for list="{{ aggLegend }}" as="lg" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="width:11px;height:11px;border-radius:3px;background:{{ lg.color }}"></span>
+                  <span style="font-size:12px;color:var(--text-2)"><b style="color:var(--text);font-weight:700">{{ lg.grade }}</b> {{ lg.name }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:{{ lg.color }}">{{ lg.count }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:11px;overflow:hidden;box-shadow:0 1px 3px var(--shadow)">
+            <div style="display:flex;align-items:center;gap:10px;padding:15px 20px;border-bottom:1px solid var(--border-2)">
+              <h2 style="margin:0;font-size:14px;font-weight:700">調査案件一覧</h2>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-3)">{{ caseCount }} 件</span>
+            </div>
+            <div style="display:grid;grid-template-columns:2.2fr 1.6fr 1fr 1.8fr 1fr 0.8fr;gap:0;padding:10px 20px;background:var(--surface-3);border-bottom:1px solid var(--border-2);font-size:10.5px;font-weight:700;color:var(--text-3);letter-spacing:.3px">
+              <span>案件名</span><span>所在地</span><span>実行日</span><span>確認優先度内訳</span><span>状態</span><span style="text-align:right">操作</span>
+            </div>
+            <sc-for list="{{ caseRows }}" as="c" hint-placeholder-count="6">
+              <div style="display:grid;grid-template-columns:2.2fr 1.6fr 1fr 1.8fr 1fr 0.8fr;gap:0;padding:13px 20px;border-bottom:1px solid var(--border-2);align-items:center">
+                <div><div style="font-size:13px;font-weight:700;color:var(--text-strong)">{{ c.name }}</div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-4)">{{ c.code }}</div></div>
+                <span style="font-size:11.5px;color:var(--text-2)">{{ c.address }}</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-3)">{{ c.date }}</span>
+                <div style="display:flex;gap:5px">
+                  <sc-for list="{{ c.breakdown }}" as="b" hint-placeholder-count="4">
+                    <span style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:5px;background:{{ b.bg }};font-size:10.5px;font-weight:700;opacity:{{ b.opacity }}"><span style="color:{{ b.color }};font-family:'JetBrains Mono',monospace">{{ b.grade }}</span><span style="color:{{ b.color }}">{{ b.n }}</span></span>
+                  </sc-for>
+                </div>
+                <span><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 10px;border-radius:11px;background:{{ c.statusBg }};color:{{ c.statusColor }}">{{ c.statusLabel }}</span></span>
+                <span style="text-align:right"><button onClick="{{ c.onOpen }}" style="padding:6px 13px;background:var(--surface);border:1px solid var(--accent-border);border-radius:6px;font-size:11.5px;font-weight:700;color:var(--accent);cursor:pointer;font-family:'Noto Sans JP',sans-serif">開く</button></span>
+              </div>
+            </sc-for>
+          </div>
+          <p style="margin:14px 2px 0;font-size:11px;color:var(--text-3);line-height:1.6">「開く」で各案件のリスク判定（SCR-002）を表示します。件数はデモデータであり、確認優先度Dは判断材料の不足を意味します。</p>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ SCR-001 地点入力 ============ -->
+      <sc-if value="{{ isInput }}">
+      <div data-screen-label="SCR-001 地点入力" style="position:absolute;inset:0;overflow:auto">
+        <div style="max-width:760px;margin:0 auto;padding:34px 28px 60px">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);letter-spacing:1px;font-weight:600">SCR-001</div>
+          <h1 style="margin:4px 0 6px;font-size:24px;font-weight:700;letter-spacing:.3px">地点を入力して初期確認を開始</h1>
+          <p style="margin:0 0 18px;font-size:13px;color:var(--text-2);line-height:1.7">住所または緯度経度を入力すると、周辺の道路・河川・災害・地形・気象・施設の公開データを横断取得し、確認優先度つきの一覧を生成します。<b style="color:var(--text);font-weight:700">「データなし」は「リスクなし」を意味しません。</b></p>
+
+          <div style="display:flex;gap:8px;margin-bottom:18px">
+            <button onClick="{{ setTypeAddress }}" style="{{ tabAddrStyle }}">住所で入力</button>
+            <button onClick="{{ setTypeCoord }}" style="{{ tabCoordStyle }}">緯度経度で入力</button>
+          </div>
+
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:22px 22px 24px;box-shadow:0 1px 3px var(--shadow)">
+            <sc-if value="{{ isAddressType }}" hint-placeholder-val="{{ true }}">
+            <div style="margin-bottom:18px">
+              <label style="display:block;font-size:12px;font-weight:700;color:var(--text-2);margin-bottom:6px">住所 <span style="color:#c0392b">*</span></label>
+              <input value="{{ form.address }}" onInput="{{ onAddress }}" placeholder="例：東京都千代田区霞が関2丁目1番3号" style="width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:'Noto Sans JP',sans-serif;outline:none;background:var(--surface-2);color:var(--text)"/>
+              <p style="margin:7px 0 0;font-size:11px;color:var(--text-3)">住所は候補のため、地図上で位置を確認してください（Nominatim）。</p>
+            </div>
+            </sc-if>
+            <sc-if value="{{ isCoordType }}">
+            <div style="display:flex;gap:14px;margin-bottom:18px">
+              <div style="flex:1">
+                <label style="display:block;font-size:12px;font-weight:700;color:var(--text-2);margin-bottom:6px">緯度 <span style="color:var(--text-3);font-weight:400">(-90〜90)</span></label>
+                <input value="{{ form.lat }}" onInput="{{ onLat }}" placeholder="35.6745" style="width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:'JetBrains Mono',monospace;outline:none;background:var(--surface-2);color:var(--text)"/>
+              </div>
+              <div style="flex:1">
+                <label style="display:block;font-size:12px;font-weight:700;color:var(--text-2);margin-bottom:6px">経度 <span style="color:var(--text-3);font-weight:400">(-180〜180)</span></label>
+                <input value="{{ form.lon }}" onInput="{{ onLon }}" placeholder="139.7503" style="width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:'JetBrains Mono',monospace;outline:none;background:var(--surface-2);color:var(--text)"/>
+              </div>
+            </div>
+            </sc-if>
+
+            <div style="margin-bottom:20px">
+              <label style="display:block;font-size:12px;font-weight:700;color:var(--text-2);margin-bottom:8px">検索半径</label>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <sc-for list="{{ radiusOptions }}" as="r" hint-placeholder-count="5">
+                  <button onClick="{{ r.onClick }}" style="{{ r.style }}">{{ r.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="margin-bottom:22px">
+              <label style="display:block;font-size:12px;font-weight:700;color:var(--text-2);margin-bottom:8px">確認カテゴリ <span style="color:var(--text-3);font-weight:400">（1つ以上）</span></label>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+                <sc-for list="{{ categoryOptions }}" as="c" hint-placeholder-count="6">
+                  <button onClick="{{ c.onClick }}" style="{{ c.style }}">
+                    <span style="width:16px;height:16px;border-radius:4px;border:1.5px solid {{ c.boxBorder }};background:{{ c.boxBg }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;flex:none">{{ c.check }}</span>
+                    <span>{{ c.label }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+
+            <sc-if value="{{ formError }}">
+              <div style="margin-bottom:14px;padding:10px 12px;background:var(--err-bg);border:1px solid var(--err-border);border-radius:7px;font-size:12.5px;color:var(--err-text)">{{ formError }}</div>
+            </sc-if>
+
+            <div style="display:flex;gap:10px;align-items:center">
+              <button onClick="{{ runAnalysis }}" style="display:flex;align-items:center;gap:8px;padding:12px 22px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif;box-shadow:0 2px 6px var(--shadow)">地点確認を開始 →</button>
+              <button onClick="{{ runSample }}" style="padding:12px 18px;background:var(--surface);color:var(--accent);border:1.5px solid var(--accent);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif">サンプル地点で試す（霞が関）</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ SCR-002 リスク判定 ============ -->
+      <sc-if value="{{ isAnalysis }}">
+      <div data-screen-label="SCR-002 リスク判定" style="position:absolute;inset:0;overflow:auto">
+        <sc-if value="{{ ranOnce }}">
+        <div>
+          <div style="display:flex;height:524px;border-bottom:1px solid var(--border)">
+
+            <div style="width:286px;flex:none;background:var(--surface);border-right:1px solid var(--border);overflow:auto">
+              <div style="padding:14px 16px;border-bottom:1px solid var(--border-2)">
+                <div style="font-size:10px;letter-spacing:1px;color:var(--text-3);font-weight:700;margin-bottom:8px">調査地点</div>
+                <div style="font-size:13px;font-weight:700;line-height:1.5;margin-bottom:6px">{{ location.address }}</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text-2);margin-bottom:4px">{{ location.coordLabel }}</div>
+                <div style="display:flex;gap:8px;font-size:11px;color:var(--text-2)"><span>検索半径</span><span style="font-weight:700;color:var(--accent)">{{ location.radiusLabel }}</span></div>
+                <div style="margin-top:8px;padding:7px 9px;background:var(--surface-3);border-radius:6px;font-size:10.5px;color:var(--text-3);line-height:1.55">住所候補のため、地図上で位置をご確認ください。</div>
+              </div>
+
+              <div style="padding:14px 16px;border-bottom:1px solid var(--border-2)">
+                <div style="font-size:10px;letter-spacing:1px;color:var(--text-3);font-weight:700;margin-bottom:9px">ベースマップ</div>
+                <div style="display:flex;gap:6px">
+                  <sc-for list="{{ baseOptions }}" as="b" hint-placeholder-count="3">
+                    <button onClick="{{ b.onClick }}" style="{{ b.style }}">{{ b.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="padding:14px 16px;border-bottom:1px solid var(--border-2)">
+                <div style="font-size:10px;letter-spacing:1px;color:var(--text-3);font-weight:700;margin-bottom:9px">表示レイヤ</div>
+                <div style="display:flex;flex-direction:column;gap:2px">
+                  <sc-for list="{{ overlayOptions }}" as="o" hint-placeholder-count="6">
+                    <button onClick="{{ o.onClick }}" style="{{ o.style }}">
+                      <span style="width:13px;height:13px;border-radius:3px;border:1.5px solid {{ o.dot }};background:{{ o.fill }};flex:none"></span>
+                      <span style="flex:1;text-align:left">{{ o.label }}</span>
+                      <span style="font-size:9.5px;color:var(--text-4)">{{ o.src }}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="padding:14px 16px">
+                <div style="font-size:10px;letter-spacing:1px;color:var(--text-3);font-weight:700;margin-bottom:9px">データソース接続</div>
+                <sc-for list="{{ sourceMini }}" as="s" hint-placeholder-count="8">
+                  <div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:11px">
+                    <span style="width:7px;height:7px;border-radius:50%;background:{{ s.color }};flex:none"></span>
+                    <span style="flex:1;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.name }}</span>
+                    <span style="font-size:9.5px;color:{{ s.color }};font-weight:600">{{ s.label }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="flex:1;position:relative;min-width:0">
+              <div id="ocsrc-map" style="position:absolute;inset:0"></div>
+              <div style="position:absolute;left:10px;bottom:10px;z-index:500;display:flex;flex-direction:column;gap:5px;pointer-events:none">
+                <sc-for list="{{ mapLegend }}" as="lg" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:6px;background:var(--map-legend);padding:3px 8px;border-radius:4px;font-size:10.5px;box-shadow:0 1px 3px rgba(0,0,0,.15)">
+                    <span style="width:14px;height:3px;background:{{ lg.color }};border-radius:2px"></span><span style="color:var(--text-2)">{{ lg.label }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="width:296px;flex:none;background:var(--surface);border-left:1px solid var(--border);overflow:auto">
+              <div style="padding:15px 16px 10px"><div style="font-size:10px;letter-spacing:1px;color:var(--text-3);font-weight:700">確認優先度サマリー</div></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 16px 14px">
+                <sc-for list="{{ summaryCards }}" as="sc" hint-placeholder-count="4">
+                  <div style="{{ sc.style }}">
+                    <div style="display:flex;align-items:baseline;gap:7px"><span style="font-size:26px;font-weight:700;font-family:'JetBrains Mono',monospace;color:{{ sc.color }};line-height:1">{{ sc.count }}</span><span style="font-size:14px;font-weight:700;color:{{ sc.color }}">{{ sc.grade }}</span></div>
+                    <div style="font-size:10.5px;color:var(--text-2);margin-top:3px">{{ sc.label }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="margin:0 16px 14px;padding:11px 12px;background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:7px">
+                <div style="font-size:10.5px;font-weight:700;color:var(--warn-text);margin-bottom:4px">データ品質メモ</div>
+                <p style="margin:0;font-size:11px;line-height:1.6;color:var(--warn-text-2)">{{ dataQualityNote }}</p>
+              </div>
+              <div style="margin:0 16px 14px">
+                <button onClick="{{ goReport }}" style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:7px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif;margin-bottom:7px">レポートを出力</button>
+                <button onClick="{{ goMemo }}" style="width:100%;padding:10px;background:var(--surface);color:var(--accent);border:1.5px solid var(--border);border-radius:7px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif">AI調査メモを見る</button>
+              </div>
+              <div style="margin:0 16px 18px;padding:10px 12px;background:var(--surface-3);border-radius:7px">
+                <p style="margin:0;font-size:10px;line-height:1.6;color:var(--text-3)">本サマリーは公開データに基づく初期確認です。優先度Dは「リスクが低い」ではなく「判断材料が不足」を意味します。</p>
+              </div>
+            </div>
+          </div>
+
+          <div style="padding:18px 22px">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+              <h2 style="margin:0;font-size:15px;font-weight:700">カテゴリ別確認結果</h2>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-3)">{{ findingCountLabel }}</span>
+            </div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px">
+              <sc-for list="{{ filterChips }}" as="fc" hint-placeholder-count="8">
+                <button onClick="{{ fc.onClick }}" style="{{ fc.style }}">{{ fc.label }} <span style="opacity:.6;font-family:'JetBrains Mono',monospace;font-size:10px">{{ fc.count }}</span></button>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <sc-for list="{{ shownFindings }}" as="f" hint-placeholder-count="6">
+                <div onClick="{{ f.onOpen }}" style="display:flex;gap:14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border-3);border-left:4px solid {{ f.color }};border-radius:8px;cursor:pointer;box-shadow:0 1px 2px var(--shadow)">
+                  <div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;width:54px">
+                    <div style="width:34px;height:34px;border-radius:8px;background:{{ f.bg }};color:{{ f.color }};display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;font-family:'JetBrains Mono',monospace">{{ f.priority }}</div>
+                    <span style="font-size:9px;color:var(--text-4);text-align:center;line-height:1.2">{{ f.categoryLabel }}</span>
+                  </div>
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">
+                      <span style="font-size:13.5px;font-weight:700;color:var(--text-strong)">{{ f.title }}</span>
+                      <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:11px;background:{{ f.statusBg }};color:{{ f.statusColor }};flex:none">{{ f.statusLabel }}</span>
+                      <sc-if value="{{ f.distanceLabel }}"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);font-weight:600">{{ f.distanceLabel }}</span></sc-if>
+                    </div>
+                    <p style="margin:0 0 7px;font-size:12px;line-height:1.6;color:var(--text-2)">{{ f.summary }}</p>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                      <sc-for list="{{ f.evidence }}" as="ev" hint-placeholder-count="1">
+                        <span style="font-size:9.5px;color:var(--text-3);background:var(--surface-3);border:1px solid var(--border-2);padding:2px 7px;border-radius:4px;font-family:'JetBrains Mono',monospace">{{ ev.source_name }}</span>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <div style="flex:none;display:flex;align-items:center;color:var(--text-4);font-size:18px">›</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="padding:0 22px 28px">
+            <div style="background:var(--surface);border:1px solid var(--border-3);border-radius:10px;padding:18px 20px">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                <h2 style="margin:0;font-size:15px;font-weight:700">AI調査メモ</h2>
+                <span style="font-size:10px;font-weight:600;padding:2px 9px;border-radius:11px;background:var(--ok-bg);color:var(--ok-text)">✓ 断定表現チェック済</span>
+                <div style="flex:1"></div>
+                <button onClick="{{ goMemo }}" style="font-size:12px;color:var(--accent);font-weight:700;background:none;border:none;cursor:pointer;font-family:'Noto Sans JP',sans-serif">全文を開く →</button>
+              </div>
+              <p style="margin:0;font-size:12.5px;line-height:1.8;color:var(--text-2)">{{ memoPreview }}</p>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+        <sc-if value="{{ notRun }}">
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--text-3)">
+            <div style="font-size:14px">まだ地点確認が実行されていません。</div>
+            <button onClick="{{ goInput }}" style="padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif">地点入力へ →</button>
+          </div>
+        </sc-if>
+      </div>
+      </sc-if>
+
+      <!-- ============ SCR-004 AI調査メモ ============ -->
+      <sc-if value="{{ isMemo }}">
+      <div data-screen-label="SCR-004 AI調査メモ" style="position:absolute;inset:0;overflow:auto;background:var(--surface-4)">
+        <sc-if value="{{ ranOnce }}">
+        <div style="max-width:840px;margin:0 auto;padding:26px 28px 70px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+            <div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);letter-spacing:1px;font-weight:600">SCR-004</div>
+              <h1 style="margin:2px 0 0;font-size:21px;font-weight:700">AI調査メモ</h1>
+            </div>
+            <div style="flex:1"></div>
+            <span style="font-size:10.5px;font-weight:600;padding:4px 10px;border-radius:13px;background:var(--ok-bg);color:var(--ok-text)">✓ 断定表現チェック済</span>
+            <button onClick="{{ toggleMemoEdit }}" style="{{ memoEditBtnStyle }}">{{ memoEditLabel }}</button>
+            <button onClick="{{ regenMemo }}" style="padding:8px 14px;background:var(--accent);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif">再生成</button>
+          </div>
+
+          <sc-if value="{{ memoEditing }}">
+            <textarea onInput="{{ onMemoInput }}" style="width:100%;height:560px;padding:20px;border:1px solid var(--border);border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.7;resize:vertical;outline:none;background:var(--surface);color:var(--text)">{{ memoText }}</textarea>
+          </sc-if>
+          <sc-if value="{{ memoViewing }}">
+          <div style="background:var(--surface);border:1px solid var(--border-3);border-radius:12px;padding:34px 40px;box-shadow:0 1px 4px var(--shadow)">
+            <sc-for list="{{ memoSections }}" as="ms" hint-placeholder-count="8">
+              <div style="margin-bottom:22px">
+                <h3 style="margin:0 0 9px;font-size:14.5px;font-weight:700;color:var(--text);padding-bottom:7px;border-bottom:1px solid var(--border-2)">{{ ms.heading }}</h3>
+                <sc-for list="{{ ms.lines }}" as="ln" hint-placeholder-count="3">
+                  <div style="{{ ln.style }}">{{ ln.text }}</div>
+                </sc-for>
+              </div>
+            </sc-for>
+            <div style="margin-top:8px;padding:13px 15px;background:var(--surface-3);border-radius:8px;border-left:3px solid var(--text-4)">
+              <p style="margin:0;font-size:11.5px;line-height:1.7;color:var(--text-3)">本メモは公開データに基づく初期調査支援であり、施工可否・法的適合性・安全性を断定するものではありません。各要確認事項には根拠データIDを紐付けています。</p>
+            </div>
+          </div>
+          </sc-if>
+        </div>
+        </sc-if>
+        <sc-if value="{{ notRun }}"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--text-3)"><div style="font-size:14px">地点確認の実行後に生成されます。</div><button onClick="{{ goInput }}" style="padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif">地点入力へ →</button></div></sc-if>
+      </div>
+      </sc-if>
+
+      <!-- ============ SCR-005 レポート出力 ============ -->
+      <sc-if value="{{ isReport }}">
+      <div data-screen-label="SCR-005 レポート出力" style="position:absolute;inset:0;overflow:auto">
+        <sc-if value="{{ ranOnce }}">
+        <div style="display:flex;height:100%;min-height:0">
+          <div style="width:320px;flex:none;background:var(--surface);border-right:1px solid var(--border);overflow:auto;padding:22px 20px">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);letter-spacing:1px;font-weight:600">SCR-005</div>
+            <h1 style="margin:3px 0 18px;font-size:20px;font-weight:700">レポート出力</h1>
+
+            <div style="font-size:11px;font-weight:700;color:var(--text-2);margin-bottom:8px">出力形式</div>
+            <div style="display:flex;gap:7px;margin-bottom:20px">
+              <button onClick="{{ setFmtMd }}" style="{{ fmtMdStyle }}">Markdown</button>
+              <button onClick="{{ setFmtCsv }}" style="{{ fmtCsvStyle }}">CSV</button>
+            </div>
+
+            <div style="font-size:11px;font-weight:700;color:var(--text-2);margin-bottom:8px">公開区分</div>
+            <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:20px">
+              <button onClick="{{ setVisInternal }}" style="{{ visIntStyle }}"><span style="font-weight:700">社外秘 / 社内限定</span><span style="font-size:10.5px;color:var(--text-3)">未公開案件・候補地として扱う</span></button>
+              <button onClick="{{ setVisPublic }}" style="{{ visPubStyle }}"><span style="font-weight:700">社外可</span><span style="font-size:10.5px;color:var(--text-3)">公開可能な情報のみで構成</span></button>
+            </div>
+
+            <div style="font-size:11px;font-weight:700;color:var(--text-2);margin-bottom:8px">含める項目</div>
+            <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:22px">
+              <sc-for list="{{ reportSections }}" as="rs" hint-placeholder-count="6">
+                <div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;color:var(--text-2)"><span style="width:14px;height:14px;border-radius:4px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px">✓</span>{{ rs }}</div>
+              </sc-for>
+            </div>
+
+            <div style="padding:11px 12px;background:var(--surface-3);border-radius:7px;margin-bottom:16px">
+              <div style="font-size:10px;color:var(--text-3);margin-bottom:3px">ファイル名</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-2);word-break:break-all">{{ reportFilename }}</div>
+            </div>
+            <button onClick="{{ downloadReport }}" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif;box-shadow:0 2px 6px var(--shadow)">↓ {{ reportFormat }} をダウンロード</button>
+          </div>
+          <div style="flex:1;min-width:0;overflow:auto;padding:24px 26px;background:var(--surface-4)">
+            <div style="font-size:11px;color:var(--text-3);margin-bottom:10px;font-weight:600">プレビュー</div>
+            <pre style="margin:0;background:var(--surface);border:1px solid var(--border-3);border-radius:10px;padding:24px 26px;font-family:'JetBrains Mono',monospace;font-size:11.5px;line-height:1.75;color:var(--text);white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 4px var(--shadow)">{{ reportPreview }}</pre>
+          </div>
+        </div>
+        </sc-if>
+        <sc-if value="{{ notRun }}"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--text-3)"><div style="font-size:14px">地点確認の実行後に出力できます。</div><button onClick="{{ goInput }}" style="padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif">地点入力へ →</button></div></sc-if>
+      </div>
+      </sc-if>
+
+      <!-- ============ SCR-006 データソース管理 ============ -->
+      <sc-if value="{{ isSources }}">
+      <div data-screen-label="SCR-006 データソース管理" style="position:absolute;inset:0;overflow:auto;padding:26px 28px 50px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);letter-spacing:1px;font-weight:600">SCR-006</div>
+        <h1 style="margin:3px 0 4px;font-size:21px;font-weight:700">データソース管理</h1>
+        <p style="margin:0 0 18px;font-size:12.5px;color:var(--text-2)">API・公開GISデータの接続状態と利用条件を管理します。出典不明データはリスク判定に使用しません。</p>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+          <div style="display:grid;grid-template-columns:2fr 1.2fr 0.8fr 1fr 0.7fr 1.1fr 1fr 0.9fr;gap:0;padding:11px 16px;background:var(--surface-3);border-bottom:1px solid var(--border-2);font-size:10.5px;font-weight:700;color:var(--text-3);letter-spacing:.3px">
+            <span>データソース</span><span>提供元</span><span>種別</span><span>ライセンス</span><span>信頼度</span><span>接続状態</span><span>最終取得</span><span style="text-align:right">操作</span>
+          </div>
+          <sc-for list="{{ sourceRows }}" as="s" hint-placeholder-count="8">
+            <div style="display:grid;grid-template-columns:2fr 1.2fr 0.8fr 1fr 0.7fr 1.1fr 1fr 0.9fr;gap:0;padding:12px 16px;border-bottom:1px solid var(--border-2);align-items:center;font-size:12px;opacity:{{ s.opacity }}">
+              <div><div style="font-weight:700;color:var(--text-strong)">{{ s.name }}</div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-4)">{{ s.key }}</div></div>
+              <span style="color:var(--text-2);font-size:11px">{{ s.provider }}</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-3)">{{ s.type }}</span>
+              <span style="font-size:10.5px;color:var(--text-2)">{{ s.license }}</span>
+              <span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:{{ s.rankColor }}">{{ s.rank }}</span></span>
+              <span><span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:{{ s.statColor }}"><span style="width:7px;height:7px;border-radius:50%;background:{{ s.statColor }}"></span>{{ s.statLabel }}</span></span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-3)">{{ s.lastFetch }}</span>
+              <span style="text-align:right"><button onClick="{{ s.onTest }}" style="padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:10.5px;font-weight:600;color:var(--accent);cursor:pointer;font-family:'Noto Sans JP',sans-serif">{{ s.testLabel }}</button></span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ SCR-007 取得ログ ============ -->
+      <sc-if value="{{ isLogs }}">
+      <div data-screen-label="SCR-007 取得ログ" style="position:absolute;inset:0;overflow:auto;padding:26px 28px 50px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);letter-spacing:1px;font-weight:600">SCR-007</div>
+        <h1 style="margin:3px 0 4px;font-size:21px;font-weight:700">取得ログ</h1>
+        <p style="margin:0 0 18px;font-size:12.5px;color:var(--text-2)">API実行履歴です。レート制限・認証エラー・タイムアウトを区別して記録します。</p>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;font-family:'JetBrains Mono',monospace">
+          <div style="display:grid;grid-template-columns:1.2fr 1.3fr 2.4fr 0.7fr 0.9fr 0.8fr 2fr;gap:0;padding:10px 16px;background:var(--surface-3);border-bottom:1px solid var(--border-2);font-size:10px;font-weight:600;color:var(--text-3);letter-spacing:.3px">
+            <span>fetched_at</span><span>source_key</span><span>endpoint</span><span>code</span><span>status</span><span>ms</span><span>error</span>
+          </div>
+          <sc-for list="{{ logRows }}" as="l" hint-placeholder-count="9">
+            <div style="display:grid;grid-template-columns:1.2fr 1.3fr 2.4fr 0.7fr 0.9fr 0.8fr 2fr;gap:0;padding:9px 16px;border-bottom:1px solid var(--border-2);font-size:10.5px;align-items:center">
+              <span style="color:var(--text-3)">{{ l.time }}</span>
+              <span style="color:var(--text)">{{ l.source }}</span>
+              <span style="color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ l.endpoint }}</span>
+              <span style="color:{{ l.codeColor }}">{{ l.code }}</span>
+              <span style="color:{{ l.statColor }};font-weight:600">{{ l.status }}</span>
+              <span style="color:var(--text-3)">{{ l.ms }}</span>
+              <span style="color:var(--err-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ l.error }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ SCR-003 リスク詳細 drawer ============ -->
+      <sc-if value="{{ detailFinding }}">
+      <div onClick="{{ closeFinding }}" style="position:absolute;inset:0;background:rgba(8,14,22,.42);z-index:900;animation:ocsrc-fade .15s ease"></div>
+      <div style="position:absolute;top:0;right:0;bottom:0;width:440px;background:var(--surface);z-index:901;box-shadow:-6px 0 24px rgba(8,14,22,.3);overflow:auto;animation:ocsrc-slide .22s cubic-bezier(.2,.7,.3,1)">
+        <div style="position:sticky;top:0;background:var(--surface);padding:18px 22px 12px;border-bottom:1px solid var(--border-2);z-index:2">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-3);letter-spacing:1px">SCR-003 / {{ detailFinding.categoryLabel }}</div>
+            <div style="flex:1"></div>
+            <button onClick="{{ closeFinding }}" style="width:28px;height:28px;border:none;background:var(--surface-3);border-radius:7px;font-size:16px;color:var(--text-3);cursor:pointer;line-height:1">✕</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:11px;margin-top:10px">
+            <div style="width:42px;height:42px;border-radius:9px;background:{{ detailFinding.bg }};color:{{ detailFinding.color }};display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;font-family:'JetBrains Mono',monospace;flex:none">{{ detailFinding.priority }}</div>
+            <div>
+              <h2 style="margin:0;font-size:16px;font-weight:700;line-height:1.4">{{ detailFinding.title }}</h2>
+              <div style="font-size:11px;color:{{ detailFinding.color }};font-weight:600">{{ detailFinding.priorityName }}</div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:18px 22px 40px">
+          <div style="display:flex;gap:8px;margin-bottom:16px">
+            <span style="font-size:11px;font-weight:600;padding:4px 11px;border-radius:12px;background:{{ detailFinding.statusBg }};color:{{ detailFinding.statusColor }}">{{ detailFinding.statusLabel }}</span>
+            <sc-if value="{{ detailFinding.distanceLabel }}"><span style="font-size:11px;font-weight:600;padding:4px 11px;border-radius:12px;background:var(--accent-soft);color:var(--accent);font-family:'JetBrains Mono',monospace">地点から {{ detailFinding.distanceLabel }}</span></sc-if>
+          </div>
+
+          <div style="font-size:10px;letter-spacing:1px;color:var(--text-3);font-weight:700;margin-bottom:6px">概要</div>
+          <p style="margin:0 0 18px;font-size:13px;line-height:1.8;color:var(--text)">{{ detailFinding.summary }}</p>
+
+          <div style="font-size:10px;letter-spacing:1px;color:var(--text-3);font-weight:700;margin-bottom:8px">根拠データ</div>
+          <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:18px">
+            <sc-for list="{{ detailFinding.evidence }}" as="ev" hint-placeholder-count="1">
+              <div style="border:1px solid var(--border-2);border-radius:9px;padding:13px 14px;background:var(--surface-2)">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                  <span style="font-size:12px;font-weight:700;color:var(--text-strong)">{{ ev.layer_name }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-4);background:var(--surface-3);padding:1px 6px;border-radius:4px">{{ ev.source_key }}</span>
+                </div>
+                <div style="display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:11px">
+                  <span style="color:var(--text-3)">出典</span><span style="color:var(--text-2)">{{ ev.attribution }}</span>
+                  <span style="color:var(--text-3)">取得日時</span><span style="color:var(--text-2);font-family:'JetBrains Mono',monospace;font-size:10.5px">{{ ev.fetched_at }}</span>
+                  <span style="color:var(--text-3)">データ更新日</span><span style="color:var(--text-2);font-family:'JetBrains Mono',monospace;font-size:10.5px">{{ ev.source_updated_at }}</span>
+                  <span style="color:var(--text-3)">属性</span><span style="color:var(--text-2);font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.6">{{ ev.propsLabel }}</span>
+                </div>
+                <sc-if value="{{ ev.quality_note }}"><div style="margin-top:8px;font-size:10.5px;color:var(--warn-text);background:var(--warn-bg);padding:6px 9px;border-radius:5px">品質メモ：{{ ev.quality_note }}</div></sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="padding:12px 14px;background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:8px;margin-bottom:18px">
+            <div style="font-size:10.5px;font-weight:700;color:var(--warn-text);margin-bottom:5px">⚠ 注意事項</div>
+            <p style="margin:0;font-size:11.5px;line-height:1.7;color:var(--warn-text-2)">{{ detailFinding.caution }}</p>
+          </div>
+
+          <div style="font-size:10px;letter-spacing:1px;color:var(--text-3);font-weight:700;margin-bottom:6px">ユーザーコメント</div>
+          <textarea placeholder="確認結果へのコメントを記入..." style="width:100%;height:80px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-family:'Noto Sans JP',sans-serif;font-size:12px;resize:vertical;outline:none;background:var(--surface-2);color:var(--text)"></textarea>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button style="flex:1;padding:9px;background:var(--accent);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif">確認済みとして登録</button>
+            <button style="padding:9px 14px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;font-weight:600;color:var(--text-2);cursor:pointer;font-family:'Noto Sans JP',sans-serif">コメント保存</button>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ Loading overlay ============ -->
+      <sc-if value="{{ running }}">
+      <div style="position:absolute;inset:0;background:rgba(8,14,22,.6);z-index:950;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);animation:ocsrc-fade .2s ease">
+        <div style="width:420px;background:var(--surface);border-radius:14px;padding:26px 28px;box-shadow:0 16px 48px rgba(8,14,22,.45)">
+          <div style="display:flex;align-items:center;gap:11px;margin-bottom:6px">
+            <div style="width:18px;height:18px;border:2.5px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:ocsrc-spin .8s linear infinite"></div>
+            <h2 style="margin:0;font-size:16px;font-weight:700;color:var(--text)">地点確認を実行中</h2>
+          </div>
+          <p style="margin:0 0 16px;font-size:11.5px;color:var(--text-3);line-height:1.6">外部APIの取得状況により、部分結果から表示します。</p>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <sc-for list="{{ fetchSteps }}" as="st" hint-placeholder-count="8">
+              <div style="display:flex;align-items:center;gap:10px;font-size:12px">
+                <span style="width:18px;height:18px;border-radius:50%;background:{{ st.bg }};color:{{ st.color }};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex:none">{{ st.icon }}</span>
+                <span style="flex:1;color:var(--text-2)">{{ st.name }}</span>
+                <span style="font-size:10px;font-weight:600;color:{{ st.color }}">{{ st.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+    </main>
+  </div>
+
+  <footer style="flex:none;height:26px;background:var(--chrome);display:flex;align-items:center;padding:0 16px;gap:14px;border-top:1px solid var(--chrome-border)">
+    <span style="font-size:10px;color:var(--chrome-text-4);font-family:'JetBrains Mono',monospace">OCSRC v1.1</span>
+    <span style="font-size:10px;color:var(--chrome-text-3)">公開データに基づく初期調査支援 — 施工可否・安全性を断定しません</span>
+    <div style="flex:1"></div>
+    <span style="font-size:10px;color:var(--chrome-text-4)">出典：国土地理院 / OpenStreetMap / Open-Meteo / 国土数値情報 / ハザードマップポータル</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;initialScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dashboard&quot;,&quot;input&quot;,&quot;analysis&quot;,&quot;aimemo&quot;,&quot;report&quot;,&quot;sources&quot;,&quot;logs&quot;],&quot;default&quot;:&quot;dashboard&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;defaultTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;,&quot;auto&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;defaultRadius&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;100&quot;,&quot;250&quot;,&quot;500&quot;,&quot;1000&quot;,&quot;3000&quot;],&quot;default&quot;:&quot;500&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;showFailedSources&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    const r = (props && props.defaultRadius) ? parseInt(props.defaultRadius,10) : 500;
+    const initScreen = (props && props.initialScreen) || 'dashboard';
+    let theme = (props && props.defaultTheme) || 'light';
+    if(theme==='auto'){ try{ theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light'; }catch(e){ theme='light'; } }
+    this.SAMPLE = { address:'東京都千代田区霞が関2丁目1番3号', lat:35.6745, lon:139.7503 };
+    this.showFailed = (props && props.showFailedSources !== undefined) ? props.showFailedSources : true;
+    this.state = {
+      screen: initScreen,
+      theme: theme,
+      form: { type:'address', address:'', lat:'', lon:'', radius:r,
+              categories:{roads:true,rivers:true,hazard:true,terrain:true,weather:true,facilities:true} },
+      formError:'',
+      running:false, ranOnce:false,
+      location:null,
+      baseLayer:'pale',
+      overlays:{ range:true, roads:true, water:true, flood:false, sediment:false, hillshade:false, facilities:true },
+      categoryFilter:'all',
+      selectedFinding:null,
+      memoEditing:false,
+      memoText:'',
+      reportFormat:'md', reportVisibility:'internal',
+      fetchSteps:[],
+      sourcesState:null
+    };
+    this.fetchedAt = '2026-06-18 10:03 JST';
+    this.PRIO_LIGHT = {
+      A:{name:'専門確認優先',color:'#c0392b',bg:'#f7e7e4'},
+      B:{name:'追加確認推奨',color:'#bf7d1c',bg:'#f8efdc'},
+      C:{name:'参考情報あり',color:'#2563a8',bg:'#e6eef9'},
+      D:{name:'データ不足',color:'#7b8494',bg:'#eef0f3'}
+    };
+    this.PRIO_DARK = {
+      A:{name:'専門確認優先',color:'#ef8c7d',bg:'#3a201c'},
+      B:{name:'追加確認推奨',color:'#e0ab55',bg:'#372c14'},
+      C:{name:'参考情報あり',color:'#6fa8e0',bg:'#1a2a3f'},
+      D:{name:'データ不足',color:'#9aa6b5',bg:'#222e3c'}
+    };
+    this.STATUS_LIGHT = {
+      found:{label:'該当あり',color:'#2f6f4f',bg:'#e3f0e8'},
+      not_found:{label:'該当なし',color:'#5a6472',bg:'#eef0f3'},
+      no_data:{label:'データ未取得',color:'#8a6d1f',bg:'#f6efd9'},
+      failed:{label:'取得失敗',color:'#b23b3b',bg:'#f7e6e6'}
+    };
+    this.STATUS_DARK = {
+      found:{label:'該当あり',color:'#5fc08c',bg:'#16301f'},
+      not_found:{label:'該当なし',color:'#9aa6b5',bg:'#222e3c'},
+      no_data:{label:'データ未取得',color:'#d6b15a',bg:'#2e2613'},
+      failed:{label:'取得失敗',color:'#e8897e',bg:'#331a1a'}
+    };
+    this.CASE_STATUS_LIGHT = {
+      done:{label:'完了',color:'#2f6f4f',bg:'#e3f0e8'},
+      progress:{label:'確認中',color:'#15616d',bg:'#e6f0f1'},
+      review:{label:'要確認',color:'#bf7d1c',bg:'#f8efdc'},
+      draft:{label:'下書き',color:'#7b8494',bg:'#eef0f3'}
+    };
+    this.CASE_STATUS_DARK = {
+      done:{label:'完了',color:'#5fc08c',bg:'#16301f'},
+      progress:{label:'確認中',color:'#4fc3d4',bg:'#12303a'},
+      review:{label:'要確認',color:'#e0ab55',bg:'#372c14'},
+      draft:{label:'下書き',color:'#9aa6b5',bg:'#222e3c'}
+    };
+    this.CASES = [
+      {id:'c1',name:'霞が関2丁目 候補地A',code:'OCSRC-2026-018',address:'千代田区霞が関2丁目',lat:35.6745,lon:139.7503,radius:500,date:'2026-06-18',status:'progress',counts:{A:1,B:3,C:4,D:2}},
+      {id:'c2',name:'豊洲6丁目 埠頭再整備',code:'OCSRC-2026-015',address:'江東区豊洲6丁目',lat:35.6553,lon:139.7967,radius:1000,date:'2026-06-15',status:'done',counts:{A:2,B:2,C:3,D:1}},
+      {id:'c3',name:'多摩川緑地 橋梁補修',code:'OCSRC-2026-012',address:'大田区下丸子',lat:35.5739,lon:139.6890,radius:500,date:'2026-06-12',status:'review',counts:{A:3,B:4,C:2,D:0}},
+      {id:'c4',name:'八王子南口 道路拡幅',code:'OCSRC-2026-010',address:'八王子市子安町',lat:35.6557,lon:139.3389,radius:250,date:'2026-06-10',status:'done',counts:{A:0,B:2,C:5,D:1}},
+      {id:'c5',name:'浦安日の出 護岸補強',code:'OCSRC-2026-008',address:'浦安市日の出',lat:35.6360,lon:139.9170,radius:1000,date:'2026-06-08',status:'draft',counts:{A:1,B:1,C:2,D:3}},
+      {id:'c6',name:'横浜本牧 物流倉庫',code:'OCSRC-2026-005',address:'横浜市中区本牧',lat:35.4290,lon:139.6660,radius:3000,date:'2026-06-05',status:'done',counts:{A:0,B:3,C:4,D:1}}
+    ];
+    this.SOURCES = [
+      {key:'nominatim',name:'OpenStreetMap / Nominatim',provider:'OSMF',type:'api',license:'ODbL',rank:'A',stat:'success',last:'10:01:58',enabled:true},
+      {key:'osm_overpass',name:'OpenStreetMap / Overpass',provider:'OSMF',type:'api',license:'ODbL',rank:'B',stat:'success',last:'10:02:14',enabled:true},
+      {key:'open_meteo',name:'Open-Meteo Forecast',provider:'Open-Meteo',type:'api',license:'CC BY 4.0',rank:'A',stat:'success',last:'10:02:31',enabled:true},
+      {key:'ksj',name:'国土数値情報',provider:'国土交通省',type:'db',license:'KSJ規約',rank:'A',stat:'success',last:'10:02:40',enabled:true},
+      {key:'hazard_portal',name:'ハザードマップポータル',provider:'国土地理院',type:'tile',license:'出典明示',rank:'A',stat:'success',last:'10:02:49',enabled:true},
+      {key:'gsi_tile',name:'地理院タイル',provider:'国土地理院',type:'tile',license:'地理院条件',rank:'A',stat:'success',last:'10:02:55',enabled:true},
+      {key:'plateau',name:'PLATEAU',provider:'国土交通省',type:'api',license:'CC BY 4.0',rank:'B',stat:'failed',last:'—',enabled:true},
+      {key:'xroad',name:'xROAD',provider:'国土交通省',type:'api',license:'規約同意要',rank:'C',stat:'skipped',last:'—',enabled:false}
+    ];
+    this.LOGS = [
+      {time:'10:01:58',source:'nominatim',endpoint:'GET /search?q=霞が関',code:'200',status:'success',ms:'412',error:'—'},
+      {time:'10:02:14',source:'osm_overpass',endpoint:'POST /api/interpreter',code:'200',status:'success',ms:'1840',error:'—'},
+      {time:'10:02:31',source:'open_meteo',endpoint:'GET /v1/forecast',code:'200',status:'success',ms:'238',error:'—'},
+      {time:'10:02:40',source:'ksj',endpoint:'PostGIS ST_DWithin (river)',code:'—',status:'success',ms:'96',error:'—'},
+      {time:'10:02:49',source:'hazard_portal',endpoint:'GET /raster/flood_l2/{z}/{x}/{y}',code:'200',status:'success',ms:'620',error:'—'},
+      {time:'10:02:55',source:'gsi_tile',endpoint:'GET /xyz/pale/{z}/{x}/{y}',code:'200',status:'success',ms:'180',error:'—'},
+      {time:'10:03:08',source:'plateau',endpoint:'GET /api/v1/datasets?bbox=...',code:'—',status:'timeout',ms:'20000',error:'Read timed out after 20s'},
+      {time:'10:03:09',source:'xroad',endpoint:'GET /api/traffic',code:'401',status:'skipped',ms:'—',error:'利用規約未同意のためスキップ'},
+      {time:'10:03:11',source:'open_meteo',endpoint:'GET /v1/forecast (retry)',code:'429',status:'failed',ms:'88',error:'Rate limit — cached応答を使用'}
+    ];
+    this.ALL_FINDINGS = [
+      {id:'haz-1',category:'hazard',priority:'A',title:'洪水浸水想定区域と重なる可能性',
+       summary:'ハザードマップポータルの洪水浸水想定（想定最大規模）レイヤと地点が重なる可能性があります。元データ・自治体公表資料での確認を優先してください。',
+       status:'found',distance_m:null,intersects:true,
+       caution:'タイル表示は視覚確認向けです。厳密な判定には自治体公表の浸水想定区域図を確認してください。',
+       evidence:[{source_key:'hazard_portal',layer_name:'洪水浸水想定区域（L2）',attribution:'ハザードマップポータルサイト',fetched_at:'2026-06-18 10:02:49',source_updated_at:'2023年度版',quality_note:'タイル重ね合わせによる視覚判定。元データ確認が必要',props:{depth:'0.5〜3.0m',scenario:'想定最大規模'}}]},
+      {id:'river-1',category:'rivers',priority:'B',title:'水路・濠が500m以内に存在',
+       summary:'検索半径500m以内に水面（外濠・桜田濠）があります。現地条件と河川・水路管理者資料の確認を推奨します。',
+       status:'found',distance_m:182,
+       caution:'公開データの整備時点と現況が異なる可能性があります。護岸・暗渠区間の有無を確認してください。',
+       evidence:[{source_key:'ksj',layer_name:'河川データ（水域）',attribution:'国土数値情報',fetched_at:'2026-06-18 10:02:40',source_updated_at:'2022年度',quality_note:'整備年度により精度差あり',props:{type:'濠/水路',width:'—'}},{source_key:'osm_overpass',layer_name:'waterway',attribution:'© OpenStreetMap contributors',fetched_at:'2026-06-18 10:02:14',source_updated_at:'—',quality_note:'',props:{waterway:'moat'}}]},
+      {id:'wx-1',category:'weather',priority:'B',title:'7日予報に強雨予測あり',
+       summary:'Open-Meteoの予報で、3日後に時間雨量の大きい降水が見込まれます。搬入・養生・排水計画で留意してください。',
+       status:'found',distance_m:null,
+       caution:'予報は取得時刻により変化します。取得日時：2026-06-18 10:02:31。再確認を推奨します。',
+       evidence:[{source_key:'open_meteo',layer_name:'hourly precipitation / wind',attribution:'Open-Meteo (CC BY 4.0)',fetched_at:'2026-06-18 10:02:31',source_updated_at:'予報モデル更新：06:00',quality_note:'予報値のため変動',props:{max_precip:'12mm/h (D+3)',max_gust:'18m/s'}}]},
+      {id:'fac-1',category:'facilities',priority:'B',title:'官公庁・学校等が近接',
+       summary:'検索半径内に官公庁施設および学校が含まれます。騒音・振動・通学路・警備動線への配慮確認を推奨します。',
+       status:'found',distance_m:230,
+       caution:'施設種別はOSM属性に基づく参考情報です。用途・運用時間は現地確認が必要です。',
+       evidence:[{source_key:'osm_overpass',layer_name:'amenity (school / government)',attribution:'© OpenStreetMap contributors',fetched_at:'2026-06-18 10:02:14',source_updated_at:'—',quality_note:'網羅性に地域差あり',props:{amenity:'school, government',count:'6件'}}]},
+      {id:'road-1',category:'roads',priority:'C',title:'主要道路（国道指定）が近接',
+       summary:'検索半径内に国道として指定された幹線道路があります。搬入経路・交通規制・占用許可の確認を推奨します。',
+       status:'found',distance_m:90,
+       caution:'OSMの道路属性は地域差があります。幅員・規制は道路管理者資料で確認してください。',
+       evidence:[{source_key:'osm_overpass',layer_name:'highway=primary',attribution:'© OpenStreetMap contributors',fetched_at:'2026-06-18 10:02:14',source_updated_at:'—',quality_note:'',props:{name:'国道1号（桜田通り）',lanes:'4'}}]},
+      {id:'fac-2',category:'facilities',priority:'C',title:'地下鉄駅が近接',
+       summary:'地下鉄駅が約180mにあります。資材搬入時間帯・歩行者動線・地下構造物の確認を推奨します。',
+       status:'found',distance_m:180,
+       caution:'地下構造物の位置・深さは公開データに含まれません。施設管理者への確認が必要です。',
+       evidence:[{source_key:'osm_overpass',layer_name:'railway=station',attribution:'© OpenStreetMap contributors',fetched_at:'2026-06-18 10:02:14',source_updated_at:'—',quality_note:'',props:{station:'霞ケ関駅',operator:'東京メトロ'}}]},
+      {id:'terr-1',category:'terrain',priority:'C',title:'参考標高 約24m／台地〜低地境界付近',
+       summary:'地理院標高タイルによる参考標高は約24mです。周辺との比高・傾斜・微地形は現地確認が必要です。',
+       status:'found',distance_m:null,
+       caution:'標高は参考値です。盛土・切土履歴や地盤条件は地質資料・ボーリングデータで確認してください。',
+       evidence:[{source_key:'gsi_tile',layer_name:'標高タイル(DEM5A)',attribution:'国土地理院',fetched_at:'2026-06-18 10:02:55',source_updated_at:'随時更新',quality_note:'タイル補間値',props:{elevation:'約24m',landform:'台地縁辺'}}]},
+      {id:'haz-2',category:'hazard',priority:'C',title:'土砂災害警戒区域：該当データなし',
+       summary:'検索半径内に土砂災害警戒区域の該当データは確認されませんでした。これはデータ整備範囲内での結果です。',
+       status:'not_found',distance_m:null,
+       caution:'「該当なし」はデータ整備範囲内での結果であり、リスクがないことを意味しません。未整備の可能性は排除できません。',
+       evidence:[{source_key:'hazard_portal',layer_name:'土砂災害警戒区域',attribution:'ハザードマップポータルサイト',fetched_at:'2026-06-18 10:02:49',source_updated_at:'2023年度版',quality_note:'整備済範囲内で該当なし',props:{result:'該当ポリゴンなし'}}]},
+      {id:'dq-1',category:'data_quality',priority:'D',title:'PLATEAUデータ：取得失敗',
+       summary:'PLATEAUアダプタでタイムアウトが発生しました。3D都市モデルによる建物・周辺密度確認は未取得です。判断材料が不足しています。',
+       status:'failed',distance_m:null,
+       caution:'再実行するか、対象地域のデータ整備状況を確認してください。Dは判断材料不足を意味します。',
+       evidence:[{source_key:'plateau',layer_name:'3D都市モデル(bldg)',attribution:'PLATEAU / 国土交通省',fetched_at:'—',source_updated_at:'—',quality_note:'Read timeout (20s)',props:{error:'timeout'}}]},
+      {id:'dq-2',category:'data_quality',priority:'D',title:'xROAD連携：未連携',
+       summary:'xROAD APIは利用規約同意が必要なため未連携です。道路交通量・旅行速度・道路施設情報は未取得です。',
+       status:'no_data',distance_m:null,
+       caution:'API利用規約への同意後に連携できます。対象道路範囲（直轄国道等）に注意してください。',
+       evidence:[{source_key:'xroad',layer_name:'交通量API（候補）',attribution:'xROAD / 国土交通省',fetched_at:'—',source_updated_at:'—',quality_note:'利用規約未同意',props:{status:'skipped'}}]}
+    ];
+  }
+
+  componentDidMount(){
+    try{ document.documentElement.setAttribute('data-ocsrc-theme', this.state.theme); }catch(e){}
+    if(this.state.screen !== 'input' && this.state.screen !== 'dashboard'){ this.silentRun(); }
+  }
+  componentDidUpdate(prevProps, prevState){
+    if(prevState.screen==='analysis' && this.state.screen!=='analysis' && this._map){
+      try{ this._map.remove(); }catch(e){} this._map=null;
+    }
+    if(this.state.screen==='analysis' && this.state.ranOnce){
+      if(!this._map){ this.initMap(); }
+      else { setTimeout(()=>{ try{ this._map.invalidateSize(); }catch(e){} },60); }
+    }
+  }
+
+  curPrio(){ return this.state.theme==='dark'?this.PRIO_DARK:this.PRIO_LIGHT; }
+  curStatus(){ return this.state.theme==='dark'?this.STATUS_DARK:this.STATUS_LIGHT; }
+  curCaseStatus(){ return this.state.theme==='dark'?this.CASE_STATUS_DARK:this.CASE_STATUS_LIGHT; }
+
+  toggleTheme(){
+    this.setState(st=>{ const t=st.theme==='dark'?'light':'dark'; try{ document.documentElement.setAttribute('data-ocsrc-theme',t); }catch(e){} return {theme:t}; });
+  }
+
+  getFindings(){
+    return this.showFailed ? this.ALL_FINDINGS : this.ALL_FINDINGS.filter(f=>f.category!=='data_quality');
+  }
+  catLabel(c){ return {roads:'周辺道路',rivers:'河川・水域',hazard:'災害関連',terrain:'地形',weather:'気象',facilities:'周辺施設',data_quality:'データ品質'}[c]||c; }
+  distLabel(f){ if(f.distance_m!=null) return '約'+Math.round(f.distance_m)+'m'; if(f.intersects) return '重なりあり'; return null; }
+  decorate(f){
+    const p=this.curPrio()[f.priority], s=this.curStatus()[f.status];
+    return Object.assign({},f,{
+      color:p.color, bg:p.bg, priorityName:p.name,
+      statusLabel:s.label, statusColor:s.color, statusBg:s.bg,
+      categoryLabel:this.catLabel(f.category),
+      distanceLabel:this.distLabel(f),
+      evidence:f.evidence.map(ev=>Object.assign({},ev,{source_name:this.srcShort(ev.source_key),propsLabel:Object.entries(ev.props||{}).map(([k,v])=>k+': '+v).join(' / ')||'—'}))
+    });
+  }
+  srcShort(k){ return {nominatim:'Nominatim',osm_overpass:'Overpass',open_meteo:'Open-Meteo',ksj:'国土数値情報',hazard_portal:'ハザードマップ',gsi_tile:'地理院タイル',plateau:'PLATEAU',xroad:'xROAD'}[k]||k; }
+
+  go(s){ this.setState({screen:s, selectedFinding:null}, ()=>{ if(s==='analysis'&&this.state.ranOnce) setTimeout(()=>this.ensureMap(),80); }); }
+  ensureMap(){
+    if(this.state.screen!=='analysis' || !this.state.ranOnce) return;
+    const el=document.getElementById('ocsrc-map');
+    if(!el || !window.L){ this._mapTries=(this._mapTries||0)+1; if(this._mapTries<40) setTimeout(()=>this.ensureMap(),150); return; }
+    if(this._map){ try{ this._map.invalidateSize(); }catch(e){} return; }
+    this.initMap();
+  }
+
+  openCase(c){
+    if(this._map){ try{ this._map.remove(); }catch(e){} this._map=null; }
+    this.setState({
+      ranOnce:true, screen:'analysis', selectedFinding:null,
+      location:{ address:c.address+'（'+c.name+'）', lat:c.lat, lon:c.lon, radius:c.radius,
+                 coordLabel:c.lat.toFixed(5)+', '+c.lon.toFixed(5), radiusLabel:this.radLabel(c.radius) }
+    }, ()=>setTimeout(()=>this.ensureMap(),120));
+  }
+
+  onAddress(e){ const v=e.target.value; this.setState(st=>({form:Object.assign({},st.form,{address:v}),formError:''})); }
+  onLat(e){ const v=e.target.value; this.setState(st=>({form:Object.assign({},st.form,{lat:v}),formError:''})); }
+  onLon(e){ const v=e.target.value; this.setState(st=>({form:Object.assign({},st.form,{lon:v}),formError:''})); }
+  setType(t){ this.setState(st=>({form:Object.assign({},st.form,{type:t}),formError:''})); }
+  setRadius(r){ this.setState(st=>({form:Object.assign({},st.form,{radius:r})})); }
+  toggleCat(k){ this.setState(st=>{ const c=Object.assign({},st.form.categories); c[k]=!c[k]; return {form:Object.assign({},st.form,{categories:c})}; }); }
+
+  silentRun(){
+    const f=this.SAMPLE;
+    this.setState({ ranOnce:true, running:false,
+      location:{ address:f.address, lat:f.lat, lon:f.lon, radius:this.state.form.radius,
+                 coordLabel:f.lat.toFixed(5)+', '+f.lon.toFixed(5),
+                 radiusLabel:this.radLabel(this.state.form.radius) } },
+      ()=>{ if(this.state.screen==='analysis') setTimeout(()=>this.ensureMap(),120); });
+  }
+  radLabel(r){ return r>=1000 ? (r/1000)+'km' : r+'m'; }
+
+  validate(){
+    const fm=this.state.form;
+    if(fm.type==='address'){ if(!fm.address.trim()) return '住所を入力してください（または緯度経度入力に切替）。'; }
+    else {
+      const la=parseFloat(fm.lat), lo=parseFloat(fm.lon);
+      if(isNaN(la)||isNaN(lo)) return '緯度・経度を数値で入力してください。';
+      if(la<-90||la>90) return '緯度は -90〜90 の範囲で入力してください。';
+      if(lo<-180||lo>180) return '経度は -180〜180 の範囲で入力してください。';
+    }
+    if(!Object.values(fm.categories).some(v=>v)) return '確認カテゴリを1つ以上選択してください。';
+    return '';
+  }
+  runSample(){
+    this.setState(st=>({form:Object.assign({},st.form,{type:'address',address:this.SAMPLE.address})}), ()=>this.startRun(true));
+  }
+  runAnalysis(){
+    const err=this.validate();
+    if(err){ this.setState({formError:err}); return; }
+    this.startRun(false);
+  }
+  startRun(isSample){
+    const fm=this.state.form;
+    let lat,lon,addr;
+    if(isSample || fm.type==='address'){ lat=this.SAMPLE.lat; lon=this.SAMPLE.lon; addr= fm.address.trim()||this.SAMPLE.address; if(fm.type==='coord'){ lat=parseFloat(fm.lat); lon=parseFloat(fm.lon);} }
+    else { lat=parseFloat(fm.lat); lon=parseFloat(fm.lon); addr='緯度経度入力 '+lat.toFixed(5)+', '+lon.toFixed(5); }
+    const steps=[
+      {key:'nominatim',name:'住所ジオコーディング（Nominatim）',final:'success'},
+      {key:'osm_overpass',name:'周辺道路・施設・水域（Overpass）',final:'success'},
+      {key:'open_meteo',name:'気象予報（Open-Meteo）',final:'success'},
+      {key:'ksj',name:'国土数値情報（河川・施設）',final:'success'},
+      {key:'hazard_portal',name:'ハザードマップ重ね合わせ',final:'success'},
+      {key:'gsi_tile',name:'地理院タイル（標高・地形）',final:'success'},
+      {key:'plateau',name:'PLATEAU（3D都市モデル）',final: this.showFailed?'failed':'success'},
+      {key:'xroad',name:'xROAD（道路交通量）',final: this.showFailed?'skipped':'success'}
+    ];
+    this._map=null;
+    this.setState({
+      running:true, formError:'',
+      location:{ address:addr, lat:lat, lon:lon, radius:fm.radius,
+                 coordLabel:lat.toFixed(5)+', '+lon.toFixed(5), radiusLabel:this.radLabel(fm.radius) },
+      fetchSteps: steps.map(s=>Object.assign({},s,{status:'pending'}))
+    });
+    steps.forEach((s,i)=>{
+      setTimeout(()=>{
+        this.setState(st=>{ const fs=st.fetchSteps.map((x,j)=> j===i?Object.assign({},x,{status:x.final}):x); return {fetchSteps:fs}; });
+      }, 360+i*300);
+    });
+    setTimeout(()=>{ this.setState({running:false, ranOnce:true, screen:'analysis'}, ()=>setTimeout(()=>this.ensureMap(),120)); }, 360+steps.length*300+450);
+  }
+
+  initMap(){
+    if(this._map || !window.L) { if(!window.L){ setTimeout(()=>this.initMap(),200);} return; }
+    const el=document.getElementById('ocsrc-map'); if(!el){ return; }
+    const L=window.L, loc=this.state.location; const c=[loc.lat,loc.lon];
+    const map=L.map(el,{zoomControl:true,attributionControl:true}).setView(c,16);
+    this._map=map;
+    this._bases={
+      pale:L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{maxZoom:18,attribution:'地理院タイル'}),
+      std:L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{maxZoom:18,attribution:'地理院タイル'}),
+      photo:L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',{maxZoom:18,attribution:'地理院タイル(シームレス空中写真)'})
+    };
+    this._bases[this.state.baseLayer].addTo(map);
+    const mk=(la,lo,label)=>L.marker([la,lo],{icon:L.divIcon({className:'',html:'<div style="background:#fff;border:1px solid #b5bcc6;color:#4a5563;font:600 10px/1 \'Noto Sans JP\',sans-serif;padding:3px 7px;border-radius:4px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25)">'+label+'</div>',iconSize:null,iconAnchor:[0,8]})});
+    this._ov={};
+    this._ov.hillshade=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/hillshademap/{z}/{x}/{y}.png',{opacity:.5,attribution:'地理院タイル(陰影起伏図)'});
+    this._ov.flood=L.tileLayer('https://disaportaldata.gsi.go.jp/raster/01_flood_l2_shinsuishin_data/{z}/{x}/{y}.png',{opacity:.6,attribution:'ハザードマップポータルサイト'});
+    this._ov.sediment=L.tileLayer('https://disaportaldata.gsi.go.jp/raster/05_dosekiryukeikaikuiki/{z}/{x}/{y}.png',{opacity:.6,attribution:'ハザードマップポータルサイト'});
+    this._ov.range=L.circle(c,{radius:loc.radius,color:'#15616d',weight:2,fillColor:'#15616d',fillOpacity:.06,dashArray:'5 5'});
+    this._ov.roads=L.layerGroup([
+      L.polyline([[c[0]+0.0012,c[1]-0.0022],[c[0]+0.0012,c[1]+0.0022]],{color:'#d98324',weight:5,opacity:.85}),
+      L.polyline([[c[0]-0.0022,c[1]-0.0006],[c[0]+0.0022,c[1]-0.0006]],{color:'#c4862f',weight:3.5,opacity:.7}),
+      L.polyline([[c[0]-0.0006,c[1]+0.0007],[c[0]+0.0016,c[1]+0.0018]],{color:'#caa15a',weight:2.5,opacity:.7})
+    ]);
+    this._ov.water=L.layerGroup([
+      L.polyline([[c[0]-0.0017,c[1]-0.002],[c[0]-0.0012,c[1]+0.0007],[c[0]-0.0019,c[1]+0.0022]],{color:'#2f6fb0',weight:6,opacity:.6})
+    ]);
+    this._ov.facilities=L.layerGroup([
+      mk(c[0]+0.0019,c[1]+0.0013,'学校'),
+      mk(c[0]-0.0015,c[1]+0.0017,'地下鉄駅'),
+      mk(c[0]+0.0009,c[1]-0.0018,'官公庁')
+    ]);
+    this._siteMarker=L.marker(c,{icon:L.divIcon({className:'',html:'<div style="position:relative"><div style="width:20px;height:20px;background:#c0392b;border:3px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 5px rgba(0,0,0,.4)"></div></div>',iconSize:[20,20],iconAnchor:[10,20]})}).addTo(map);
+    this.applyOverlays();
+    setTimeout(()=>{ try{ map.invalidateSize(); }catch(e){} },120);
+  }
+  applyOverlays(){
+    if(!this._map||!this._ov) return; const o=this.state.overlays;
+    Object.keys(this._ov).forEach(k=>{ const lyr=this._ov[k]; if(!lyr) return;
+      if(o[k]){ if(!this._map.hasLayer(lyr)) lyr.addTo(this._map); }
+      else { if(this._map.hasLayer(lyr)) this._map.removeLayer(lyr); } });
+  }
+  setBase(b){ if(this._map&&this._bases){ Object.values(this._bases).forEach(l=>{ if(this._map.hasLayer(l)) this._map.removeLayer(l);}); this._bases[b].addTo(this._map);} this.setState({baseLayer:b}); }
+  toggleOverlay(k){ this.setState(st=>({overlays:Object.assign({},st.overlays,{[k]:!st.overlays[k]})}), ()=>this.applyOverlays()); }
+
+  openFinding(id){ this.setState({selectedFinding:id}); }
+  closeFinding(){ this.setState({selectedFinding:null}); }
+
+  buildMemoText(){
+    const loc=this.state.location||this.SAMPLE; const counts=this.counts();
+    const fs=this.getFindings();
+    const lines=[];
+    lines.push('# AI調査メモ','');
+    lines.push('## 1. 調査地点');
+    lines.push('- 住所：'+(loc.address||'—'));
+    lines.push('- 緯度経度：'+loc.lat.toFixed(5)+', '+loc.lon.toFixed(5));
+    lines.push('- 検索半径：'+this.radLabel(loc.radius||500),'');
+    lines.push('## 2. 確認優先度サマリー');
+    lines.push('- 専門確認優先（A）：'+counts.A+'件');
+    lines.push('- 追加確認推奨（B）：'+counts.B+'件');
+    lines.push('- 参考情報（C）：'+counts.C+'件');
+    lines.push('- データ不足（D）：'+counts.D+'件','');
+    lines.push('## 3. 要確認事項');
+    fs.filter(f=>f.priority==='A'||f.priority==='B').forEach(f=>lines.push('- ['+f.priority+'] '+f.title+'：'+f.summary));
+    lines.push('');
+    lines.push('## 4. 追加調査候補');
+    lines.push('- 河川・水路管理者資料による護岸・暗渠区間の確認');
+    lines.push('- 自治体公表の浸水想定区域図および避難情報の確認');
+    lines.push('- 地質資料・既往ボーリングデータによる地盤条件の確認','');
+    lines.push('## 5. 現地確認候補');
+    lines.push('- 搬入経路の幅員・交通規制・占用条件');
+    lines.push('- 周辺施設（官公庁・学校・駅）の運用時間と動線','');
+    lines.push('## 6. 取得できなかった情報');
+    if(this.showFailed){ lines.push('- PLATEAU 3D都市モデル（取得タイムアウト）'); lines.push('- xROAD 道路交通量（利用規約未同意のため未連携）'); }
+    else { lines.push('- 特になし（主要データソースの取得に成功）'); }
+    lines.push('');
+    lines.push('## 7. 参照データ');
+    this.SOURCES.filter(s=>s.stat==='success').forEach(s=>lines.push('- '+s.name+'（'+s.provider+'）'));
+    lines.push('');
+    lines.push('## 8. 注意事項');
+    lines.push('本メモは公開データに基づく初期調査支援であり、施工可否、法的適合性、安全性を断定するものではありません。');
+    return lines.join('\n');
+  }
+  memoTextOrDefault(){ return this.state.memoText || this.buildMemoText(); }
+  toggleMemoEdit(){ this.setState(st=>({memoEditing:!st.memoEditing, memoText: st.memoText|| this.buildMemoText() })); }
+  onMemoInput(e){ const v=e.target.value; this.setState({memoText:v}); }
+  regenMemo(){ this.setState({memoText:this.buildMemoText(), memoEditing:false}); }
+
+  setFmt(f){ this.setState({reportFormat:f}); }
+  setVis(v){ this.setState({reportVisibility:v}); }
+  buildReportMd(){
+    const loc=this.state.location||this.SAMPLE; const counts=this.counts(); const fs=this.getFindings();
+    const L=[];
+    L.push('# 工事候補地リスク確認メモ','');
+    L.push('## 1. 調査条件','');
+    L.push('| 項目 | 内容 |');
+    L.push('|---|---|');
+    L.push('| 入力地点 | '+(loc.address||'—')+' |');
+    L.push('| 緯度経度 | '+loc.lat.toFixed(5)+', '+loc.lon.toFixed(5)+' |');
+    L.push('| 検索半径 | '+this.radLabel(loc.radius||500)+' |');
+    L.push('| 実行日時 | '+this.fetchedAt+' |');
+    L.push('| 公開区分 | '+(this.state.reportVisibility==='internal'?'社外秘 / 社内限定':'社外可')+' |','');
+    L.push('## 2. 確認優先度サマリー','');
+    L.push('| 優先度 | 件数 |');
+    L.push('|---|---:|');
+    L.push('| A：専門確認優先 | '+counts.A+' |');
+    L.push('| B：追加確認推奨 | '+counts.B+' |');
+    L.push('| C：参考情報あり | '+counts.C+' |');
+    L.push('| D：データ不足 | '+counts.D+' |','');
+    L.push('## 3. カテゴリ別確認結果','');
+    fs.forEach(f=>{ L.push('### ['+f.priority+'] '+f.title+'（'+this.catLabel(f.category)+'）');
+      L.push('- 状態：'+this.curStatus()[f.status].label+(this.distLabel(f)?' / 距離：'+this.distLabel(f):''));
+      L.push('- 概要：'+f.summary);
+      L.push('- 出典：'+f.evidence.map(e=>this.srcShort(e.source_key)).join(', ')+'（取得：'+(f.evidence[0].fetched_at)+'）');
+      L.push('- 注意：'+f.caution,''); });
+    L.push('## 4. AI調査メモ','',this.memoTextOrDefault().replace(/^# AI調査メモ\n+/,''),'');
+    L.push('## 5. 取得できなかった情報','');
+    if(this.showFailed){ L.push('- PLATEAU 3D都市モデル（取得タイムアウト）','- xROAD 道路交通量（利用規約未同意）',''); } else { L.push('- 特になし',''); }
+    L.push('## 6. 参照データ・出典','');
+    this.SOURCES.forEach(s=>L.push('- '+s.name+'（'+s.provider+'） / '+s.license+' / 状態：'+s.stat));
+    L.push('');
+    L.push('## 7. 注意事項','');
+    L.push('本資料は公開データに基づく初期調査支援資料であり、施工可否、設計判断、法令適合性、安全性を断定するものではありません。');
+    return L.join('\n');
+  }
+  buildReportCsv(){
+    const fs=this.getFindings();
+    const rows=[['category','item','priority','summary','distance_m','status','fetched_at','source']];
+    fs.forEach(f=>rows.push([this.catLabel(f.category),f.title,f.priority,f.summary.replace(/"/g,'""'),(f.distance_m!=null?f.distance_m:''),this.curStatus()[f.status].label,f.evidence[0].fetched_at,f.evidence.map(e=>this.srcShort(e.source_key)).join('; ')]));
+    return rows.map(r=>r.map(c=>/[",\n]/.test(String(c))?'"'+c+'"':c).join(',')).join('\n');
+  }
+  reportText(){ return this.state.reportFormat==='md'?this.buildReportMd():this.buildReportCsv(); }
+  reportFile(){ return 'site-risk-check_20260618_1003_kasumigaseki.'+this.state.reportFormat; }
+  downloadReport(){
+    const txt=this.reportText();
+    const blob=new Blob([txt],{type:this.state.reportFormat==='md'?'text/markdown':'text/csv'});
+    const url=URL.createObjectURL(blob); const a=document.createElement('a');
+    a.href=url; a.download=this.reportFile(); document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },200);
+  }
+
+  testSource(key){
+    this.setState(st=>{ const ss=(st.sourcesState||this.SOURCES.map(s=>Object.assign({},s))).map(s=> s.key===key?Object.assign({},s,{_testing:true}):s); return {sourcesState:ss}; });
+    setTimeout(()=>{
+      this.setState(st=>{ const ss=(st.sourcesState||this.SOURCES.map(s=>Object.assign({},s))).map(s=>{
+        if(s.key!==key) return s;
+        let stat=s.stat; if(s.key==='plateau') stat='success'; if(s.key==='xroad') stat='skipped';
+        return Object.assign({},s,{_testing:false,stat:stat,last: s.key==='xroad'?'—':'10:05:'+(10+Math.floor(Math.random()*40))});
+      }); return {sourcesState:ss}; });
+    },900);
+  }
+  sourcesList(){ return this.state.sourcesState || this.SOURCES.map(s=>Object.assign({},s)); }
+
+  counts(){ const c={A:0,B:0,C:0,D:0}; this.getFindings().forEach(f=>c[f.priority]++); return c; }
+
+  renderVals(){
+    const st=this.state;
+    const screen=st.screen;
+    const dark=st.theme==='dark';
+    const PRIO=this.curPrio();
+    const navDefs=[
+      {key:'dashboard',label:'ダッシュボード',code:'SCR-000'},
+      {key:'input',label:'地点入力',code:'SCR-001'},
+      {key:'analysis',label:'リスク判定',code:'SCR-002'},
+      {key:'aimemo',label:'AI調査メモ',code:'SCR-004'},
+      {key:'report',label:'レポート出力',code:'SCR-005'},
+      {key:'sources',label:'データソース管理',code:'SCR-006'},
+      {key:'logs',label:'取得ログ',code:'SCR-007'}
+    ];
+    const counts=this.counts();
+    const navItems=navDefs.map(n=>{
+      const active=screen===n.key;
+      const base='display:flex;align-items:center;gap:10px;width:100%;padding:9px 16px;border:none;background:'+(active?'var(--accent)':'transparent')+';color:'+(active?'#fff':'var(--chrome-text-2)')+';font-size:13px;font-weight:'+(active?'700':'500')+';cursor:pointer;text-align:left;font-family:\'Noto Sans JP\',sans-serif;border-left:3px solid '+(active?'#3fd0e0':'transparent');
+      let badge=null; if(n.key==='dashboard') badge=String(this.CASES.length); if(n.key==='analysis'&&st.ranOnce) badge=String(this.getFindings().length); if(n.key==='sources') badge='8';
+      return {code:n.code,label:n.label,style:base,badge:badge,onClick:()=>this.go(n.key)};
+    });
+
+    // theme toggle
+    const themeIcon = dark ? '☾' : '☀';
+    const themeLabel = dark ? 'ダーク' : 'ライト';
+
+    // dashboard
+    const caseStatusPal=this.curCaseStatus();
+    const caseRows=this.CASES.map(c=>{
+      const sp=caseStatusPal[c.status];
+      const breakdown=['A','B','C','D'].map(g=>({grade:g,n:c.counts[g],color:PRIO[g].color,bg:PRIO[g].bg,opacity:c.counts[g]>0?'1':'.4'}));
+      return {name:c.name,code:c.code,address:c.address,date:c.date,breakdown,
+        statusLabel:sp.label,statusColor:sp.color,statusBg:sp.bg, onOpen:()=>this.openCase(c)};
+    });
+    const agg={A:0,B:0,C:0,D:0}; this.CASES.forEach(c=>{['A','B','C','D'].forEach(g=>agg[g]+=c.counts[g]);});
+    const aggTotal=agg.A+agg.B+agg.C+agg.D;
+    const aggNames={A:'専門確認優先',B:'追加確認推奨',C:'参考情報あり',D:'データ不足'};
+    const aggBar=['A','B','C','D'].map(g=>({label:agg[g]>0?(g+' '+agg[g]):'',color:PRIO[g].color,pct:(aggTotal?(agg[g]/aggTotal*100):0)+'%'}));
+    const aggLegend=['A','B','C','D'].map(g=>({grade:g,name:aggNames[g],count:agg[g],color:PRIO[g].color}));
+    const aCount=this.CASES.reduce((s,c)=>s+c.counts.A,0);
+    const needAction=this.CASES.filter(c=>c.counts.A>0).length;
+    const thisWeek=this.CASES.filter(c=>c.date>='2026-06-15').length;
+    const kpiCards=[
+      {label:'総案件数',value:String(this.CASES.length),unit:'件',sub:'登録済みの調査案件',color:'var(--accent)'},
+      {label:'専門確認優先（A）合計',value:String(aCount),unit:'件',sub:'全案件のA項目の合計',color:PRIO.A.color},
+      {label:'要対応案件',value:String(needAction),unit:'件',sub:'A項目を含む案件',color:PRIO.B.color},
+      {label:'今週実行',value:String(thisWeek),unit:'件',sub:'2026-06-15 以降に実行',color:PRIO.C.color}
+    ];
+
+    // input screen
+    const fm=st.form;
+    const tabBase='padding:9px 16px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;font-family:\'Noto Sans JP\',sans-serif;border:1.5px solid ';
+    const tabOn='var(--accent);background:var(--accent);color:#fff';
+    const tabOff='var(--border);background:var(--surface);color:var(--text-2)';
+    const tabAddrStyle=tabBase+(fm.type==='address'?tabOn:tabOff);
+    const tabCoordStyle=tabBase+(fm.type==='coord'?tabOn:tabOff);
+    const radiusOptions=[100,250,500,1000,3000].map(r=>({label:this.radLabel(r),onClick:()=>this.setRadius(r),
+      style:'padding:8px 16px;border-radius:7px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:\'JetBrains Mono\',monospace;border:1.5px solid '+(fm.radius===r?'var(--accent);background:var(--accent-soft);color:var(--accent)':'var(--border);background:var(--surface);color:var(--text-2)')}));
+    const catDefs=[['hazard','災害関連'],['rivers','河川・水域'],['roads','周辺道路'],['terrain','地形'],['weather','気象'],['facilities','周辺施設']];
+    const categoryOptions=catDefs.map(([k,l])=>{ const on=fm.categories[k];
+      return {label:l,check:on?'✓':'',boxBg:on?'var(--accent)':'var(--surface)',boxBorder:on?'var(--accent)':'var(--border)',onClick:()=>this.toggleCat(k),
+        style:'display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:8px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:\'Noto Sans JP\',sans-serif;text-align:left;border:1.5px solid '+(on?'var(--accent-border);background:var(--accent-soft);color:var(--text)':'var(--border-3);background:var(--surface);color:var(--text-2)')}; });
+
+    // analysis
+    const baseDefs=[['pale','淡色'],['std','標準'],['photo','写真']];
+    const baseOptions=baseDefs.map(([k,l])=>({label:l,onClick:()=>this.setBase(k),
+      style:'flex:1;padding:7px;border-radius:6px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:\'Noto Sans JP\',sans-serif;border:1.5px solid '+(st.baseLayer===k?'var(--accent);background:var(--accent-soft);color:var(--accent)':'var(--border-3);background:var(--surface);color:var(--text-2)')}));
+    const ovDefs=[['range','検索範囲','#15616d','rgba(21,97,109,.22)','GSI'],['roads','道路','#d98324','rgba(217,131,36,.3)','OSM'],['water','水路・河川','#2f6fb0','rgba(47,111,176,.3)','OSM/KSJ'],['flood','洪水浸水想定','#3a76c4','rgba(58,118,196,.3)','ハザード'],['sediment','土砂災害','#b06a2a','rgba(176,106,42,.3)','ハザード'],['hillshade','陰影起伏','#888','rgba(136,136,136,.3)','GSI'],['facilities','周辺施設','#7b8494','rgba(123,132,148,.25)','OSM']];
+    const overlayOptions=ovDefs.map(([k,l,dot,fill,src])=>{ const on=st.overlays[k];
+      return {label:l,src:src,dot:on?dot:'var(--border)',fill:on?fill:'var(--surface)',onClick:()=>this.toggleOverlay(k),
+        style:'display:flex;align-items:center;gap:9px;padding:6px 8px;border:none;background:'+(on?'var(--accent-soft)':'transparent')+';border-radius:6px;font-size:11.5px;font-weight:500;color:'+(on?'var(--text)':'var(--text-3)')+';cursor:pointer;font-family:\'Noto Sans JP\',sans-serif;width:100%'}; });
+    const mapLegend=[{color:'#c0392b',label:'調査地点'},{color:'#d98324',label:'主要道路'},{color:'#2f6fb0',label:'水路・河川'}];
+    const sourceMini=this.SOURCES.map(s=>{ const col={success:'#3fb27f',failed:'#c0392b',skipped:'#9aa2ae'}[s.stat]; const lab={success:'接続',failed:'失敗',skipped:'未連携'}[s.stat];
+      return {name:this.srcShort(s.key),color:col,label:lab}; });
+
+    const summaryCards=['A','B','C','D'].map(g=>({grade:g,count:counts[g],label:PRIO[g].name,color:PRIO[g].color,
+      style:'padding:11px 12px;border-radius:9px;background:'+PRIO[g].bg+';border:1px solid '+PRIO[g].color+'44'}));
+    const dataQualityNote = this.showFailed
+      ? '一部データソース（PLATEAU）で取得失敗があります。xROADは利用規約未同意のため未連携です。優先度Dの項目は判断材料が不足しています。'
+      : '主要データソースの取得に成功しました。各結果の取得日時・出典・更新日をご確認ください。';
+
+    const allDec=this.getFindings().map(f=>this.decorate(f));
+    const catCounts={}; allDec.forEach(f=>{catCounts[f.category]=(catCounts[f.category]||0)+1;});
+    const chipDefs=[['all','すべて'],['hazard','災害'],['rivers','河川・水域'],['roads','道路'],['terrain','地形'],['weather','気象'],['facilities','施設'],['data_quality','データ品質']];
+    const filterChips=chipDefs.filter(([k])=>k==='all'||catCounts[k]).map(([k,l])=>{ const on=st.categoryFilter===k;
+      return {label:l,count:k==='all'?allDec.length:(catCounts[k]||0),onClick:()=>this.setState({categoryFilter:k}),
+        style:'padding:6px 13px;border-radius:18px;font-size:12px;font-weight:600;cursor:pointer;font-family:\'Noto Sans JP\',sans-serif;border:1.5px solid '+(on?'var(--accent);background:var(--accent);color:#fff':'var(--border);background:var(--surface);color:var(--text-2)')}; });
+    const shownFindings=(st.categoryFilter==='all'?allDec:allDec.filter(f=>f.category===st.categoryFilter)).map(f=>Object.assign({},f,{onOpen:()=>this.openFinding(f.id)}));
+
+    const memoFull=this.memoTextOrDefault();
+    const memoPreview=allDec.filter(f=>f.priority==='A'||f.priority==='B').map(f=>'【'+f.priority+'】'+f.title).join('　/　')+' — 詳細は全文をご確認ください。各要確認事項には根拠データを紐付けています。';
+    let memoSections=[];
+    memoFull.split(/\n## /).forEach((blk,i)=>{
+      let txt=i===0?blk.replace(/^# .*\n*/,''):blk; if(i===0 && !txt.trim()) return;
+      const linesArr=(i===0?txt:('## '+txt)).split('\n').filter(x=>x.trim());
+      if(!linesArr.length) return;
+      const heading=linesArr[0].replace(/^#+\s*/,'');
+      const body=linesArr.slice(1).map(l=>{ const t=l.replace(/^-\s*/,''); const bullet=/^-\s/.test(l);
+        return {text:bullet?'• '+t:t, style:'font-size:12.5px;line-height:1.8;color:var(--text-2);'+(bullet?'padding-left:6px':'')}; });
+      memoSections.push({heading:heading,lines:body});
+    });
+
+    const fmtBase='padding:8px 16px;border-radius:7px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:\'Noto Sans JP\',sans-serif;border:1.5px solid ';
+    const visBase='display:flex;flex-direction:column;gap:2px;padding:11px 13px;border-radius:8px;cursor:pointer;text-align:left;font-size:12.5px;color:var(--text);font-family:\'Noto Sans JP\',sans-serif;border:1.5px solid ';
+
+    const sourceRows=this.sourcesList().map(s=>{
+      const statColor={success:'#3fb27f',failed:'#c0392b',skipped:'#9aa2ae'}[s.stat];
+      const statLabel=s._testing?'テスト中…':{success:'接続成功',failed:'接続失敗',skipped:'未連携/無効'}[s.stat];
+      const rankColor=PRIO[s.rank]?PRIO[s.rank].color:'var(--text-2)';
+      return {name:s.name,key:s.key,provider:s.provider,type:s.type,license:s.license,rank:s.rank,rankColor:rankColor,
+        statColor:s._testing?'#bf7d1c':statColor,statLabel:statLabel,lastFetch:s.last,opacity:s.enabled?'1':'.55',
+        testLabel:s._testing?'…':'接続テスト',onTest:()=>this.testSource(s.key)};
+    });
+    const logRows=this.LOGS.map(l=>({time:l.time,source:l.source,endpoint:l.endpoint,code:l.code,ms:l.ms,error:l.error,status:l.status,
+      codeColor: l.code==='200'?'#3fb27f':(l.code==='—'?'#6f7c8e':'#d98324'),
+      statColor:{success:'#3fb27f',timeout:'#d98324',failed:'#c0392b',skipped:'#9aa2ae'}[l.status]||'#8b97a8'}));
+
+    const detail = st.selectedFinding ? this.decorate(this.getFindings().find(f=>f.id===st.selectedFinding)) : null;
+    const okBg=dark?'#16301f':'#e3f0e8', okText=dark?'#5fc08c':'#2f6f4f';
+    const errBg=dark?'#331a1a':'#f7e7e4', errBorder=dark?'#5a2a26':'#e3b5ad', errText=dark?'#e8897e':'#a5341f';
+    const warnBg=dark?'#2e2613':'#fbf4e6', warnBorder=dark?'#4a3d1c':'#ecd9ad', warnText=dark?'#d6b15a':'#8a6d1f', warnText2=dark?'#c2a76a':'#7a6a3f';
+
+    return {
+      navItems, fetchedAt:this.fetchedAt, ranOnce:st.ranOnce, running:st.running,
+      themeIcon, themeLabel, toggleTheme:()=>this.toggleTheme(),
+      okBg, okText,
+      location:st.location||{address:'',coordLabel:'',radiusLabel:'',lat:0,lon:0},
+      isDashboard:screen==='dashboard',
+      isInput:screen==='input', isAnalysis:screen==='analysis', isMemo:screen==='aimemo',
+      isReport:screen==='report', isSources:screen==='sources', isLogs:screen==='logs',
+      notRun:!st.ranOnce,
+      goInput:()=>this.go('input'), goReport:()=>this.go('report'), goMemo:()=>this.go('aimemo'),
+      // dashboard
+      kpiCards, caseRows, caseCount:this.CASES.length, aggBar, aggLegend, aggTotal,
+      // input
+      isAddressType:fm.type==='address', isCoordType:fm.type==='coord',
+      tabAddrStyle, tabCoordStyle, setTypeAddress:()=>this.setType('address'), setTypeCoord:()=>this.setType('coord'),
+      onAddress:(e)=>this.onAddress(e), onLat:(e)=>this.onLat(e), onLon:(e)=>this.onLon(e), form:fm,
+      radiusOptions, categoryOptions, formError:st.formError,
+      runAnalysis:()=>this.runAnalysis(), runSample:()=>this.runSample(),
+      // analysis
+      baseOptions, overlayOptions, mapLegend, sourceMini, summaryCards, dataQualityNote,
+      filterChips, shownFindings, findingCountLabel:shownFindings.length+' / '+allDec.length+' 件',
+      memoPreview,
+      // memo
+      memoEditing:st.memoEditing, memoViewing:!st.memoEditing, memoText:memoFull, memoSections,
+      toggleMemoEdit:()=>this.toggleMemoEdit(), onMemoInput:(e)=>this.onMemoInput(e), regenMemo:()=>this.regenMemo(),
+      memoEditLabel:st.memoEditing?'プレビュー':'編集',
+      memoEditBtnStyle:'padding:8px 14px;background:var(--surface);color:var(--accent);border:1.5px solid var(--border);border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'Noto Sans JP\',sans-serif',
+      // report
+      reportFormat:st.reportFormat==='md'?'Markdown':'CSV',
+      setFmtMd:()=>this.setFmt('md'), setFmtCsv:()=>this.setFmt('csv'),
+      fmtMdStyle:fmtBase+(st.reportFormat==='md'?'var(--accent);background:var(--accent);color:#fff':'var(--border);background:var(--surface);color:var(--text-2)'),
+      fmtCsvStyle:fmtBase+(st.reportFormat==='csv'?'var(--accent);background:var(--accent);color:#fff':'var(--border);background:var(--surface);color:var(--text-2)'),
+      setVisInternal:()=>this.setVis('internal'), setVisPublic:()=>this.setVis('public'),
+      visIntStyle:visBase+(st.reportVisibility==='internal'?'var(--accent);background:var(--accent-soft)':'var(--border-3);background:var(--surface)'),
+      visPubStyle:visBase+(st.reportVisibility==='public'?'var(--accent);background:var(--accent-soft)':'var(--border-3);background:var(--surface)'),
+      reportSections:['調査条件','確認優先度サマリー','カテゴリ別確認結果','AI調査メモ','取得できなかった情報','参照データ・出典','注意事項'],
+      reportFilename:this.reportFile(), reportPreview:this.reportText(), downloadReport:()=>this.downloadReport(),
+      // sources / logs
+      sourceRows, logRows,
+      // detail
+      detailFinding:detail, closeFinding:()=>this.closeFinding(),
+      // theme-tinted tokens injected as values used by template via --vars set below
+      // loading
+      fetchSteps:st.fetchSteps.map(s=>{ const m={pending:{icon:'',label:'取得中…',color:'var(--text-3)',bg:'var(--surface-3)'},success:{icon:'✓',label:'成功',color:okText,bg:okBg},failed:{icon:'✕',label:'失敗',color:errText,bg:errBg},skipped:{icon:'–',label:'スキップ',color:'#9aa2ae',bg:'var(--surface-3)'}}[s.status];
+        return {name:s.name,icon:m.icon,label:m.label,color:m.color,bg:m.bg}; }),
+      // expose theme-dependent css custom props on root via inline (handled by attribute) — provide warn/err/ok via style vars
+      __vars:{okBg,okText,errBg,errBorder,errText,warnBg,warnBorder,warnText,warnText2}
+    };
+  }
+}
+</script>
+</body>
+</html>

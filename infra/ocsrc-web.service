@@ -1,0 +1,24 @@
+# Open Civil Site Risk Checker — Web 配信 systemd ユニット（参照用コピー）。
+# 実体は scripts/install-systemd.sh が node 絶対パス・ポートを検出して
+# /etc/systemd/system/ocsrc-web.service に生成する。手動更新時はこの内容を合わせること。
+[Unit]
+Description=Open Civil Site Risk Checker Web (OCSRC SPA)
+Documentation=https://github.com/Kensan196948G/Open-Civil-Site-Risk-Checker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kensan
+Group=kensan
+WorkingDirectory=/home/kensan/Projects/Open-Civil-Site-Risk-Checker/frontend
+Environment=NODE_ENV=production
+Environment=HOST=0.0.0.0
+Environment=PORT=8700
+ExecStart=/home/kensan/.nvm/versions/node/v25.2.1/bin/node server.mjs
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
