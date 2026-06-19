@@ -24,6 +24,9 @@ npm run build        # 型チェック + 本番ビルド（dist/）
 npm run preview      # ビルド成果物のプレビュー
 npm run lint         # ESLint
 npm run typecheck    # tsc --noEmit
+npm test             # ユニットテスト（vitest, 1回実行）
+npm run test:watch   # ユニットテスト（vitest, watch）
+npm run test:smoke   # スモークテスト（esbuild ランナー / 制約環境向け）
 ```
 
 ブラウザで開いたら、**「サンプル地点で試す（霞が関）」** ボタンで一連の流れ（取得 → 地図 → 確認結果 → AIメモ → レポート）を確認できます。
@@ -102,6 +105,39 @@ docker compose down               # 停止
 | xROAD | 道路交通量 | ⏸ 未連携（利用規約同意が必要） |
 
 > ハザードの重なり判定はクライアント側では行わず、タイル重ね合わせによる**視覚確認**として表示します（出典明示・断定回避）。KSJ / PLATEAU / xROAD は「取得失敗・未連携」を誠実に区別表示します（要件 FR-503 / NFR-504）。
+
+---
+
+## 品質ゲート / テスト
+
+| ゲート | コマンド | 内容 |
+|---|---|---|
+| Lint | `npm run lint` | ESLint（TypeScript + React Hooks ルール） |
+| 型チェック | `npm run typecheck` | `tsc --noEmit`（テストファイル含む） |
+| ユニットテスト | `npm test` | vitest（純粋ロジックの回帰防止） |
+| スモークテスト | `npm run test:smoke` | esbuild ランナー（環境非依存の二重検証） |
+| ビルド | `npm run build` | 本番ビルド成功確認 |
+
+### テスト対象（純粋ロジック）
+
+DOM 非依存の純粋関数を中心に検証します。とくに**「断定表現を出力しない」コンプライアンス制約**（要件 §3.2）を回帰テストで保証します。
+
+- `src/risk/memo.ts` — AI調査メモ生成（免責文の必須化・根拠データ紐付け・8セクション構成）
+- `src/report/markdown.ts` — Markdown レポート（免責文・公開区分・優先度集計）
+- `src/report/csv.ts` — CSV 生成（RFC 4180 エスケープ・距離丸め・出典連結）
+- `src/api/geo.ts` — Haversine 距離・bbox（WGS84）
+- `src/data/constants.ts` — ラベル辞書の網羅性・「該当なし／データ未取得」の区別
+
+### 二重ランナー構成（vitest + esbuild スモーク）
+
+テスト本体は1つ（`src/**/*.test.ts`, `import ... from 'vitest'`）で、2つのランナーから実行します。
+
+- **vitest**（CI・通常環境）: `npm test`。
+- **esbuild スモーク**（`scripts/smoke-test.mjs`）: `npm run test:smoke`。`'vitest'` を極小 shim（`scripts/smoke/shim.mjs`）に alias し、esbuild で単一バンドル化して node 上で実行します。仮想メモリ `ulimit` 制約により Vite/WASM 系ツールが起動できない環境でも、同じテスト資産をそのまま検証できます。
+
+### CI
+
+`.github/workflows/ci.yml` が `main` への push / PR で lint → typecheck → test → smoke → build を実行します（Node 22・`npm ci`）。リモート未接続の間はローカルで上記コマンドを実行してください。
 
 ---
 

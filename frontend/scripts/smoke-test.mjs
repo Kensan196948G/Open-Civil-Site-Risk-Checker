@@ -1,0 +1,68 @@
+// esbuild スモークテストランナー。
+// src/**/*.test.ts を集め、'vitest' を scripts/smoke/shim.mjs に alias して esbuild で
+// 単一 ESM バンドルへ束ね、node 上で逐次実行する。Vite/WASM を介さないため、仮想メモリ
+// ulimit 制約のある環境でもテストロジックを実際に検証できる（CI では本物の vitest を使用）。
+//
+//   node scripts/smoke-test.mjs
+//
+import { build } from 'esbuild';
+import { readdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { join, resolve, relative, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const root = resolve(__dirname, '..');
+const srcDir = join(root, 'src');
+const shimPath = join(__dirname, 'smoke', 'shim.mjs');
+
+/** src 配下の *.test.ts を再帰列挙する。 */
+async function findTests(dir) {
+  const out = [];
+  for (const ent of await readdir(dir, { withFileTypes: true })) {
+    const p = join(dir, ent.name);
+    if (ent.isDirectory()) out.push(...(await findTests(p)));
+    else if (ent.name.endsWith('.test.ts')) out.push(p);
+  }
+  return out;
+}
+
+const tests = (await findTests(srcDir)).sort();
+if (!tests.length) {
+  console.error('no *.test.ts found under src/');
+  process.exit(1);
+}
+
+// 全テストを import してから runAll() を呼ぶエントリを生成。
+const imports = tests.map((t, i) => `import * as t${i} from ${JSON.stringify(t)};`).join('\n');
+const entry = `${imports}
+import { runAll } from ${JSON.stringify(shimPath)};
+const r = await runAll();
+if (r.fail > 0) process.exitCode = 1;
+`;
+
+const tmp = await mkdtemp(join(tmpdir(), 'ocsrc-smoke-'));
+const entryFile = join(tmp, 'entry.mjs');
+const outFile = join(tmp, 'bundle.mjs');
+await writeFile(entryFile, entry, 'utf8');
+
+try {
+  await build({
+    entryPoints: [entryFile],
+    outfile: outFile,
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    target: 'node20',
+    sourcemap: 'inline',
+    logLevel: 'warning',
+    // テストファイルの `from 'vitest'` を極小 shim へ差し替える。
+    alias: { vitest: shimPath },
+  });
+  console.log(`▶ smoke: bundled ${tests.length} test file(s)`);
+  for (const t of tests) console.log(`  • ${relative(root, t)}`);
+  await import(pathToFileURL(outFile).href);
+} finally {
+  await rm(tmp, { recursive: true, force: true });
+}
