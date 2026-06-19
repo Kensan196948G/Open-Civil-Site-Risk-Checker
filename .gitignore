@@ -34,3 +34,7 @@ coverage/
 # ===== Claude Code local-only settings (project policy is tracked, machine state is not) =====
 .claude/settings.local.json
 .claude/state.local.json
+
+# ===== ClaudeOS operational state / reports (session-local, regenerated) =====
+/state.json
+/reports/
