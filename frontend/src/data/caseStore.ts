@@ -124,40 +124,45 @@ export function importLiveCases(json: string): { cases: CaseRecord[]; imported: 
   return { cases: next, imported: valid.length };
 }
 
-/** 任意オブジェクトを CaseRecord に正規化。必須（name, lat, lon）を欠く場合は null。 */
-function coerce(o: any): CaseRecord | null {
+/** 任意オブジェクトを CaseRecord に正規化。必須（name, lat, lon）を欠く場合は null。
+ *  信頼境界外として unknown 受けし、フィールドごとに型を検証する。 */
+function coerce(o: unknown): CaseRecord | null {
   if (!o || typeof o !== 'object') return null;
-  const lat = Number(o.lat);
-  const lon = Number(o.lon);
-  const name = typeof o.name === 'string' ? o.name : '';
+  const r = o as Record<string, unknown>;
+  const lat = Number(r.lat);
+  const lon = Number(r.lon);
+  const name = typeof r.name === 'string' ? r.name : '';
   if (!name || Number.isNaN(lat) || Number.isNaN(lon)) return null;
   if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
 
   const counts: Record<Priority, number> = { A: 0, B: 0, C: 0, D: 0 };
-  if (o.counts && typeof o.counts === 'object') {
+  if (r.counts && typeof r.counts === 'object') {
+    const cs = r.counts as Record<string, unknown>;
     GRADES.forEach((g) => {
-      const n = Number(o.counts[g]);
+      const n = Number(cs[g]);
       counts[g] = Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
     });
   }
   const allowedStatus: CaseStatus[] = ['done', 'progress', 'review', 'draft'];
-  const status: CaseStatus = allowedStatus.includes(o.status) ? o.status : statusFromCounts(counts);
+  const status: CaseStatus = allowedStatus.includes(r.status as CaseStatus)
+    ? (r.status as CaseStatus)
+    : statusFromCounts(counts);
 
   return {
-    id: typeof o.id === 'string' && o.id ? o.id : uid(),
+    id: typeof r.id === 'string' && r.id ? r.id : uid(),
     name,
-    code: typeof o.code === 'string' && o.code ? o.code : `OCSRC-IMPORT-${uid().slice(5, 13)}`,
-    address: typeof o.address === 'string' ? o.address : `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+    code: typeof r.code === 'string' && r.code ? r.code : `OCSRC-IMPORT-${uid().slice(5, 13)}`,
+    address: typeof r.address === 'string' ? r.address : `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
     lat,
     lon,
-    radius: Number.isFinite(Number(o.radius)) ? Number(o.radius) : 500,
-    date: typeof o.date === 'string' && o.date ? o.date : todayStamp(),
+    radius: Number.isFinite(Number(r.radius)) ? Number(r.radius) : 500,
+    date: typeof r.date === 'string' && r.date ? r.date : todayStamp(),
     status,
     counts,
     isDummy: false, // 取り込みデータは本番データ扱い
-    findings: Array.isArray(o.findings) ? o.findings : undefined,
-    location: o.location && typeof o.location === 'object' ? o.location : undefined,
-    logs: Array.isArray(o.logs) ? o.logs : undefined,
-    fetchedAt: typeof o.fetchedAt === 'string' ? o.fetchedAt : undefined,
+    findings: Array.isArray(r.findings) ? (r.findings as Finding[]) : undefined,
+    location: r.location && typeof r.location === 'object' ? (r.location as SiteLocation) : undefined,
+    logs: Array.isArray(r.logs) ? (r.logs as LogEntry[]) : undefined,
+    fetchedAt: typeof r.fetchedAt === 'string' ? r.fetchedAt : undefined,
   };
 }

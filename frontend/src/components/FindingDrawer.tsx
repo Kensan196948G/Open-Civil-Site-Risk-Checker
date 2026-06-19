@@ -90,13 +90,15 @@ export function FindingDrawer() {
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="確認結果へのコメントを記入..."
+            placeholder="確認結果へのコメントを記入...（現時点では下書きのみ・保存は今後対応）"
             style={{ width: '100%', height: 80, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontFamily: "'Noto Sans JP', sans-serif", fontSize: 12, resize: 'vertical', outline: 'none', background: 'var(--surface-2)', color: 'var(--text)' }}
           />
+          {/* コメント永続化は未実装。誤操作を避けるためボタンは無効化し、状態を明示する。 */}
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <button style={{ flex: 1, padding: 9, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>確認済みとして登録</button>
-            <button style={{ padding: '9px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 7, fontSize: 12, fontWeight: 600, color: 'var(--text-2)', cursor: 'pointer' }}>コメント保存</button>
+            <button disabled title="この機能は今後のフェーズで対応予定です" style={{ flex: 1, padding: 9, background: 'var(--surface-4)', color: 'var(--text-3)', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'not-allowed', opacity: 0.7 }}>確認済みとして登録</button>
+            <button disabled title="この機能は今後のフェーズで対応予定です" style={{ padding: '9px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 7, fontSize: 12, fontWeight: 600, color: 'var(--text-3)', cursor: 'not-allowed', opacity: 0.7 }}>コメント保存</button>
           </div>
+          <p style={{ margin: '8px 2px 0', fontSize: 10.5, color: 'var(--text-3)', lineHeight: 1.6 }}>※ コメントの保存・確認登録は今後のフェーズで対応予定です。</p>
         </div>
       </div>
     </>

@@ -32,7 +32,7 @@ export function nowStamp(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-export async function fetchJson<T = any>(url: string, opts: FetchOpts = {}): Promise<FetchOutcome<T>> {
+export async function fetchJson<T = unknown>(url: string, opts: FetchOpts = {}): Promise<FetchOutcome<T>> {
   const timeout = opts.timeout ?? 15000;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -45,16 +45,17 @@ export async function fetchJson<T = any>(url: string, opts: FetchOpts = {}): Pro
     }
     const data = (await res.json()) as T;
     return { ok: true, status: res.status, code: String(res.status), ms, data, error: '—' };
-  } catch (e: any) {
+  } catch (e) {
     const ms = Math.round(performance.now() - start);
-    const aborted = e?.name === 'AbortError';
+    const err = e instanceof Error ? e : undefined;
+    const aborted = err?.name === 'AbortError';
     return {
       ok: false,
       status: 0,
       code: '—',
       ms,
       data: null,
-      error: aborted ? `Read timed out after ${Math.round(timeout / 1000)}s` : (e?.message || 'ネットワークエラー'),
+      error: aborted ? `Read timed out after ${Math.round(timeout / 1000)}s` : (err?.message || 'ネットワークエラー'),
     };
   } finally {
     clearTimeout(timer);
@@ -62,7 +63,7 @@ export async function fetchJson<T = any>(url: string, opts: FetchOpts = {}): Pro
 }
 
 /** POST（Overpass 用、bodyは text/plain）。 */
-export async function postForm<T = any>(url: string, body: string, opts: FetchOpts = {}): Promise<FetchOutcome<T>> {
+export async function postForm<T = unknown>(url: string, body: string, opts: FetchOpts = {}): Promise<FetchOutcome<T>> {
   return fetchJson<T>(url, {
     ...opts,
     init: {

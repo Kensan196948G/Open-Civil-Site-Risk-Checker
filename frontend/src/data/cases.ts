@@ -30,8 +30,15 @@ export const SHOW_DUMMY: boolean =
 /** 画面に出すダミー案件（非表示設定時は空）。UI は必ずこちらを参照する。 */
 export const DUMMY_CASES_VISIBLE: CaseRecord[] = SHOW_DUMMY ? DUMMY_CASES : [];
 
-/** @deprecated 後方互換エイリアス。新コードは DUMMY_CASES を使う。 */
-export const CASES = DUMMY_CASES;
+/** @deprecated 後方互換エイリアス。新コードは DUMMY_CASES_VISIBLE を使う（非表示トグルを尊重）。 */
+export const CASES = DUMMY_CASES_VISIBLE;
 
-/** 「今週実行」の基準日（KPI 集計用）。 */
-export const THIS_WEEK_SINCE = '2026-06-15';
+/** 「今週実行」の基準日（KPI 集計用）。実行時に今週の月曜（ローカル時刻）を算出する。 */
+export const THIS_WEEK_SINCE = (() => {
+  const now = new Date();
+  const diffToMonday = (now.getDay() + 6) % 7; // 0=Sun → 6, 1=Mon → 0 ...
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - diffToMonday);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${monday.getFullYear()}-${p(monday.getMonth() + 1)}-${p(monday.getDate())}`;
+})();

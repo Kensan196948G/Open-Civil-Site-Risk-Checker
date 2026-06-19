@@ -47,8 +47,8 @@ export function DashboardScreen() {
       const text = await file.text();
       const { imported } = importCases(text);
       setMsg({ kind: 'ok', text: `${imported} 件の本番データを取り込みました。` });
-    } catch (err: any) {
-      setMsg({ kind: 'err', text: err?.message || '取り込みに失敗しました。' });
+    } catch (err) {
+      setMsg({ kind: 'err', text: err instanceof Error ? err.message : '取り込みに失敗しました。' });
     }
   };
 

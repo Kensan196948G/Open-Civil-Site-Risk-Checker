@@ -218,7 +218,14 @@ export function useAppController(): AppController {
       setState((s) => ({ ...s, fetchSteps: s.fetchSteps.map((x) => (x.key === key ? { ...x, status } : x)) }));
     };
 
-    const outcome = await runAnalysis(payload, { onStep });
+    let outcome: Awaited<ReturnType<typeof runAnalysis>>;
+    try {
+      outcome = await runAnalysis(payload, { onStep });
+    } catch {
+      // runAnalysis が outcome.error ではなく例外を投げた場合も running を解除し UI を復帰させる。
+      setState((s) => ({ ...s, running: false, formError: '予期しないエラーが発生しました。', screen: 'input' }));
+      return;
+    }
 
     if (outcome.error || !outcome.result) {
       setState((s) => ({ ...s, running: false, formError: outcome.error || '取得に失敗しました。', screen: 'input' }));

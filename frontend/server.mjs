@@ -42,24 +42,32 @@ const MIME = {
 
 const INDEX = path.join(DIST, 'index.html');
 
-/** リクエストパスを dist 内の実ファイルへ安全に解決する（パストラバーサル防止）。 */
+/** SPA フォールバック（index.html）を stat 付きで返す。 */
+async function fallback() {
+  return { file: INDEX, stat: await fs.stat(INDEX) };
+}
+
+/** リクエストパスを dist 内の実ファイルへ安全に解決する（パストラバーサル防止）。
+ *  stat 結果を同梱して返し、ハンドラ側での重複 stat（hot path）を避ける。 */
 async function resolveFile(urlPath) {
   const decoded = decodeURIComponent(urlPath.split('?')[0].split('#')[0]);
   const rel = path.normalize(decoded).replace(/^(\.\.[/\\])+/, '');
   let target = path.join(DIST, rel);
   // 範囲外アクセス（セパレータ境界で判定）は index へ。
-  if (target !== DIST && !target.startsWith(DIST_PREFIX)) return INDEX;
+  if (target !== DIST && !target.startsWith(DIST_PREFIX)) return fallback();
   try {
-    const st = await fs.stat(target);
-    if (st.isDirectory()) target = path.join(target, 'index.html');
-    await fs.access(target);
+    let st = await fs.stat(target);
+    if (st.isDirectory()) {
+      target = path.join(target, 'index.html');
+      st = await fs.stat(target);
+    }
     // シンボリックリンク経由の dist 外脱出を realpath で遮断（defense-in-depth）。
     const real = await fs.realpath(target);
-    if (real !== DIST_REAL && !real.startsWith(ROOT_PREFIX)) return INDEX;
-    return target;
+    if (real !== DIST_REAL && !real.startsWith(ROOT_PREFIX)) return fallback();
+    return { file: target, stat: st };
   } catch {
     // 見つからない場合は SPA フォールバックとして index.html を返す。
-    return INDEX;
+    return fallback();
   }
 }
 
@@ -75,12 +83,11 @@ const server = http.createServer(async (req, res) => {
       res.end('ok');
       return;
     }
-    const file = await resolveFile(req.url || '/');
+    const { file, stat } = await resolveFile(req.url || '/');
     const ext = path.extname(file).toLowerCase();
     const type = MIME[ext] || 'application/octet-stream';
     // ハッシュ付きアセットは長期キャッシュ、HTML は都度検証。
     const cache = /\/assets\//.test(file) ? 'public, max-age=31536000, immutable' : 'no-cache';
-    const stat = await fs.stat(file);
     res.writeHead(200, { 'Content-Type': type, 'Cache-Control': cache, 'Content-Length': stat.size });
     if (req.method === 'HEAD') {
       res.end();
