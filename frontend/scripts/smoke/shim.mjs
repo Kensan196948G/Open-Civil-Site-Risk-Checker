@@ -11,7 +11,12 @@ export function describe(name, fn) {
   const prev = current;
   current = { name, tests: [] };
   suites.push(current);
-  fn();
+  const result = fn();
+  // 本 shim は同期 describe のみ対応。async コールバックは it 登録が current 復元後に
+  // ずれて誤ったスイートへ入るため、早期に検知して失敗させる。
+  if (result && typeof result.then === 'function') {
+    throw new Error(`describe('${name}') callback must be synchronous (smoke shim limitation)`);
+  }
   current = prev;
 }
 

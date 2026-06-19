@@ -29,6 +29,9 @@ describe('buildMemoText（断定回避コンプライアンス）', () => {
     const text = buildMemoText(location, [makeFinding()]);
     expect(text).toContain('断定するものではありません');
     expect(text).toContain('施工可否');
+    // 免責文言を固定し、将来の文言改変での退行を検知する。
+    expect(text).toContain('法的適合性');
+    expect(text).toContain('安全性');
   });
 
   it('規定の8セクション見出しを全て含む', () => {

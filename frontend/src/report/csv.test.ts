@@ -17,9 +17,9 @@ describe('buildReportCsv', () => {
       makeFinding({ id: 'F-002', distance_m: null }),
     ]);
     const [, row1, row2] = csv.split('\n');
-    expect(row1.split(',')).toContain('124');
-    // null 距離は空フィールド（,, が連続して現れる）
-    expect(row2).toContain(',,');
+    // distance_m は5列目（0-indexed: 4）。列インデックスで検証し列順変更にも頑健にする。
+    expect(row1.split(',')[4]).toBe('124');
+    expect(row2.split(',')[4]).toBe('');
   });
 
   it('RFC 4180: カンマ・改行・二重引用符を含む値はクォートしエスケープする', () => {

@@ -54,7 +54,8 @@ try {
     bundle: true,
     platform: 'node',
     format: 'esm',
-    target: 'node20',
+    // CI（actions: node 22）/ Dockerfile（node:22-alpine）の実行環境に揃える。
+    target: 'node22',
     sourcemap: 'inline',
     logLevel: 'warning',
     // テストファイルの `from 'vitest'` を極小 shim へ差し替える。

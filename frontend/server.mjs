@@ -14,6 +14,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 8700;
 const HOST = process.env.HOST || '0.0.0.0';
 const DIST = path.resolve(process.env.DIST || path.join(__dirname, 'dist'));
+// 範囲判定はセパレータ境界で行い、兄弟ディレクトリ（例: dist-secret）への前方一致誤検知を防ぐ。
+const DIST_PREFIX = DIST.endsWith(path.sep) ? DIST : DIST + path.sep;
+// 配信ルートの実体パス（シンボリックリンク解決済み）。realpath 検証の基準にする。
+const DIST_REAL = await fs.realpath(DIST).catch(() => DIST);
+const ROOT_PREFIX = DIST_REAL.endsWith(path.sep) ? DIST_REAL : DIST_REAL + path.sep;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -42,11 +47,15 @@ async function resolveFile(urlPath) {
   const decoded = decodeURIComponent(urlPath.split('?')[0].split('#')[0]);
   const rel = path.normalize(decoded).replace(/^(\.\.[/\\])+/, '');
   let target = path.join(DIST, rel);
-  if (!target.startsWith(DIST)) return INDEX; // 範囲外アクセスは index へ
+  // 範囲外アクセス（セパレータ境界で判定）は index へ。
+  if (target !== DIST && !target.startsWith(DIST_PREFIX)) return INDEX;
   try {
     const st = await fs.stat(target);
     if (st.isDirectory()) target = path.join(target, 'index.html');
     await fs.access(target);
+    // シンボリックリンク経由の dist 外脱出を realpath で遮断（defense-in-depth）。
+    const real = await fs.realpath(target);
+    if (real !== DIST_REAL && !real.startsWith(ROOT_PREFIX)) return INDEX;
     return target;
   } catch {
     // 見つからない場合は SPA フォールバックとして index.html を返す。
