@@ -16,6 +16,20 @@ export const DUMMY_CASES: CaseRecord[] = [
   { id: 'c6', name: '横浜本牧 物流倉庫', code: 'OCSRC-2026-005', address: '横浜市中区本牧', lat: 35.429, lon: 139.666, radius: 3000, date: '2026-06-05', status: 'done', counts: { A: 0, B: 3, C: 4, D: 1 }, isDummy: true },
 ];
 
+/**
+ * ダミー（サンプル）案件を表示するか。
+ * - 既定: 開発（`npm run dev`）は表示、本番ビルド（`npm run build`）は非表示。
+ * - 明示上書き: 環境変数 `VITE_SHOW_DUMMY`（'true' / 'false'）。デモ用に本番でも出したい場合に使う。
+ *   例) `VITE_SHOW_DUMMY=true npm run build`（ダミーあり） / 既定の本番ビルドはダミーなし。
+ */
+export const SHOW_DUMMY: boolean =
+  import.meta.env.VITE_SHOW_DUMMY != null
+    ? import.meta.env.VITE_SHOW_DUMMY === 'true'
+    : import.meta.env.DEV;
+
+/** 画面に出すダミー案件（非表示設定時は空）。UI は必ずこちらを参照する。 */
+export const DUMMY_CASES_VISIBLE: CaseRecord[] = SHOW_DUMMY ? DUMMY_CASES : [];
+
 /** @deprecated 後方互換エイリアス。新コードは DUMMY_CASES を使う。 */
 export const CASES = DUMMY_CASES;
 

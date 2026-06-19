@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useApp } from '../store';
-import { DUMMY_CASES, THIS_WEEK_SINCE } from '../data/cases';
+import { DUMMY_CASES_VISIBLE, THIS_WEEK_SINCE } from '../data/cases';
 import { getCaseStatus, getPrio } from '../data/constants';
 import type { CaseRecord, Priority } from '../types';
 
@@ -16,9 +16,10 @@ export function DashboardScreen() {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
-  // 実データ（新しい順）を先頭に、続いてダミーを並べる。
-  const cases: CaseRecord[] = useMemo(() => [...state.liveCases, ...DUMMY_CASES], [state.liveCases]);
+  // 実データ（新しい順）を先頭に、続いてダミー（表示設定時のみ）を並べる。
+  const cases: CaseRecord[] = useMemo(() => [...state.liveCases, ...DUMMY_CASES_VISIBLE], [state.liveCases]);
   const liveCount = state.liveCases.length;
+  const dummyCount = DUMMY_CASES_VISIBLE.length;
 
   const { agg, aggTotal, kpiCards } = useMemo(() => {
     const a: Record<Priority, number> = { A: 0, B: 0, C: 0, D: 0 };
@@ -28,7 +29,7 @@ export function DashboardScreen() {
     const needAction = cases.filter((c) => c.counts.A > 0).length;
     const thisWeek = cases.filter((c) => c.date >= THIS_WEEK_SINCE).length;
     const cards = [
-      { label: '総案件数', value: String(cases.length), unit: '件', sub: `実データ ${liveCount} / ダミー ${DUMMY_CASES.length}`, color: 'var(--accent)' },
+      { label: '総案件数', value: String(cases.length), unit: '件', sub: dummyCount ? `実データ ${liveCount} / ダミー ${dummyCount}` : `実データ ${liveCount}`, color: 'var(--accent)' },
       { label: '専門確認優先（A）合計', value: String(aCount), unit: '件', sub: '全案件のA項目の合計', color: PRIO.A.color },
       { label: '要対応案件', value: String(needAction), unit: '件', sub: 'A項目を含む案件', color: PRIO.B.color },
       { label: '今週実行', value: String(thisWeek), unit: '件', sub: `${THIS_WEEK_SINCE} 以降に実行`, color: PRIO.C.color },
@@ -160,7 +161,7 @@ export function DashboardScreen() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '15px 20px', borderBottom: '1px solid var(--border-2)' }}>
             <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>調査案件一覧</h2>
             <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--text-3)' }}>
-              {cases.length} 件（実データ {liveCount} / ダミー {DUMMY_CASES.length}）
+              {cases.length} 件（実データ {liveCount}{dummyCount ? ` / ダミー ${dummyCount}` : ''}）
             </span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.6fr 1fr 1.8fr 1fr 1fr', gap: 0, padding: '10px 20px', background: 'var(--surface-3)', borderBottom: '1px solid var(--border-2)', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '.3px' }}>
@@ -216,9 +217,19 @@ export function DashboardScreen() {
               </div>
             );
           })}
+          {cases.length === 0 && (
+            <div style={{ padding: '32px 20px', textAlign: 'center', fontSize: 12.5, color: 'var(--text-3)', lineHeight: 1.7 }}>
+              まだ調査案件がありません。<br />
+              「地点入力（SCR-001）」で地点確認を実行し、結果を「ダッシュボードに保存（本番データ）」すると一覧に追加されます。
+            </div>
+          )}
         </div>
         <p style={{ margin: '14px 2px 0', fontSize: 11, color: 'var(--text-3)', lineHeight: 1.6 }}>
-          「<b style={{ color: 'var(--text-2)' }}>ダミーデータ</b>」タグの6件はサンプルで、件数はデモ値です（「開く」で座標の実取得を実行）。実データは地点確認の結果を SCR-002 の「ダッシュボードに保存」で追加できます。確認優先度Dは判断材料の不足を意味します。
+          {dummyCount > 0 ? (
+            <>「<b style={{ color: 'var(--text-2)' }}>ダミーデータ</b>」タグの{dummyCount}件はサンプルで、件数はデモ値です（「開く」で座標の実取得を実行）。実データは地点確認の結果を SCR-002 の「ダッシュボードに保存」で追加できます。確認優先度Dは判断材料の不足を意味します。</>
+          ) : (
+            <>実データは地点確認の結果を SCR-002 の「ダッシュボードに保存」で追加できます。確認優先度Dは「リスクが低い」ではなく判断材料の不足を意味します。</>
+          )}
         </p>
       </div>
     </div>

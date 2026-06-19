@@ -1,5 +1,5 @@
 import { useApp } from '../store';
-import { DUMMY_CASES } from '../data/cases';
+import { DUMMY_CASES_VISIBLE } from '../data/cases';
 import type { Screen } from '../types';
 
 // 左ナビゲーション。ワークフロー（SCR-000〜007）を切り替える。
@@ -18,7 +18,7 @@ export function Sidebar() {
   const { screen, ranOnce, findings, sources } = state;
 
   const badgeFor = (key: Screen): string | null => {
-    if (key === 'dashboard') return String(state.liveCases.length + DUMMY_CASES.length);
+    if (key === 'dashboard') return String(state.liveCases.length + DUMMY_CASES_VISIBLE.length);
     if (key === 'analysis' && ranOnce) return String(findings.length);
     if (key === 'sources') return String(sources.length);
     return null;
