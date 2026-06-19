@@ -1,0 +1,156 @@
+/* グローバルスタイル。Claude Design モック（v2）の helmet/style を移植。
+   ライト/ダークの 2 テーマを CSS 変数で切り替える。テーマは <html data-ocsrc-theme="dark">
+   属性で適用され、構造色（背景・境界・文字・クローム）を変数化している。
+   意味色（確認優先度 A〜D 等）は JS のテーマ別パレットで解決する。 */
+
+:root {
+  --bg: #e6e9ee;
+  --surface: #ffffff;
+  --surface-2: #fbfcfd;
+  --surface-3: #f4f6f8;
+  --surface-4: #eef0f3;
+  --border: #d3d8e0;
+  --border-2: #e8ebf0;
+  --border-3: #dde2e9;
+  --text: #1d2733;
+  --text-strong: #27313d;
+  --text-2: #5b6573;
+  --text-3: #8a929e;
+  --text-4: #9aa2ae;
+  --accent: #15616d;
+  --accent-soft: #e6f0f1;
+  --accent-border: #b6cdd1;
+  /* クローム（ヘッダー / サイドバー / フッター）はライトモードでは明色にする。 */
+  --chrome: #ffffff;
+  --chrome-2: #f1f4f8;
+  --chrome-3: #eaeef3;
+  --chrome-border: #d8dee6;
+  --chrome-text: #1d2733;
+  --chrome-text-2: #46515f;
+  --chrome-text-3: #6b7682;
+  --chrome-text-4: #8a929e;
+  --scroll: #c2c8d2;
+  --shadow: rgba(20, 40, 70, 0.08);
+  --map-legend: #ffffff;
+  --warn-bg: #fbf4e6;
+  --warn-border: #ecd9ad;
+  --warn-text: #8a6d1f;
+  --warn-text-2: #7a6a3f;
+  --err-bg: #f7e7e4;
+  --err-border: #e3b5ad;
+  --err-text: #a5341f;
+  --ok-bg: #e3f0e8;
+  --ok-text: #2f6f4f;
+}
+
+:root[data-ocsrc-theme='dark'] {
+  --bg: #0e1621;
+  --surface: #16212e;
+  --surface-2: #1a2734;
+  --surface-3: #1f2c3b;
+  --surface-4: #111c28;
+  --border: #2a3a4e;
+  --border-2: #223142;
+  --border-3: #28384b;
+  --text: #e7ecf2;
+  --text-strong: #f1f5f9;
+  --text-2: #a4b0bf;
+  --text-3: #76828f;
+  --text-4: #5d6b7e;
+  --accent: #2f9fb0;
+  --accent-soft: #12303a;
+  --accent-border: #1e4c57;
+  --chrome: #0a121c;
+  --chrome-2: #0d1825;
+  --chrome-3: #16202e;
+  --chrome-border: #060c14;
+  --chrome-text: #e7ecf2;
+  --chrome-text-2: #9fabba;
+  --chrome-text-3: #7d8a9c;
+  --chrome-text-4: #5d6b7e;
+  --scroll: #2a3a4e;
+  --shadow: rgba(0, 0, 0, 0.45);
+  --map-legend: #1a2734;
+  --warn-bg: #2e2613;
+  --warn-border: #4a3d1c;
+  --warn-text: #d6b15a;
+  --warn-text-2: #c2a76a;
+  --err-bg: #331a1a;
+  --err-border: #5a2a26;
+  --err-text: #e8897e;
+  --ok-bg: #16301f;
+  --ok-text: #5fc08c;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+body {
+  font-family: 'Noto Sans JP', sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+/* スクロールバー */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scroll);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.leaflet-container {
+  font-family: 'Noto Sans JP', sans-serif;
+  background: var(--surface-3);
+}
+/* ダーク時はベースタイル/重ねタイルを反転してダーク地図化する（1行で全タイルに作用）。 */
+:root[data-ocsrc-theme='dark'] .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.93) contrast(0.92);
+}
+
+/* アニメーション */
+@keyframes ocsrc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ocsrc-slide {
+  from {
+    transform: translateX(28px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes ocsrc-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+button {
+  font-family: inherit;
+}
+input,
+textarea {
+  font-family: inherit;
+}

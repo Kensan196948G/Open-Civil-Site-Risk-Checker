@@ -1,0 +1,16 @@
+# OCSRC Web を Docker で常駐させる（systemd の代替）。
+#   cd infra && OCSRC_PORT=8700 docker compose up -d --build
+# restart: always によりホスト再起動後も自動で立ち上がる。ホストの全 IF（自動割当 IP 含む）に公開。
+services:
+  ocsrc-web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    image: ocsrc-web:latest
+    container_name: ocsrc-web
+    restart: always
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8700
+    ports:
+      - "${OCSRC_PORT:-8700}:8700"
