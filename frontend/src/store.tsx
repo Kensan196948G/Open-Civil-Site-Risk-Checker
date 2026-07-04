@@ -27,6 +27,7 @@ import type {
 } from './types';
 import { SAMPLE } from './data/constants';
 import { cloneLedger } from './data/sources';
+import { loadAnalysisDefaults } from './settings/appSettings';
 import { addLiveCase, buildCaseFromAnalysis, deleteLiveCase, exportLiveCases, importLiveCases, loadLiveCases } from './data/caseStore';
 import { buildMemoText } from './risk/memo';
 import { runAnalysis, STEP_DEFS, type AnalysisInputForm } from './api/runAnalysis';
@@ -89,6 +90,8 @@ export interface AppState {
 }
 
 function initialState(): AppState {
+  // SCR-008 で保存された既定値（検索半径・確認カテゴリ）があれば使う（未保存時は組み込みの既定値）。
+  const defaults = loadAnalysisDefaults();
   return {
     screen: 'dashboard',
     theme: initialTheme(),
@@ -97,8 +100,8 @@ function initialState(): AppState {
       address: '',
       lat: '',
       lon: '',
-      radius: 500,
-      categories: { roads: true, rivers: true, hazard: true, terrain: true, weather: true, facilities: true },
+      radius: defaults.radius,
+      categories: defaults.categories,
     },
     formError: '',
     running: false,

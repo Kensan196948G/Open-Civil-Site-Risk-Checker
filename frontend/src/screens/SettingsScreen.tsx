@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../store';
 import { ksjBaseUrl } from '../api/ksj';
+import { CATEGORY_OPTIONS, RADIUS_OPTIONS, radiusLabel } from '../data/constants';
 import {
   clearAiSettings,
   DEFAULT_MODEL,
@@ -13,10 +14,23 @@ import {
   type AiSettings,
   type TestVerdict,
 } from '../settings/aiSettings';
+import {
+  canSaveAnalysisDefaults,
+  clearAnalysisDefaults,
+  isValidBackendUrl,
+  loadAnalysisDefaults,
+  loadBackendUrlOverride,
+  resetAllLocalData,
+  saveAnalysisDefaults,
+  saveBackendUrlOverride,
+  testBackendConnection,
+  type AnalysisDefaults,
+  type BackendTestVerdict,
+} from '../settings/appSettings';
 
-// SCR-008 システム設定。AI調査メモで利用する AI 設定（Anthropic / Claude 専用）と
-// アプリ情報を表示する。API キーはこのブラウザの localStorage のみに保存し、
-// 送信先は接続テスト・生成時の Anthropic API のみ（自社サーバへは送信しない）。
+// SCR-008 システム設定。AI調査メモで利用する AI 設定（Anthropic / Claude 専用）、
+// バックエンド接続（KSJ 連携）、地点確認の既定値、ローカルデータ管理、アプリ情報を表示する。
+// いずれも localStorage のみに保存し、送信先は接続テスト・生成時の対象サービスのみ。
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -39,6 +53,15 @@ const labelStyle: React.CSSProperties = {
   letterSpacing: '.3px',
 };
 
+const sectionStyle: React.CSSProperties = {
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: 10,
+  padding: '18px 20px',
+  maxWidth: 720,
+  marginTop: 16,
+};
+
 function btnStyle(kind: 'primary' | 'ghost' | 'danger', disabled = false): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: '7px 14px',
@@ -54,68 +77,156 @@ function btnStyle(kind: 'primary' | 'ghost' | 'danger', disabled = false): React
   return { ...base, background: 'var(--surface)', color: 'var(--text-2)', border: '1px solid var(--border)' };
 }
 
+function VerdictBanner({ verdict }: { verdict: TestVerdict | BackendTestVerdict | null }) {
+  if (!verdict) return null;
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        padding: '9px 12px',
+        borderRadius: 6,
+        fontSize: 12,
+        fontWeight: 600,
+        background: verdict.ok ? '#3fb27f18' : '#c0392b14',
+        color: verdict.ok ? '#2e8f66' : '#c0392b',
+        border: `1px solid ${verdict.ok ? '#3fb27f44' : '#c0392b44'}`,
+      }}
+    >
+      {verdict.ok ? '✓ ' : '✗ '}
+      {verdict.message}
+    </div>
+  );
+}
+
 export function SettingsScreen() {
   const { state } = useApp();
-  const [saved, setSaved] = useState<AiSettings>(() => loadAiSettings());
-  const [apiKey, setApiKey] = useState<string>(saved.apiKey);
-  const [model, setModel] = useState<string>(saved.model);
+
+  // ---- AI 設定 ----
+  const [savedAi, setSavedAi] = useState<AiSettings>(() => loadAiSettings());
+  const [apiKey, setApiKey] = useState<string>(savedAi.apiKey);
+  const [model, setModel] = useState<string>(savedAi.model);
   const [showKey, setShowKey] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [verdict, setVerdict] = useState<TestVerdict | null>(null);
-  const [notice, setNotice] = useState('');
+  const [testingAi, setTestingAi] = useState(false);
+  const [aiVerdict, setAiVerdict] = useState<TestVerdict | null>(null);
+  const [aiNotice, setAiNotice] = useState('');
 
-  const savable = canSave(apiKey);
+  const aiSavable = canSave(apiKey);
 
-  const onTest = () => {
-    if (!savable || testing) return;
-    setTesting(true);
-    setVerdict(null);
+  const onTestAi = () => {
+    if (!aiSavable || testingAi) return;
+    setTestingAi(true);
+    setAiVerdict(null);
     void testAiConnection(apiKey.trim()).then((v) => {
-      setVerdict(v);
-      setTesting(false);
+      setAiVerdict(v);
+      setTestingAi(false);
     });
   };
 
-  const onSave = () => {
-    if (!savable) return;
+  const onSaveAi = () => {
+    if (!aiSavable) return;
     const stamped = saveAiSettings({ apiKey, model: model.trim() || DEFAULT_MODEL });
     if (stamped) {
-      setSaved(stamped);
+      setSavedAi(stamped);
       setModel(stamped.model);
-      setNotice(`保存しました（${stamped.savedAt}）`);
+      setAiNotice(`保存しました（${stamped.savedAt}）`);
     } else {
-      setNotice('保存できませんでした（この環境では localStorage が利用できません）。');
+      setAiNotice('保存できませんでした（この環境では localStorage が利用できません）。');
     }
   };
 
-  const onClearInput = () => {
+  const onClearAiInput = () => {
     setApiKey('');
     setModel('');
-    setVerdict(null);
-    setNotice('入力をクリアしました（保存済み設定は保持されています）。');
+    setAiVerdict(null);
+    setAiNotice('入力をクリアしました（保存済み設定は保持されています）。');
   };
 
-  const onDeleteSaved = () => {
+  const onDeleteSavedAi = () => {
     clearAiSettings();
-    setSaved({ apiKey: '', model: '', savedAt: '' });
+    setSavedAi({ apiKey: '', model: '', savedAt: '' });
     setApiKey('');
     setModel('');
-    setVerdict(null);
-    setNotice('保存済みの AI 設定を削除しました。');
+    setAiVerdict(null);
+    setAiNotice('保存済みの AI 設定を削除しました。');
   };
 
-  const backend = ksjBaseUrl();
+  // ---- バックエンド接続（KSJ 連携） ----
+  const [backendUrl, setBackendUrl] = useState<string>(() => loadBackendUrlOverride());
+  const [testingBackend, setTestingBackend] = useState(false);
+  const [backendVerdict, setBackendVerdict] = useState<BackendTestVerdict | null>(null);
+  const [backendNotice, setBackendNotice] = useState('');
+
+  const backendUrlValid = isValidBackendUrl(backendUrl);
+  const backendBuildTime = ksjBaseUrl();
+
+  const onTestBackend = () => {
+    if (!backendUrlValid || testingBackend) return;
+    setTestingBackend(true);
+    setBackendVerdict(null);
+    void testBackendConnection(backendUrl).then((v) => {
+      setBackendVerdict(v);
+      setTestingBackend(false);
+    });
+  };
+
+  const onSaveBackend = () => {
+    if (!backendUrlValid) return;
+    if (saveBackendUrlOverride(backendUrl)) {
+      setBackendNotice('バックエンド接続先を保存しました。次回の地点確認から反映されます。');
+    } else {
+      setBackendNotice('保存できませんでした（この環境では localStorage が利用できません）。');
+    }
+  };
+
+  const onClearBackend = () => {
+    setBackendUrl('');
+    setBackendVerdict(null);
+    setBackendNotice('バックエンド接続先の上書きを解除しました（ビルド時設定に戻ります）。');
+  };
+
+  // ---- 地点確認の既定値 ----
+  const [defaults, setDefaults] = useState<AnalysisDefaults>(() => loadAnalysisDefaults());
+  const [defaultsNotice, setDefaultsNotice] = useState('');
+  const defaultsSavable = canSaveAnalysisDefaults(defaults);
+
+  const toggleDefaultCat = (k: keyof AnalysisDefaults['categories']) =>
+    setDefaults((d) => ({ ...d, categories: { ...d.categories, [k]: !d.categories[k] } }));
+
+  const onSaveDefaults = () => {
+    if (!defaultsSavable) return;
+    if (saveAnalysisDefaults(defaults)) {
+      setDefaultsNotice('既定値を保存しました。次回の地点入力画面から反映されます。');
+    } else {
+      setDefaultsNotice('保存できませんでした（この環境では localStorage が利用できません）。');
+    }
+  };
+
+  const onResetDefaults = () => {
+    clearAnalysisDefaults();
+    setDefaults(loadAnalysisDefaults());
+    setDefaultsNotice('組み込みの既定値（500m・全カテゴリ）に戻しました。');
+  };
+
+  // ---- ローカルデータ管理 ----
+  const [confirmingReset, setConfirmingReset] = useState(false);
+
+  const onExecuteReset = () => {
+    resetAllLocalData();
+    window.location.reload();
+  };
+
+  const backendUrlKind = backendUrl === '' ? undefined : backendUrlValid ? 'ok' : 'invalid';
 
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'auto', padding: '26px 28px 50px' }}>
       <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-008</div>
       <h1 style={{ margin: '3px 0 4px', fontSize: 21, fontWeight: 700 }}>システム設定</h1>
       <p style={{ margin: '0 0 18px', fontSize: 12.5, color: 'var(--text-2)' }}>
-        AI調査メモで利用する AI 接続と、アプリの動作環境を管理します。
+        AI 接続・バックエンド連携・地点確認の既定値・ローカルデータを管理します。
       </p>
 
       {/* ---- AI 設定 ---- */}
-      <section style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '18px 20px', maxWidth: 720 }}>
+      <section style={{ ...sectionStyle, marginTop: 0 }}>
         <h2 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>AI 設定（AI調査メモ）</h2>
         <p style={{ margin: '0 0 14px', fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-3)' }}>
           API キーは<strong>このブラウザの localStorage のみ</strong>に保存され、送信先は接続テスト・メモ生成時の Anthropic API だけです（本アプリのサーバへは送信しません）。共有端末では保存後の取り扱いに注意してください。
@@ -143,7 +254,7 @@ export function SettingsScreen() {
               value={apiKey}
               onChange={(e) => {
                 setApiKey(e.target.value);
-                setVerdict(null);
+                setAiVerdict(null);
               }}
               placeholder="sk-ant-…"
               autoComplete="off"
@@ -156,46 +267,28 @@ export function SettingsScreen() {
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={onTest} disabled={!savable || testing} style={btnStyle('ghost', !savable || testing)}>
-            {testing ? 'テスト中…' : '接続テスト'}
+          <button onClick={onTestAi} disabled={!aiSavable || testingAi} style={btnStyle('ghost', !aiSavable || testingAi)}>
+            {testingAi ? 'テスト中…' : '接続テスト'}
           </button>
-          <button onClick={onClearInput} style={btnStyle('ghost')}>
+          <button onClick={onClearAiInput} style={btnStyle('ghost')}>
             入力クリア
           </button>
-          <button onClick={onSave} disabled={!savable} style={btnStyle('primary', !savable)}>
+          <button onClick={onSaveAi} disabled={!aiSavable} style={btnStyle('primary', !aiSavable)}>
             設定を保存
           </button>
         </div>
 
-        {verdict && (
-          <div
-            style={{
-              marginTop: 12,
-              padding: '9px 12px',
-              borderRadius: 6,
-              fontSize: 12,
-              fontWeight: 600,
-              background: verdict.ok ? '#3fb27f18' : '#c0392b14',
-              color: verdict.ok ? '#2e8f66' : '#c0392b',
-              border: `1px solid ${verdict.ok ? '#3fb27f44' : '#c0392b44'}`,
-            }}
-          >
-            {verdict.ok ? '✓ ' : '✗ '}
-            {verdict.message}
-          </div>
-        )}
-        {notice && (
-          <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--text-3)' }}>{notice}</div>
-        )}
+        <VerdictBanner verdict={aiVerdict} />
+        {aiNotice && <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--text-3)' }}>{aiNotice}</div>}
 
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-2)', display: 'flex', alignItems: 'center', gap: 10, fontSize: 11.5 }}>
-          {saved.savedAt ? (
+          {savedAi.savedAt ? (
             <>
               <span style={{ color: 'var(--text-2)' }}>
-                保存済み: {PROVIDER_NAME} / <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{maskApiKey(saved.apiKey)}</span> / {saved.model}
-                <span style={{ color: 'var(--text-4)' }}>（{saved.savedAt}）</span>
+                保存済み: {PROVIDER_NAME} / <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{maskApiKey(savedAi.apiKey)}</span> / {savedAi.model}
+                <span style={{ color: 'var(--text-4)' }}>（{savedAi.savedAt}）</span>
               </span>
-              <button onClick={onDeleteSaved} style={btnStyle('danger')}>
+              <button onClick={onDeleteSavedAi} style={btnStyle('danger')}>
                 保存済み設定を削除
               </button>
             </>
@@ -205,17 +298,165 @@ export function SettingsScreen() {
         </div>
       </section>
 
+      {/* ---- バックエンド接続（KSJ 連携） ---- */}
+      <section style={sectionStyle}>
+        <h2 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>バックエンド接続（KSJ 連携）</h2>
+        <p style={{ margin: '0 0 14px', fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-3)' }}>
+          国土数値情報（河川・施設）の空間検索 API（FastAPI + PostGIS）の接続先を、ビルドし直さずにこの画面から設定できます。未設定時はビルド時の
+          <code style={{ fontFamily: "'JetBrains Mono', monospace" }}> VITE_OCSRC_BACKEND_URL </code>
+          {backendBuildTime ? `（現在: ${backendBuildTime}）` : '（未設定）'}が使われます。
+        </p>
+
+        <label style={labelStyle}>バックエンド URL</label>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <input
+            value={backendUrl}
+            onChange={(e) => {
+              setBackendUrl(e.target.value);
+              setBackendVerdict(null);
+            }}
+            placeholder="http://127.0.0.1:8000"
+            style={{
+              ...inputStyle,
+              flex: 1,
+              borderColor: backendUrlKind === 'invalid' ? '#c0392b88' : 'var(--border)',
+            }}
+          />
+        </div>
+        {backendUrlKind === 'invalid' && (
+          <div style={{ marginBottom: 10, fontSize: 11, color: '#c0392b' }}>http:// または https:// で始まる URL を入力してください。</div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button onClick={onTestBackend} disabled={!backendUrlValid || testingBackend} style={btnStyle('ghost', !backendUrlValid || testingBackend)}>
+            {testingBackend ? 'テスト中…' : '接続テスト'}
+          </button>
+          <button onClick={onClearBackend} style={btnStyle('ghost')}>
+            上書きを解除
+          </button>
+          <button onClick={onSaveBackend} disabled={!backendUrlValid} style={btnStyle('primary', !backendUrlValid)}>
+            設定を保存
+          </button>
+        </div>
+
+        <VerdictBanner verdict={backendVerdict} />
+        {backendNotice && <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--text-3)' }}>{backendNotice}</div>}
+      </section>
+
+      {/* ---- 地点確認の既定値 ---- */}
+      <section style={sectionStyle}>
+        <h2 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>地点確認の既定値</h2>
+        <p style={{ margin: '0 0 14px', fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-3)' }}>
+          地点入力画面（SCR-001）を開いたときの検索半径・確認カテゴリの初期選択を変更します。個々の地点確認では、この画面とは別にその場で変更できます。
+        </p>
+
+        <label style={{ ...labelStyle, marginBottom: 8 }}>既定の検索半径</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+          {RADIUS_OPTIONS.map((r) => {
+            const on = defaults.radius === r;
+            return (
+              <button
+                key={r}
+                onClick={() => setDefaults((d) => ({ ...d, radius: r }))}
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  cursor: 'pointer',
+                  border: `1.5px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
+                  background: on ? 'var(--accent-soft)' : 'var(--surface)',
+                  color: on ? 'var(--accent)' : 'var(--text-2)',
+                }}
+              >
+                {radiusLabel(r)}
+              </button>
+            );
+          })}
+        </div>
+
+        <label style={{ ...labelStyle, marginBottom: 8 }}>既定の確認カテゴリ（1つ以上）</label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 14 }}>
+          {CATEGORY_OPTIONS.map(([k, label]) => {
+            const on = defaults.categories[k];
+            return (
+              <button
+                key={k}
+                onClick={() => toggleDefaultCat(k)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  border: `1.5px solid ${on ? 'var(--accent-border)' : 'var(--border-3)'}`,
+                  background: on ? 'var(--accent-soft)' : 'var(--surface)',
+                  color: 'var(--text)',
+                }}
+              >
+                <span style={{ width: 14, height: 14, borderRadius: 4, border: `1.5px solid ${on ? 'var(--accent)' : 'var(--border)'}`, background: on ? 'var(--accent)' : 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 9, flex: 'none' }}>
+                  {on ? '✓' : ''}
+                </span>
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button onClick={onResetDefaults} style={btnStyle('ghost')}>
+            組み込みの既定値に戻す
+          </button>
+          <button onClick={onSaveDefaults} disabled={!defaultsSavable} style={btnStyle('primary', !defaultsSavable)}>
+            既定値を保存
+          </button>
+        </div>
+        {defaultsNotice && <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--text-3)' }}>{defaultsNotice}</div>}
+      </section>
+
+      {/* ---- ローカルデータ管理 ---- */}
+      <section style={sectionStyle}>
+        <h2 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>ローカルデータ管理</h2>
+        <p style={{ margin: '0 0 14px', fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-3)' }}>
+          本アプリのデータ（調査案件・テーマ・AI設定・バックエンド設定・既定値）はすべてこのブラウザの localStorage に保存されています。サーバ側には保存されません。
+        </p>
+
+        {!confirmingReset ? (
+          <button onClick={() => setConfirmingReset(true)} style={btnStyle('danger')}>
+            ローカルデータを全て削除…
+          </button>
+        ) : (
+          <div style={{ padding: '12px 14px', borderRadius: 8, background: '#c0392b0f', border: '1px solid #c0392b44' }}>
+            <p style={{ margin: '0 0 10px', fontSize: 12, lineHeight: 1.7, color: 'var(--text)' }}>
+              <strong>本当にすべてのローカルデータを削除しますか？</strong> 調査案件（実データ）・AI設定・バックエンド設定・既定値がすべて削除され、元に戻せません。ダッシュボードの「↓ エクスポート」で事前にバックアップを取ることを推奨します。
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setConfirmingReset(false)} style={btnStyle('ghost')}>
+                キャンセル
+              </button>
+              <button onClick={onExecuteReset} style={{ ...btnStyle('danger'), background: '#c0392b', color: '#fff' }}>
+                完全に削除する
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
       {/* ---- アプリ情報 ---- */}
-      <section style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '18px 20px', maxWidth: 720, marginTop: 16 }}>
+      <section style={sectionStyle}>
         <h2 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>アプリ情報</h2>
         {(
           [
             ['アプリ', 'Open Civil Site Risk Checker（工事候補地リスクチェッカー）'],
             ['フェーズ', 'MVP（Phase 1）+ Phase 2（KSJ ローカルDB / 空間検索）'],
             ['AI 連携', `${PROVIDER_NAME} のみ対応（AI調査メモ生成）`],
-            ['バックエンド連携', backend ? `${backend}（KSJ 実連携）` : '未設定（KSJ は未連携表示）'],
+            ['バックエンド連携', backendBuildTime ? `${backendBuildTime}（KSJ 実連携）` : '未設定（KSJ は未連携表示）'],
             ['テーマ', state.theme === 'dark' ? 'ダーク' : 'ライト'],
-            ['ローカル保存データ', 'ocsrc-cases（調査案件）/ ocsrc-theme（テーマ）/ ocsrc-ai-settings（AI設定）'],
+            ['ローカル保存データ', 'ocsrc-cases / ocsrc-theme / ocsrc-ai-settings / ocsrc-backend-url / ocsrc-default-analysis'],
           ] as const
         ).map(([k, v]) => (
           <div key={k} style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 10, padding: '7px 0', borderBottom: '1px solid var(--border-2)', fontSize: 12 }}>
