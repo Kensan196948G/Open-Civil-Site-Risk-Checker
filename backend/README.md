@@ -21,6 +21,17 @@ ruff check .                   # Lint
 |---|---|---|
 | GET | `/healthz` | liveness + DB 到達性（`ok` / `error` / `not_configured` / `unavailable`） |
 | GET | `/api/v1/ping` | API 疎通確認 |
+| GET | `/api/v1/nearby?lat=&lon=&radius_m=` | 取込済み KSJ（河川・施設）の近傍検索。距離昇順・出典/整備年度つき。DB 未整備時は 503（「該当なし」と「取得失敗」を区別、NFR-504） |
+
+## KSJ データ取込
+
+```bash
+OCSRC_DATABASE_URL=postgresql://app:***@127.0.0.1:5432/site_risk_checker \
+  python -m app.ingest data/sample/sample-rivers.geojson \
+  --dataset river --source "サンプル河川データ（テスト用）" --source-updated "2026（合成）"
+```
+
+同一 `(dataset, source)` の再実行は洗い替え（冪等）。実データの入手・変換手順は [`data/README.md`](data/README.md) を参照。
 
 ## 設定（環境変数、prefix `OCSRC_`）
 

@@ -1,0 +1,22 @@
+{
+  "type": "FeatureCollection",
+  "_comment": "SYNTHETIC SAMPLE for tests/dev — NOT real KSJ data. Geometries are fictional lines near Kasumigaseki.",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "サンプル川（テスト用）", "W05_004": "サンプル川（テスト用）", "type": "river" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[139.7565, 35.6720], [139.7570, 35.6745], [139.7575, 35.6770]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "サンプル水路（テスト用）", "type": "canal" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[139.7460, 35.6800], [139.7480, 35.6820]]
+      }
+    }
+  ]
+}

@@ -12,6 +12,10 @@ dist-ssr/
 .env.*
 !.env.example
 
+# ===== KSJ downloaded data (raw/processed are local-only; sample/ is tracked) =====
+backend/data/raw/
+backend/data/processed/
+
 # ===== Python (backend) =====
 __pycache__/
 *.pyc

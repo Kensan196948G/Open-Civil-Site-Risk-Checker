@@ -1,4 +1,5 @@
 import { fetchJson, nowHMS } from './http';
+import { ksjBaseUrl } from './ksj';
 import type { SourceKey, SourceStatus } from '../types';
 
 // データソース接続テスト（要件 FR-603）。
@@ -55,8 +56,13 @@ export async function pingSource(key: SourceKey): Promise<PingResult> {
       const good = await imageProbe('https://disaportaldata.gsi.go.jp/raster/01_flood_l2_shinsuishin_data/14/14552/6451.png');
       return good ? ok() : fail();
     }
-    case 'ksj':
-      return skip();
+    case 'ksj': {
+      // Phase 2: バックエンド設定時は healthz で DB 到達性まで確認する。
+      const base = ksjBaseUrl();
+      if (!base) return skip();
+      const r = await fetchJson<{ db?: string }>(`${base}/healthz`, { timeout: 8000 });
+      return r.ok && r.data?.db === 'ok' ? ok() : fail();
+    }
     case 'plateau':
       // 規約上は接続可能。MVP では疎通成功扱い（実データ取得は別途）。
       return ok();

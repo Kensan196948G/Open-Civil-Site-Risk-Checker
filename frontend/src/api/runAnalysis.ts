@@ -2,6 +2,7 @@ import { geocode } from './nominatim';
 import { fetchWeather } from './openMeteo';
 import { fetchOverpass } from './overpass';
 import { fetchElevation } from './elevation';
+import { fetchKsj, isKsjConfigured } from './ksj';
 import { nowHMS, nowStamp } from './http';
 import { radiusLabel } from '../data/constants';
 import { FALLBACK_FINDINGS } from '../data/fixtures';
@@ -138,12 +139,23 @@ export async function runAnalysis(form: AnalysisInputForm, opts: RunOpts = {}): 
       })
     : Promise.resolve().then(() => onStep('gsi_tile', 'skipped'));
 
-  // ---- 3) 取得できないソースの誠実な表現（段階的に点灯） ----
-  // KSJ: 初期版はローカルDB未整備のため未連携（rivers は Overpass で代替）。
-  const ksjP = delay(300).then(() => {
-    logs.push({ time: nowHMS(), source: 'ksj', endpoint: 'PostGIS ST_DWithin（未整備）', code: '—', status: 'skipped', ms: '—', error: 'ローカルDB未整備のためスキップ' });
-    onStep('ksj', 'skipped');
-  });
+  // ---- 3) KSJ ローカルDB（Phase 2: バックエンド設定時のみ実連携） ----
+  // VITE_OCSRC_BACKEND_URL 未設定時は従来どおり「未連携」を誠実に表示する。
+  const needKsj = cat.rivers || cat.facilities;
+  const ksjP =
+    needKsj && isKsjConfigured()
+      ? fetchKsj(input).then((r) => {
+          logs.push(r.log);
+          r.findings.forEach((f) => {
+            if (cat[f.category as Exclude<Category, 'data_quality'>]) findings.push(f);
+          });
+          onStep('ksj', r.stepStatus);
+        })
+      : delay(300).then(() => {
+          const reason = needKsj ? 'バックエンド未設定（VITE_OCSRC_BACKEND_URL）のためスキップ' : '対象カテゴリ未選択のためスキップ';
+          logs.push({ time: nowHMS(), source: 'ksj', endpoint: 'PostGIS ST_DWithin', code: '—', status: 'skipped', ms: '—', error: reason });
+          onStep('ksj', 'skipped');
+        });
 
   // ハザードマップ: タイル重ね合わせは可能。重なりの自動判定はしない（視覚確認要）。
   const hazardP = delay(500).then(() => {
