@@ -1,6 +1,10 @@
 # OCSRC Web を Docker で常駐させる（systemd の代替）。
 #   cd infra && OCSRC_PORT=8700 docker compose up -d --build
 # restart: always によりホスト再起動後も自動で立ち上がる。ホストの全 IF（自動割当 IP 含む）に公開。
+#
+# Phase 2（backend + PostGIS）は profile "phase2" に分離。既定の up では起動しない:
+#   docker compose --profile phase2 up -d --build
+# DB 資格情報は infra/.env（コミット対象外、.env.example 参照）から注入する。
 services:
   ocsrc-web:
     build:
@@ -14,3 +18,44 @@ services:
       - PORT=8700
     ports:
       - "${OCSRC_PORT:-8700}:8700"
+
+  db:
+    image: postgis/postgis:16-3.4
+    profiles: ["phase2"]
+    container_name: ocsrc-db
+    restart: always
+    environment:
+      POSTGRES_DB: ${OCSRC_DB_NAME:-site_risk_checker}
+      POSTGRES_USER: ${OCSRC_DB_USER:-app}
+      # Development-only default; override via infra/.env in any shared environment.
+      POSTGRES_PASSWORD: ${OCSRC_DB_PASSWORD:-dev_only_password}
+    ports:
+      # Bind to loopback only — the DB is not a public service.
+      - "127.0.0.1:${OCSRC_DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${OCSRC_DB_USER:-app} -d ${OCSRC_DB_NAME:-site_risk_checker}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.backend
+    image: ocsrc-backend:latest
+    profiles: ["phase2"]
+    container_name: ocsrc-backend
+    restart: always
+    environment:
+      - OCSRC_APP_ENV=${OCSRC_APP_ENV:-development}
+      - OCSRC_DATABASE_URL=postgresql://${OCSRC_DB_USER:-app}:${OCSRC_DB_PASSWORD:-dev_only_password}@db:5432/${OCSRC_DB_NAME:-site_risk_checker}
+    ports:
+      - "127.0.0.1:${OCSRC_BACKEND_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

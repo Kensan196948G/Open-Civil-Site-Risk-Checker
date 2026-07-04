@@ -234,6 +234,23 @@ frontend/src/
 
 ---
 
+## バックエンド（Phase 2・開発中）
+
+`backend/` に FastAPI バックエンド（Phase 2 scaffold）を追加しました。国土数値情報のローカル DB 化（PostgreSQL + PostGIS）と空間検索 API をここに実装していきます（Issue #4）。
+
+```bash
+cd infra
+cp .env.example .env                          # DB パスワード等（コミット禁止）
+docker compose --profile phase2 up -d --build # db(PostGIS) + backend を起動
+curl http://127.0.0.1:8000/healthz            # → {"status":"ok","db":"ok",...}
+```
+
+- 既定の `docker compose up`（フロント配信のみ）には**影響しません**（profile 分離）
+- CI に backend ジョブ（ruff / pytest）を追加済み
+- 詳細は `backend/README.md` を参照
+
+---
+
 ## 今後の拡張（要件 §18 / 詳細仕様準拠）
 
 | フェーズ | 内容 |
