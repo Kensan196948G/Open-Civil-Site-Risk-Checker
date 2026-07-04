@@ -1,0 +1,16 @@
+{
+  "type": "FeatureCollection",
+  "_comment": "SYNTHETIC SAMPLE for tests/dev — NOT real KSJ data. Points are fictional facilities near Kasumigaseki.",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "サンプル庁舎（テスト用）", "category": "官公署" },
+      "geometry": { "type": "Point", "coordinates": [139.7530, 35.6740] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "サンプル小学校（テスト用）", "category": "学校" },
+      "geometry": { "type": "Point", "coordinates": [139.7495, 35.6760] }
+    }
+  ]
+}

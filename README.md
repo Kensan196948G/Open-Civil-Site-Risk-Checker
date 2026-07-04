@@ -127,7 +127,7 @@ docker compose ps                         # Docker の場合
 | Open-Meteo | 7日予報（強雨・強風の抽出） | ✅ 実連携 |
 | 国土地理院 地理院タイル | 背景地図（淡色/標準/写真）・標高 | ✅ 実連携 |
 | ハザードマップポータル | 洪水浸水想定・土砂災害の重ね合わせタイル | ✅ 実連携（視覚確認向け） |
-| 国土数値情報 (KSJ) | 河川・施設（ローカルDB前提） | ⏸ 未連携（Phase 2 で PostGIS 化） |
+| 国土数値情報 (KSJ) | 河川・施設（ローカルDB / PostGIS 空間検索） | 🟡 条件付き実連携（`VITE_OCSRC_BACKEND_URL` 設定時・Phase 2） |
 | PLATEAU | 3D都市モデル | ⏳ タイムアウト再現（取得失敗の扱いを実証） |
 | xROAD | 道路交通量 | ⏸ 未連携（利用規約同意が必要） |
 
@@ -246,7 +246,9 @@ curl http://127.0.0.1:8000/healthz            # → {"status":"ok","db":"ok",...
 ```
 
 - 既定の `docker compose up`（フロント配信のみ）には**影響しません**（profile 分離）
-- CI に backend ジョブ（ruff / pytest）を追加済み
+- CI に backend ジョブ（ruff / pytest + PostGIS サービスコンテナでの統合テスト）を追加済み
+- 🗺️ **KSJ 空間検索（Phase 2-3/2-4 実装済み）**: `python -m app.ingest` で国土数値情報（GeoJSON）を PostGIS へ取込み、`GET /api/v1/nearby?lat=&lon=&radius_m=` で近傍の河川・施設を距離つきで返します（取込手順は `backend/data/README.md`）
+- 🔌 フロントエンドはビルド時に `VITE_OCSRC_BACKEND_URL`（例 `http://127.0.0.1:8000`）を設定すると KSJ ステップが実連携になります。**未設定なら従来どおり「未連携」表示**で動作は不変です
 - 詳細は `backend/README.md` を参照
 
 ---

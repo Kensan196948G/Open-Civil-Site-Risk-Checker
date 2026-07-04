@@ -59,6 +59,23 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      # KSJ 空間検索の統合テスト用 PostGIS（tests/test_ksj_db_integration.py）。
+      postgis:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: ocsrc_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      OCSRC_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ocsrc_test
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
