@@ -76,6 +76,15 @@ docker compose down               # 停止
 
 > systemd と Docker は同一ポートを使うため、**どちらか一方**を使用してください。
 
+> ⚠️ **Windows ホストでの既知の落とし穴**: `restart: always` はコンテナ自身の再起動を担保しますが、
+> Docker Desktop（Docker エンジン）そのものが起動していなければコンテナは復帰しません。Docker Desktop の
+> 既定は「ログイン時に自動起動しない」設定のため、Windows 再起動後にサイトが接続拒否になることがあります
+> （2026-07-05 に本番 `http://192.168.0.143:8700/` で実際に発生・復旧済み）。対策として、ログオン時に
+> Docker Desktop を起動するタスクを登録済みです:
+> - スクリプト: `scripts/ops/Start-DockerDesktop.ps1`
+> - タスク名: `OCSRC-DockerDesktop-AutoStart`（Task Scheduler / ログオン時トリガー）
+> - 確認: `Get-ScheduledTask -TaskName OCSRC-DockerDesktop-AutoStart`
+
 ### C. ロールバック（切り戻し）手順
 
 デプロイ後に問題が見つかった場合は、**コードを直前の正常版へ戻して再ビルド・再起動**します。履歴改変（force push）は行わず、`git revert` で戻します。
