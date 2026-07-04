@@ -248,7 +248,7 @@ curl http://127.0.0.1:8000/healthz            # → {"status":"ok","db":"ok",...
 
 - 既定の `docker compose up`（フロント配信のみ）には**影響しません**（profile 分離）
 - CI に backend ジョブ（ruff / pytest + PostGIS サービスコンテナでの統合テスト）を追加済み
-- 🗺️ **KSJ 空間検索（Phase 2-3/2-4 実装済み）**: `python -m app.ingest` で国土数値情報（GeoJSON）を PostGIS へ取込み、`GET /api/v1/nearby?lat=&lon=&radius_m=` で近傍の河川・施設を距離つきで返します（取込手順は `backend/data/README.md`）
+- 🗺️ **KSJ 空間検索（Phase 2-3/2-4 実装済み）**: `python -m app.ingest` で国土数値情報（GeoJSON）を PostGIS へ取込み、`GET /api/v1/nearby?lat=&lon=&radius_m=` で近傍の河川・施設を距離つきで返します（取込手順は `backend/data/README.md`）。**実データでの動作検証済み**: NII Geoshape 経由で荒川水系（日本橋川・隅田川等 2,937件、CC BY 4.0）を取込み、霞が関周辺の検索で実取得できることを確認
 - 🔌 フロントエンドはビルド時に `VITE_OCSRC_BACKEND_URL`（例 `http://127.0.0.1:8000`）を設定すると KSJ ステップが実連携になります。**未設定なら従来どおり「未連携」表示**で動作は不変です
 - 詳細は `backend/README.md` を参照
 
