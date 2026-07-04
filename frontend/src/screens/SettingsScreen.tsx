@@ -3,23 +3,20 @@ import { useApp } from '../store';
 import { ksjBaseUrl } from '../api/ksj';
 import {
   clearAiSettings,
-  DEFAULT_MODELS,
-  PROVIDER_LABEL,
+  DEFAULT_MODEL,
+  PROVIDER_NAME,
   canSave,
   loadAiSettings,
   maskApiKey,
   saveAiSettings,
   testAiConnection,
-  type AiProvider,
   type AiSettings,
   type TestVerdict,
 } from '../settings/aiSettings';
 
-// SCR-008 システム設定。AI調査メモで利用する AI 設定（プロバイダ / API キー）と
+// SCR-008 システム設定。AI調査メモで利用する AI 設定（Anthropic / Claude 専用）と
 // アプリ情報を表示する。API キーはこのブラウザの localStorage のみに保存し、
-// 送信先は接続テスト・生成時の AI 提供元のみ（自社サーバへは送信しない）。
-
-const PROVIDERS: AiProvider[] = ['anthropic', 'openai', 'gemini'];
+// 送信先は接続テスト・生成時の Anthropic API のみ（自社サーバへは送信しない）。
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -60,7 +57,6 @@ function btnStyle(kind: 'primary' | 'ghost' | 'danger', disabled = false): React
 export function SettingsScreen() {
   const { state } = useApp();
   const [saved, setSaved] = useState<AiSettings>(() => loadAiSettings());
-  const [provider, setProvider] = useState<AiProvider>(saved.provider);
   const [apiKey, setApiKey] = useState<string>(saved.apiKey);
   const [model, setModel] = useState<string>(saved.model);
   const [showKey, setShowKey] = useState(false);
@@ -68,13 +64,13 @@ export function SettingsScreen() {
   const [verdict, setVerdict] = useState<TestVerdict | null>(null);
   const [notice, setNotice] = useState('');
 
-  const savable = canSave(provider, apiKey);
+  const savable = canSave(apiKey);
 
   const onTest = () => {
     if (!savable || testing) return;
     setTesting(true);
     setVerdict(null);
-    void testAiConnection(provider, apiKey.trim()).then((v) => {
+    void testAiConnection(apiKey.trim()).then((v) => {
       setVerdict(v);
       setTesting(false);
     });
@@ -82,7 +78,7 @@ export function SettingsScreen() {
 
   const onSave = () => {
     if (!savable) return;
-    const stamped = saveAiSettings({ provider, apiKey, model: model.trim() || DEFAULT_MODELS[provider] });
+    const stamped = saveAiSettings({ apiKey, model: model.trim() || DEFAULT_MODEL });
     if (stamped) {
       setSaved(stamped);
       setModel(stamped.model);
@@ -101,7 +97,7 @@ export function SettingsScreen() {
 
   const onDeleteSaved = () => {
     clearAiSettings();
-    setSaved({ provider: 'anthropic', apiKey: '', model: '', savedAt: '' });
+    setSaved({ apiKey: '', model: '', savedAt: '' });
     setApiKey('');
     setModel('');
     setVerdict(null);
@@ -122,30 +118,20 @@ export function SettingsScreen() {
       <section style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '18px 20px', maxWidth: 720 }}>
         <h2 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>AI 設定（AI調査メモ）</h2>
         <p style={{ margin: '0 0 14px', fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-3)' }}>
-          API キーは<strong>このブラウザの localStorage のみ</strong>に保存され、送信先は接続テスト・メモ生成時の AI 提供元だけです（本アプリのサーバへは送信しません）。共有端末では保存後の取り扱いに注意してください。
+          API キーは<strong>このブラウザの localStorage のみ</strong>に保存され、送信先は接続テスト・メモ生成時の Anthropic API だけです（本アプリのサーバへは送信しません）。共有端末では保存後の取り扱いに注意してください。
         </p>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
             <label style={labelStyle}>AI プロバイダ</label>
-            <select
-              value={provider}
-              onChange={(e) => {
-                setProvider(e.target.value as AiProvider);
-                setVerdict(null);
-              }}
-              style={{ ...inputStyle, fontFamily: "'Noto Sans JP', sans-serif" }}
-            >
-              {PROVIDERS.map((p) => (
-                <option key={p} value={p}>
-                  {PROVIDER_LABEL[p]}
-                </option>
-              ))}
-            </select>
+            <div style={{ ...inputStyle, fontFamily: "'Noto Sans JP', sans-serif", background: 'var(--surface-3)', color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              {PROVIDER_NAME}
+              <span style={{ fontSize: 10, color: 'var(--text-4)' }}>（本アプリは Anthropic のみ対応）</span>
+            </div>
           </div>
           <div>
-            <label style={labelStyle}>モデル（空欄で既定: {DEFAULT_MODELS[provider]}）</label>
-            <input value={model} onChange={(e) => setModel(e.target.value)} placeholder={DEFAULT_MODELS[provider]} style={inputStyle} />
+            <label style={labelStyle}>モデル（空欄で既定: {DEFAULT_MODEL}）</label>
+            <input value={model} onChange={(e) => setModel(e.target.value)} placeholder={DEFAULT_MODEL} style={inputStyle} />
           </div>
         </div>
 
@@ -159,7 +145,7 @@ export function SettingsScreen() {
                 setApiKey(e.target.value);
                 setVerdict(null);
               }}
-              placeholder={provider === 'anthropic' ? 'sk-ant-…' : provider === 'openai' ? 'sk-…' : 'AIza…'}
+              placeholder="sk-ant-…"
               autoComplete="off"
               style={{ ...inputStyle, flex: 1 }}
             />
@@ -206,7 +192,7 @@ export function SettingsScreen() {
           {saved.savedAt ? (
             <>
               <span style={{ color: 'var(--text-2)' }}>
-                保存済み: {PROVIDER_LABEL[saved.provider]} / <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{maskApiKey(saved.apiKey)}</span> / {saved.model}
+                保存済み: {PROVIDER_NAME} / <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{maskApiKey(saved.apiKey)}</span> / {saved.model}
                 <span style={{ color: 'var(--text-4)' }}>（{saved.savedAt}）</span>
               </span>
               <button onClick={onDeleteSaved} style={btnStyle('danger')}>
@@ -226,6 +212,7 @@ export function SettingsScreen() {
           [
             ['アプリ', 'Open Civil Site Risk Checker（工事候補地リスクチェッカー）'],
             ['フェーズ', 'MVP（Phase 1）+ Phase 2（KSJ ローカルDB / 空間検索）'],
+            ['AI 連携', `${PROVIDER_NAME} のみ対応（AI調査メモ生成）`],
             ['バックエンド連携', backend ? `${backend}（KSJ 実連携）` : '未設定（KSJ は未連携表示）'],
             ['テーマ', state.theme === 'dark' ? 'ダーク' : 'ライト'],
             ['ローカル保存データ', 'ocsrc-cases（調査案件）/ ocsrc-theme（テーマ）/ ocsrc-ai-settings（AI設定）'],
