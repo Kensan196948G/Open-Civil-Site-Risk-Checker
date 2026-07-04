@@ -68,6 +68,11 @@ export async function pingSource(key: SourceKey): Promise<PingResult> {
       return ok();
     case 'xroad':
       return skip();
+    case 'jma_warning': {
+      // 認証不要・CORS開放のため東京都のエンドポイントで疎通確認する。
+      const r = await fetchJson('https://www.jma.go.jp/bosai/warning/data/warning/130000.json', { timeout: 8000 });
+      return r.ok ? ok() : fail();
+    }
     default:
       return fail();
   }
