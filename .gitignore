@@ -12,6 +12,14 @@ dist-ssr/
 .env.*
 !.env.example
 
+# ===== Python (backend) =====
+__pycache__/
+*.pyc
+.venv/
+**/.venv/
+.pytest_cache/
+.ruff_cache/
+
 # ===== Logs =====
 *.log
 npm-debug.log*
