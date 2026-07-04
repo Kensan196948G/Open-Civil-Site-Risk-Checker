@@ -1,11 +1,35 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useApp } from '../store';
 import { memoSectionsFromText } from '../risk/memo';
+import { generateAiMemo } from '../risk/aiMemo';
+import { canSave, loadAiSettings } from '../settings/aiSettings';
 
-// SCR-004 AI調査メモ。閲覧 / 編集を切り替え、再生成できる（要件 FR-401〜405）。
+// SCR-004 AI調査メモ。閲覧 / 編集を切り替え、テンプレート再生成と
+// AI 生成（SCR-008 で保存した Anthropic キーを利用）ができる（要件 FR-401〜405）。
 export function MemoScreen() {
   const { state, go, toggleMemoEdit, onMemoInput, regenMemo, memoTextOrDefault } = useApp();
   const { ranOnce, memoEditing } = state;
+
+  const [generating, setGenerating] = useState(false);
+  const [aiNotice, setAiNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  const [aiWarnings, setAiWarnings] = useState<string[]>([]);
+
+  const aiSettings = useMemo(() => loadAiSettings(), []);
+  const aiConfigured = canSave(aiSettings.apiKey);
+
+  const onAiGenerate = () => {
+    if (!aiConfigured || generating || !state.location) return;
+    setGenerating(true);
+    setAiNotice(null);
+    void generateAiMemo(aiSettings, state.location, state.findings).then((res) => {
+      if (res.ok && res.text) {
+        onMemoInput(res.text);
+        setAiWarnings(res.warnings);
+      }
+      setAiNotice({ ok: res.ok, message: res.message });
+      setGenerating(false);
+    });
+  };
 
   const memoText = memoTextOrDefault();
   const sections = useMemo(() => memoSectionsFromText(memoText), [memoText]);
@@ -30,12 +54,55 @@ export function MemoScreen() {
             <h1 style={{ margin: '2px 0 0', fontSize: 21, fontWeight: 700 }}>AI調査メモ</h1>
           </div>
           <div style={{ flex: 1 }} />
-          <span style={{ fontSize: 10.5, fontWeight: 600, padding: '4px 10px', borderRadius: 13, background: 'var(--ok-bg)', color: 'var(--ok-text)' }}>✓ 断定表現チェック済</span>
+          {aiWarnings.length ? (
+            <span style={{ fontSize: 10.5, fontWeight: 600, padding: '4px 10px', borderRadius: 13, background: '#d9832422', color: '#b06a1a' }}>
+              ⚠ 断定表現の可能性 {aiWarnings.length} 件
+            </span>
+          ) : (
+            <span style={{ fontSize: 10.5, fontWeight: 600, padding: '4px 10px', borderRadius: 13, background: 'var(--ok-bg)', color: 'var(--ok-text)' }}>✓ 断定表現チェック済</span>
+          )}
           <button onClick={toggleMemoEdit} style={editBtn}>{memoEditing ? 'プレビュー' : '編集'}</button>
-          <button onClick={regenMemo} style={{ padding: '8px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-            再生成
+          <button onClick={regenMemo} style={editBtn}>
+            テンプレート再生成
           </button>
+          {aiConfigured ? (
+            <button
+              onClick={onAiGenerate}
+              disabled={generating}
+              style={{ padding: '8px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: generating ? 'default' : 'pointer', opacity: generating ? 0.6 : 1 }}
+            >
+              {generating ? 'AI 生成中…' : '🤖 AI生成（Claude）'}
+            </button>
+          ) : (
+            <button onClick={() => go('settings')} style={editBtn} title="システム設定で Anthropic API キーを保存すると AI 生成が使えます">
+              AI設定へ
+            </button>
+          )}
         </div>
+
+        {aiNotice && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: '9px 12px',
+              borderRadius: 6,
+              fontSize: 12,
+              fontWeight: 600,
+              background: aiNotice.ok ? '#3fb27f18' : '#c0392b14',
+              color: aiNotice.ok ? '#2e8f66' : '#c0392b',
+              border: `1px solid ${aiNotice.ok ? '#3fb27f44' : '#c0392b44'}`,
+            }}
+          >
+            {aiNotice.ok ? '✓ ' : '✗ '}
+            {aiNotice.message}
+          </div>
+        )}
+        {aiWarnings.length > 0 && (
+          <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 6, fontSize: 11.5, background: '#d9832414', color: '#b06a1a', border: '1px solid #d9832444', lineHeight: 1.7 }}>
+            ⚠ 生成文に断定の可能性がある表現が含まれます：{aiWarnings.map((w) => `「${w}」`).join('、')}。
+            「編集」から表現を「要確認」「追加確認推奨」等へ修正してください（本ツールは断定表現を出力しない方針です）。
+          </div>
+        )}
 
         {memoEditing ? (
           <textarea

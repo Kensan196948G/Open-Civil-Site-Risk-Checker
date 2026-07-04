@@ -1,13 +1,11 @@
 import { fetchJson, nowStamp, type FetchOutcome } from '../api/http';
 
 // AI 設定（SCR-008 システム設定 / AI調査メモ向け）。
+// プロバイダは Anthropic（Claude）のみをサポートする（運用方針）。
 // API キーは「このブラウザの localStorage のみ」に保存し、自社サーバへは送信しない。
-// 接続テストは各 AI 提供元の軽量エンドポイント（モデル一覧）を直接呼び出す。
-
-export type AiProvider = 'anthropic' | 'openai' | 'gemini';
+// 接続テストは Anthropic のモデル一覧 GET（トークン消費なし）で行う。
 
 export interface AiSettings {
-  provider: AiProvider;
   apiKey: string;
   model: string;
   /** 保存日時（'YYYY-MM-DD HH:MM:SS'）。未保存は ''。 */
@@ -15,36 +13,23 @@ export interface AiSettings {
 }
 
 export const AI_SETTINGS_KEY = 'ocsrc-ai-settings';
-
-export const PROVIDER_LABEL: Record<AiProvider, string> = {
-  anthropic: 'Anthropic（Claude）',
-  openai: 'OpenAI',
-  gemini: 'Google Gemini',
-};
-
-/** 既定モデル（空欄保存時に使用）。 */
-export const DEFAULT_MODELS: Record<AiProvider, string> = {
-  anthropic: 'claude-sonnet-5',
-  openai: 'gpt-4o-mini',
-  gemini: 'gemini-2.0-flash',
-};
+export const PROVIDER_NAME = 'Anthropic（Claude）';
+export const DEFAULT_MODEL = 'claude-sonnet-5';
 
 export function emptyAiSettings(): AiSettings {
-  return { provider: 'anthropic', apiKey: '', model: '', savedAt: '' };
+  return { apiKey: '', model: '', savedAt: '' };
 }
 
-const PROVIDERS: AiProvider[] = ['anthropic', 'openai', 'gemini'];
-
-/** JSON 文字列 → AiSettings。壊れた値・未知 provider は null（既定にフォールバック）。 */
+/** JSON 文字列 → AiSettings。壊れた値・旧形式の他社プロバイダ設定は null（既定へ）。 */
 export function parseAiSettings(json: string | null): AiSettings | null {
   if (!json) return null;
   try {
-    const v = JSON.parse(json) as Partial<AiSettings>;
+    const v = JSON.parse(json) as Partial<AiSettings> & { provider?: string };
     if (!v || typeof v !== 'object') return null;
-    if (!PROVIDERS.includes(v.provider as AiProvider)) return null;
+    // 旧形式（provider つき）は anthropic のみ引き継ぐ。他社設定は破棄する。
+    if (v.provider !== undefined && v.provider !== 'anthropic') return null;
     if (typeof v.apiKey !== 'string' || !v.apiKey) return null;
     return {
-      provider: v.provider as AiProvider,
       apiKey: v.apiKey,
       model: typeof v.model === 'string' ? v.model : '',
       savedAt: typeof v.savedAt === 'string' ? v.savedAt : '',
@@ -61,12 +46,12 @@ export function maskApiKey(key: string): string {
   return `${key.slice(0, 4)}…${key.slice(-4)}`;
 }
 
-/** 保存可能か（provider 選択済み + キーが最低限の長さ）。 */
-export function canSave(provider: AiProvider | '', apiKey: string): boolean {
-  return PROVIDERS.includes(provider as AiProvider) && apiKey.trim().length >= 8;
+/** 保存可能か（キーが最低限の長さ）。 */
+export function canSave(apiKey: string): boolean {
+  return apiKey.trim().length >= 8;
 }
 
-// ---- localStorage 永続化（不可環境では黙って無効化しない — 呼び出し側へ false を返す）----
+// ---- localStorage 永続化 ----
 
 export function loadAiSettings(): AiSettings {
   try {
@@ -79,7 +64,7 @@ export function loadAiSettings(): AiSettings {
 export function saveAiSettings(s: Omit<AiSettings, 'savedAt'>): AiSettings | null {
   const stamped: AiSettings = { ...s, apiKey: s.apiKey.trim(), savedAt: nowStamp() };
   try {
-    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(stamped));
+    localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify({ provider: 'anthropic', ...stamped }));
     return stamped;
   } catch {
     return null;
@@ -94,41 +79,27 @@ export function clearAiSettings(): void {
   }
 }
 
-// ---- 接続テスト ----
+// ---- 接続テスト（Anthropic モデル一覧 GET）----
 
 export interface TestRequest {
   url: string;
   init: RequestInit;
 }
 
-/** provider ごとの軽量テストリクエスト（モデル一覧 GET）を組み立てる（pure）。 */
-export function buildTestRequest(provider: AiProvider, apiKey: string): TestRequest {
-  switch (provider) {
-    case 'anthropic':
-      return {
-        url: 'https://api.anthropic.com/v1/models',
-        init: {
-          method: 'GET',
-          headers: {
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            // ブラウザ直接呼び出しの明示オプトイン（Anthropic 公式 CORS サポート）。
-            'anthropic-dangerous-direct-browser-access': 'true',
-          },
-        },
-      };
-    case 'openai':
-      return {
-        url: 'https://api.openai.com/v1/models',
-        init: { method: 'GET', headers: { Authorization: `Bearer ${apiKey}` } },
-      };
-    case 'gemini':
-      return {
-        // Gemini はクエリキー方式。ログ等に URL を出す場合はマスクすること。
-        url: `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
-        init: { method: 'GET' },
-      };
-  }
+/** 軽量テストリクエスト（モデル一覧 GET）を組み立てる（pure）。 */
+export function buildTestRequest(apiKey: string): TestRequest {
+  return {
+    url: 'https://api.anthropic.com/v1/models',
+    init: {
+      method: 'GET',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        // ブラウザ直接呼び出しの明示オプトイン（Anthropic 公式 CORS サポート）。
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+    },
+  };
 }
 
 export interface TestVerdict {
@@ -137,17 +108,15 @@ export interface TestVerdict {
 }
 
 interface ModelsResponse {
-  data?: unknown[]; // anthropic / openai
-  models?: unknown[]; // gemini
+  data?: unknown[];
 }
 
-/** HTTP 結果 → 判定メッセージ（pure）。認証失敗と網羅的な失敗理由を区別する。 */
+/** HTTP 結果 → 判定メッセージ（pure）。認証失敗と他の失敗理由を区別する。 */
 export function interpretTestOutcome(
-  provider: AiProvider,
   out: Pick<FetchOutcome<ModelsResponse>, 'ok' | 'status' | 'data' | 'error'>,
 ): TestVerdict {
   if (out.ok && out.data) {
-    const n = (out.data.data ?? out.data.models ?? []).length;
+    const n = (out.data.data ?? []).length;
     return { ok: true, message: `接続成功（利用可能モデル ${n} 件を確認）` };
   }
   if (out.status === 401 || out.status === 403) {
@@ -157,18 +126,14 @@ export function interpretTestOutcome(
     return { ok: false, message: 'レート制限（HTTP 429）。時間をおいて再試行してください。' };
   }
   if (out.status === 0) {
-    const corsHint =
-      provider === 'openai'
-        ? ' OpenAI はブラウザからの直接呼び出しを許可していない場合があります（CORS）。キー自体は有効な可能性があります。'
-        : '';
-    return { ok: false, message: `接続できませんでした（${out.error}）。${corsHint}`.trim() };
+    return { ok: false, message: `接続できませんでした（${out.error}）。ネットワーク接続を確認してください。` };
   }
   return { ok: false, message: `接続失敗（HTTP ${out.status}: ${out.error}）` };
 }
 
-/** 接続テストを実行する（ブラウザ → AI 提供元へ直接。キーは提供元以外へ送信しない）。 */
-export async function testAiConnection(provider: AiProvider, apiKey: string): Promise<TestVerdict> {
-  const req = buildTestRequest(provider, apiKey);
+/** 接続テストを実行する（キーの送信先は Anthropic のみ）。 */
+export async function testAiConnection(apiKey: string): Promise<TestVerdict> {
+  const req = buildTestRequest(apiKey);
   const out = await fetchJson<ModelsResponse>(req.url, { timeout: 10000, init: req.init });
-  return interpretTestOutcome(provider, out);
+  return interpretTestOutcome(out);
 }
