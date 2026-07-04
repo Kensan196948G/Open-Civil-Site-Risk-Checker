@@ -3,6 +3,7 @@ import { fetchWeather } from './openMeteo';
 import { fetchOverpass } from './overpass';
 import { fetchElevation } from './elevation';
 import { fetchKsj, isKsjConfigured } from './ksj';
+import { fetchJmaWarning } from './jmaWarning';
 import { nowHMS, nowStamp } from './http';
 import { radiusLabel } from '../data/constants';
 import { FALLBACK_FINDINGS } from '../data/fixtures';
@@ -49,6 +50,7 @@ export const STEP_DEFS: StepDef[] = [
   { key: 'open_meteo', name: '気象予報（Open-Meteo）' },
   { key: 'ksj', name: '国土数値情報（河川・施設）' },
   { key: 'hazard_portal', name: 'ハザードマップ重ね合わせ' },
+  { key: 'jma_warning', name: '気象庁 警報・注意報' },
   { key: 'gsi_tile', name: '地理院タイル（標高・地形）' },
   { key: 'plateau', name: 'PLATEAU（3D都市モデル）' },
   { key: 'xroad', name: 'xROAD（道路交通量）' },
@@ -182,7 +184,16 @@ export async function runAnalysis(form: AnalysisInputForm, opts: RunOpts = {}): 
     onStep('xroad', 'skipped');
   });
 
-  await Promise.all([overpassP, weatherP, elevP, ksjP, hazardP, plateauP, xroadP]);
+  // 気象庁 警報・注意報（Phase 3 / Issue #22）: 認証不要・CORS開放のため直接取得する。
+  const jmaP = cat.hazard
+    ? fetchJmaWarning(input).then((r) => {
+        logs.push(r.log);
+        findings.push(...r.findings);
+        onStep('jma_warning', r.stepStatus);
+      })
+    : Promise.resolve().then(() => onStep('jma_warning', 'skipped'));
+
+  await Promise.all([overpassP, weatherP, elevP, ksjP, hazardP, plateauP, xroadP, jmaP]);
 
   // Overpass が失敗し roads/rivers/facilities が空なら、フォールバック項目で補う（要件 AC-009）。
   ensureFallback(findings, cat);

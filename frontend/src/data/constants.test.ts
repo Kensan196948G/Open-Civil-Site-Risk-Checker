@@ -59,6 +59,7 @@ describe('ラベル辞書の網羅性（断定表現の一元管理）', () => {
     'gsi_tile',
     'plateau',
     'xroad',
+    'jma_warning',
   ];
   it('全ソースキーに短縮名が存在する', () => {
     sources.forEach((k) => {

@@ -95,6 +95,7 @@ export const SOURCE_SHORT: Record<SourceKey, string> = {
   gsi_tile: '地理院タイル',
   plateau: 'PLATEAU',
   xroad: 'xROAD',
+  jma_warning: '気象庁警報',
 };
 
 export const RADIUS_OPTIONS = [100, 250, 500, 1000, 3000] as const;

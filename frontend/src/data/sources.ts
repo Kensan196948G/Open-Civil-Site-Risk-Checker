@@ -16,6 +16,7 @@ export const SOURCE_LEDGER: SourceLedgerEntry[] = [
   { key: 'gsi_tile', name: '地理院タイル', provider: '国土地理院', type: 'tile', license: '地理院条件', rank: 'A', stat: 'success', last: '—', enabled: true },
   { key: 'plateau', name: 'PLATEAU', provider: '国土交通省', type: 'api', license: 'CC BY 4.0', rank: 'B', stat: 'failed', last: '—', enabled: true },
   { key: 'xroad', name: 'xROAD', provider: '国土交通省', type: 'api', license: '規約同意要', rank: 'C', stat: 'skipped', last: '—', enabled: false },
+  { key: 'jma_warning', name: '気象庁 警報・注意報', provider: '気象庁', type: 'api', license: '出典明示', rank: 'A', stat: 'success', last: '—', enabled: true },
 ];
 
 /** 台帳のクローンを返す（state 初期化用。元配列を破壊しない）。 */

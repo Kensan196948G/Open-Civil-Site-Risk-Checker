@@ -30,7 +30,8 @@ export type SourceKey =
   | 'hazard_portal'
   | 'gsi_tile'
   | 'plateau'
-  | 'xroad';
+  | 'xroad'
+  | 'jma_warning';
 
 /** 根拠データ1件（要件 §14.1 / NFR-301）。出典・取得日時・更新日・属性を保持。 */
 export interface Evidence {
