@@ -76,6 +76,33 @@ docker compose down               # 停止
 
 > systemd と Docker は同一ポートを使うため、**どちらか一方**を使用してください。
 
+### C. ロールバック（切り戻し）手順
+
+デプロイ後に問題が見つかった場合は、**コードを直前の正常版へ戻して再ビルド・再起動**します。履歴改変（force push）は行わず、`git revert` で戻します。
+
+```bash
+# 1. 戻したいコミットを特定（直前のマージなら HEAD）
+git log --oneline -5
+
+# 2. 対象コミットを打ち消すコミットを作成（マージコミットは -m 1）
+git revert <commit>            # 通常コミット
+git revert -m 1 <merge-commit> # マージコミット
+
+# 3. 再ビルド + 再起動（稼働方式に応じてどちらか）
+scripts/install-systemd.sh                    # systemd の場合（再ビルド + 再起動）
+cd infra && docker compose up -d --build      # Docker の場合
+```
+
+確認:
+
+```bash
+curl -fsS http://127.0.0.1:8700/healthz   # → ok
+systemctl status ocsrc-web                # systemd の場合
+docker compose ps                         # Docker の場合
+```
+
+> 本アプリは静的 SPA（サーバ側状態なし・DB なし）のため、ロールバックはビルド成果物の差し替えのみで完結します。利用者データは各ブラウザの `localStorage` にあり、ロールバックの影響を受けません（スキーマ変更を伴う変更を戻す場合のみ、README の該当バージョンの記載を確認してください）。
+
 ---
 
 ## 実装済み機能（MVP / 受入条件 AC-001〜010 対応）
