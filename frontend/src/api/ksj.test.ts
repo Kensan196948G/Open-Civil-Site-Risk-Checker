@@ -3,6 +3,11 @@ import { mapKsjItems, type KsjItem } from './ksj';
 
 const FETCHED = '2026-07-04 12:00:00';
 
+// ksjBaseUrl() は localStorage（SCR-008 実行時設定）に依存するため、この
+// プロジェクトの vitest 環境（environment: 'node', jsdom 非依存）ではユニット
+// テスト対象外とする（aiSettings.ts の loadXxx 系と同じ既定方針）。手動 / 視覚
+// 確認で検証済み（SCR-008 でのバックエンド URL 保存 → SCR-004/006 への反映）。
+
 const river = (over: Partial<KsjItem> = {}): KsjItem => ({
   dataset: 'river',
   name: 'サンプル川',

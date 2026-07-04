@@ -1,11 +1,14 @@
 import { fetchJson, nowHMS, nowStamp } from './http';
+import { loadBackendUrlOverride } from '../settings/appSettings';
 import type { AdapterResult, AnalysisInput } from './types';
 import type { Evidence, Finding } from '../types';
 
 // 国土数値情報（KSJ）アダプタ（要件 §18 Phase 2 / NFR-401）。
 // 自前バックエンド（FastAPI + PostGIS）の空間検索 API を呼び出し、
 // 取込済みローカル DB の河川・施設を確認項目化する。
-// バックエンド URL（VITE_OCSRC_BACKEND_URL）未設定時は従来どおり「未連携」扱い。
+// バックエンド URL は SCR-008 の実行時設定（localStorage）を優先し、
+// 未設定時はビルド時の VITE_OCSRC_BACKEND_URL にフォールバックする。
+// どちらも未設定なら従来どおり「未連携」扱い。
 
 export interface KsjItem {
   dataset: 'river' | 'facility';
@@ -23,8 +26,11 @@ interface KsjNearbyResponse {
   items: KsjItem[];
 }
 
-/** バックエンド base URL（末尾スラッシュ除去済み）。未設定なら undefined。 */
+/** バックエンド base URL（末尾スラッシュ除去済み）。未設定なら undefined。
+ *  優先順位: SCR-008 の実行時設定（localStorage） > ビルド時の VITE_OCSRC_BACKEND_URL。 */
 export function ksjBaseUrl(): string | undefined {
+  const override = loadBackendUrlOverride();
+  if (override) return override;
   const v = (import.meta as { env?: Record<string, string | undefined> }).env
     ?.VITE_OCSRC_BACKEND_URL;
   return v ? v.replace(/\/+$/, '') : undefined;
