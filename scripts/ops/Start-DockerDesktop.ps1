@@ -13,10 +13,23 @@
 #>
 
 $dockerDesktopExe = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+$logPath = "$env:ProgramData\OCSRC\Start-DockerDesktop.log"
+
+function Write-Log($message) {
+    New-Item -ItemType Directory -Force -Path (Split-Path $logPath) | Out-Null
+    "$(Get-Date -Format o) $message" | Out-File -FilePath $logPath -Append -Encoding utf8
+}
 
 $running = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
 if (-not $running) {
     if (Test-Path $dockerDesktopExe) {
-        Start-Process $dockerDesktopExe
+        try {
+            Start-Process $dockerDesktopExe -ErrorAction Stop
+            Write-Log "Docker Desktop starting."
+        } catch {
+            Write-Log "Failed to start Docker Desktop: $_"
+        }
+    } else {
+        Write-Log "Docker Desktop executable not found at $dockerDesktopExe"
     }
 }
