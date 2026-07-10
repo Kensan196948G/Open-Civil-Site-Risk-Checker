@@ -21,6 +21,15 @@ class Settings(BaseSettings):
     # Plain PostgreSQL DSN, e.g. postgresql://app:***@db:5432/site_risk_checker
     database_url: str | None = None
     db_check_timeout_seconds: float = 3.0
+    # Comma-separated allowlist of browser origins for CORS, e.g.
+    # "http://localhost:5173". Empty (default) disables CORS entirely;
+    # production stays same-origin behind the reverse proxy (Issue #35).
+    cors_origins: str = ""
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        """cors_origins parsed into origins (whitespace stripped, empties dropped)."""
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 
 @lru_cache
