@@ -50,3 +50,5 @@ coverage/
 # ===== ClaudeOS operational state / reports (session-local, regenerated) =====
 /state.json
 /reports/
+.claude/claudeos/snapshots/
+*.bak-*
