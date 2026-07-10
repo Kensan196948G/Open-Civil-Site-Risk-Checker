@@ -15,6 +15,9 @@ WorkingDirectory=/home/kensan/Projects/Mirai-DX-Project/Open-Civil-Site-Risk-Che
 Environment=NODE_ENV=production
 Environment=HOST=0.0.0.0
 Environment=PORT=8700
+# SPA からの /api 中継先（server.mjs の same-origin プロキシ、Issue #35）。
+# 実値は scripts/install-systemd-api.sh が API の検出ポートで注入・更新する。
+Environment=OCSRC_BACKEND_ORIGIN=http://127.0.0.1:8000
 ExecStart=/home/kensan/.nvm/versions/node/v25.2.1/bin/node server.mjs
 Restart=always
 RestartSec=3

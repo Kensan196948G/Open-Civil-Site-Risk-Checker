@@ -1,0 +1,24 @@
+# Open Civil Site Risk Checker — API (FastAPI) systemd ユニット（参照用コピー）。
+# 実体は scripts/install-systemd-api.sh が venv 絶対パス・空きポートを検出して
+# /etc/systemd/system/ocsrc-api.service に生成する。手動更新時はこの内容を合わせること。
+# DB 資格情報はリポジトリ外の EnvironmentFile（/etc/ocsrc/api.env、600）から注入する。
+# 127.0.0.1 バインドを維持し LAN へ直接露出しない（SPA は server.mjs の same-origin プロキシ経由）。
+[Unit]
+Description=Open Civil Site Risk Checker API (OCSRC FastAPI)
+Documentation=https://github.com/Kensan196948G/Open-Civil-Site-Risk-Checker
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kensan
+Group=kensan
+WorkingDirectory=/home/kensan/Projects/Mirai-DX-Project/Open-Civil-Site-Risk-Checker/backend
+EnvironmentFile=/etc/ocsrc/api.env
+ExecStart=/home/kensan/Projects/Mirai-DX-Project/Open-Civil-Site-Risk-Checker/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
