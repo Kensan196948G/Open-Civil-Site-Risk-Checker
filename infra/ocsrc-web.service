@@ -11,7 +11,7 @@ Wants=network-online.target
 Type=simple
 User=kensan
 Group=kensan
-WorkingDirectory=/home/kensan/Projects/Open-Civil-Site-Risk-Checker/frontend
+WorkingDirectory=/home/kensan/Projects/Mirai-DX-Project/Open-Civil-Site-Risk-Checker/frontend
 Environment=NODE_ENV=production
 Environment=HOST=0.0.0.0
 Environment=PORT=8700
