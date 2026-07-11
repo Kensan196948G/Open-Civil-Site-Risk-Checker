@@ -7,9 +7,13 @@
 //   DIST                   配信ディレクトリ（既定 ./dist）
 //   OCSRC_BACKEND_ORIGIN   /api/* の中継先バックエンド（既定 http://127.0.0.1:8000）
 //   OCSRC_PROXY_TIMEOUT_MS 中継のアイドルタイムアウト ms（既定 10000）
+//   OCSRC_TUNNEL_BASIC_USER / OCSRC_TUNNEL_BASIC_PASS
+//                          Cloudflare Tunnel 経由アクセスの Basic 認証資格情報。
+//                          両方設定で有効。未設定のまま Tunnel 経由で到達すると 503（Issue #66）。
 
 import http from 'node:http';
 import https from 'node:https';
+import crypto from 'node:crypto';
 import { promises as fs, createReadStream } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -78,6 +82,101 @@ const SECURITY_HEADERS = {
   'Referrer-Policy': 'strict-origin-when-cross-origin',
 };
 
+// ---- Cloudflare Tunnel 経由アクセスの Basic 認証（Issue #66・要件 §11.3.1） ----
+// Tunnel 判定は cf-connecting-ip ヘッダの有無。cloudflared は必ず付与する一方、
+// LAN 内クライアントが偽装付与しても「認証が余計に要求される」方向にしか働かず、
+// 認証バイパスには使えない（fail-secure）。LAN 直アクセスの挙動は従来どおり。
+const TUNNEL_USER = process.env.OCSRC_TUNNEL_BASIC_USER || '';
+const TUNNEL_PASS = process.env.OCSRC_TUNNEL_BASIC_PASS || '';
+const TUNNEL_AUTH_ENABLED = TUNNEL_USER !== '' && TUNNEL_PASS !== '';
+const sha256 = (s) => crypto.createHash('sha256').update(s, 'utf8').digest();
+// 比較は SHA-256 ダイジェスト同士の timingSafeEqual（入力長に依らず長さ一定・時間一定）。
+const TUNNEL_USER_DIGEST = sha256(TUNNEL_USER);
+const TUNNEL_PASS_DIGEST = sha256(TUNNEL_PASS);
+
+// 認証失敗レート制限: IP 別の固定窓カウンタ。窓内で上限回失敗すると 429 を返す。
+// Map は上限件数で頭打ちにし、溢れたら最古の窓を追い出す（メモリ無限成長の防止）。
+const AUTH_FAIL_WINDOW_MS = 60_000;
+const AUTH_FAIL_LIMIT = 10;
+const AUTH_FAIL_MAX_ENTRIES = 1000;
+const authFailures = new Map();
+
+function authRateLimited(ip) {
+  const entry = authFailures.get(ip);
+  if (!entry) return false;
+  if (Date.now() - entry.windowStart > AUTH_FAIL_WINDOW_MS) {
+    authFailures.delete(ip);
+    return false;
+  }
+  return entry.count >= AUTH_FAIL_LIMIT;
+}
+
+function recordAuthFailure(ip) {
+  const now = Date.now();
+  const entry = authFailures.get(ip);
+  if (entry && now - entry.windowStart <= AUTH_FAIL_WINDOW_MS) {
+    entry.count += 1;
+    return;
+  }
+  if (!authFailures.has(ip) && authFailures.size >= AUTH_FAIL_MAX_ENTRIES) {
+    let oldestKey;
+    let oldestStart = Infinity;
+    for (const [key, value] of authFailures) {
+      if (value.windowStart < oldestStart) {
+        oldestStart = value.windowStart;
+        oldestKey = key;
+      }
+    }
+    if (oldestKey !== undefined) authFailures.delete(oldestKey);
+  }
+  authFailures.set(ip, { count: 1, windowStart: now });
+}
+
+/** Basic 資格情報を検証する（ヘッダ不正・不一致は false）。 */
+function verifyBasicAuth(header) {
+  if (typeof header !== 'string' || !header.startsWith('Basic ')) return false;
+  let decoded;
+  try {
+    decoded = Buffer.from(header.slice(6).trim(), 'base64').toString('utf8');
+  } catch {
+    return false;
+  }
+  const sep = decoded.indexOf(':');
+  if (sep < 0) return false;
+  const okUser = crypto.timingSafeEqual(sha256(decoded.slice(0, sep)), TUNNEL_USER_DIGEST);
+  const okPass = crypto.timingSafeEqual(sha256(decoded.slice(sep + 1)), TUNNEL_PASS_DIGEST);
+  return okUser && okPass;
+}
+
+/** Tunnel 経由リクエストの認証ゲート。true = 続行可、false = 応答送出済み。
+ *  /healthz のみ除外（秘匿情報を含まず、公開経路の死活監視に使うため）。 */
+function checkTunnelAuth(req, res) {
+  const connectingIp = req.headers['cf-connecting-ip'];
+  if (connectingIp === undefined) return true; // LAN 直アクセス
+  if ((req.url || '/').split('?')[0] === '/healthz') return true;
+
+  const deny = (status, headers, message) => {
+    res.writeHead(status, { 'Cache-Control': 'no-store', ...headers });
+    res.end(message);
+    return false;
+  };
+  if (!TUNNEL_AUTH_ENABLED) {
+    // 認証情報が未設定のまま公開経路から到達した場合は塞ぐ（設定漏れ事故の防止）。
+    return deny(503, { 'Content-Type': 'text/plain; charset=utf-8' }, 'tunnel access is not configured');
+  }
+  const ip = String(connectingIp);
+  if (authRateLimited(ip)) {
+    return deny(429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '60' }, 'too many failed authentication attempts');
+  }
+  if (verifyBasicAuth(req.headers.authorization)) return true;
+  recordAuthFailure(ip);
+  return deny(
+    401,
+    { 'Content-Type': 'text/plain; charset=utf-8', 'WWW-Authenticate': 'Basic realm="OCSRC RiskChecker", charset="UTF-8"' },
+    'authentication required',
+  );
+}
+
 // ---- /api リバースプロキシ（same-origin 化。SSRF 防止のため転送先は env 固定オリジンのみ） ----
 const BACKEND_ORIGIN = new URL(process.env.OCSRC_BACKEND_ORIGIN || 'http://127.0.0.1:8000');
 if (BACKEND_ORIGIN.protocol !== 'http:' && BACKEND_ORIGIN.protocol !== 'https:') {
@@ -99,7 +198,8 @@ const DROP_HEADERS = new Set([
 // リクエスト方向の追加除去: GET/HEAD のみ中継し body を転送しないため、エンティティ
 // ヘッダを落とす。クライアントが送った過大な Content-Length を残すとバックエンドが
 // 到着しない body を待ってソケットを PROXY_TIMEOUT_MS まで保持し得る（軽微な slowloris 増幅）。
-const DROP_REQUEST_HEADERS = new Set([...DROP_HEADERS, 'content-length', 'content-type']);
+// authorization は web 層（Tunnel Basic 認証）で消費する資格情報のためバックエンドへ渡さない。
+const DROP_REQUEST_HEADERS = new Set([...DROP_HEADERS, 'content-length', 'content-type', 'authorization']);
 // レスポンス方向の追加除去: web 層が全応答へ付与するセキュリティヘッダは上流の値で
 // 上書きさせない（writeHead はマージ時に自身の引数を優先するため、上流が同名ヘッダを
 // 返すと setHeader 済みの値が負ける）。将来 backend が独自ヘッダを返しても web 層が優先。
@@ -207,6 +307,9 @@ const server = http.createServer(async (req, res) => {
     // 全応答（静的・プロキシ・405/500 等のエラー）に共通のセキュリティヘッダを付与する。
     // writeHead で同名ヘッダを渡さない限り、ここで set した値がそのまま送出される。
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+    // 公開経路（Cloudflare Tunnel）の認証ゲート。メソッド判定より先に評価し、
+    // 未認証クライアントには許可メソッド等の情報も返さない。
+    if (!checkTunnelAuth(req, res)) return;
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.writeHead(405, { Allow: 'GET, HEAD' });
       res.end('Method Not Allowed');

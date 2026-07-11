@@ -91,6 +91,9 @@ WorkingDirectory=${FRONTEND_DIR}
 Environment=NODE_ENV=production
 Environment=HOST=0.0.0.0
 Environment=PORT=${SEL_PORT}
+# Cloudflare Tunnel 公開時の Basic 認証資格情報など（無ければ無視・chmod 600 で管理）。
+# 例: OCSRC_TUNNEL_BASIC_USER / OCSRC_TUNNEL_BASIC_PASS（server.mjs / Issue #66）
+EnvironmentFile=-/etc/ocsrc/web.env
 ExecStart=${NODE_BIN} server.mjs
 Restart=always
 RestartSec=3
