@@ -11,7 +11,7 @@
 
 ---
 
-## クイックスタート
+## 🚀 クイックスタート
 
 ```bash
 cd frontend
@@ -35,9 +35,9 @@ npm run test:smoke   # スモークテスト（esbuild ランナー / 制約環�
 
 ---
 
-## 常駐サービス（WebUI 公開）
+## 🌐 常駐サービス（WebUI 公開）
 
-ビルド成果物（`frontend/dist`）を依存ゼロの静的サーバ（`frontend/server.mjs`）で配信し、常時起動します。サーバは `HOST=0.0.0.0` でバインドするため、**ホストに自動割当された IP（DHCP）を含む全インタフェース**で到達でき、ポートは**競合しない番号を自動選択**します（既定は 8700〜8799 から空きを探索）。
+ビルド成果物（`frontend/dist`）を依存ゼロの静的サーバ（`frontend/server.mjs`）で配信し、常時起動します。サーバは `HOST=0.0.0.0` でバインドするため、**ホストに自動割当された IP（DHCP）を含む全インタフェース**で到達でき、ポートは**競合しない番号を自動選択**します（既定は 8700〜8799 から空きを探索）。`server.mjs` は静的配信に加えて**セキュリティヘッダの付与**と **`/api/*` の same-origin プロキシ**（バックエンド API への中継）も担います（[アーキテクチャ](#-アーキテクチャ)参照）。
 
 現在の稼働 URL（Linux ホスト `kensan1969` / systemd 常駐 / IP は DHCP 自動割当）:
 
@@ -66,6 +66,8 @@ journalctl -u ocsrc-web -f      # ログ追従
 ```
 
 > コード更新後は `scripts/install-systemd.sh` を再実行（再ビルド＋再起動）すれば反映されます。ポートは既存ユニットの値を引き継ぎます。
+
+> 🚀 **バックエンド API（KSJ 空間検索）も常駐させる場合**は `scripts/install-systemd-api.sh` を実行します（`ocsrc-api.service`・127.0.0.1 バインド・web へのプロキシ先自動注入）。DB（PostGIS）起動・パスワード設定を含む全体手順の正本は [`docs/deploy-backend.md`](docs/deploy-backend.md) を参照してください。
 
 ### B. Docker（代替・別ホスト向け）
 
@@ -121,7 +123,7 @@ docker compose ps                         # Docker の場合
 
 ---
 
-## 実装済み機能（MVP / 受入条件 AC-001〜010 対応）
+## 📋 実装済み機能（MVP / 受入条件 AC-001〜010 対応）
 
 | 画面                     | 内容                                                                                                                                                                                                                                                                                                                                |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -133,9 +135,9 @@ docker compose ps                         # Docker の場合
 | SCR-005 レポート出力     | Markdown / CSV 出力（公開区分つき、UTF-8 BOM 付き CSV）                                                                                                                                                                                                                                                                             |
 | SCR-006 データソース管理 | 接続状態・利用条件の台帳、接続テスト（実疎通）                                                                                                                                                                                                                                                                                      |
 | SCR-007 取得ログ         | 実行履歴（成功 / 失敗 / タイムアウト / スキップを区別）                                                                                                                                                                                                                                                                             |
-| SCR-008 システム設定     | AI設定（**Anthropic（Claude）専用**・APIキー入力/クリア/接続テスト/保存）+ **バックエンド接続（KSJ連携）のランタイム設定**（URL保存・接続テスト。ビルド不要で即時反映）+ **地点確認の既定値**（既定検索半径・既定カテゴリ）+ **ローカルデータ管理**（全削除・二段階確認）+ アプリ情報。**すべてブラウザの localStorage のみに保存** |
+| SCR-008 システム設定     | AI設定（**Anthropic（Claude）専用**・APIキー入力/クリア/接続テスト/保存）+ **バックエンド接続（KSJ連携）**（既定は「このサイト経由（/api プロキシ）」・カスタム URL の保存/解除・接続テスト。ビルド不要で即時反映）+ **地点確認の既定値**（既定検索半径・既定カテゴリ）+ **ローカルデータ管理**（全削除・二段階確認）+ アプリ情報。**すべてブラウザの localStorage のみに保存** |
 
-### 連携している公開データソース（ブラウザ直接呼び出し）
+### 🔌 連携している公開データソース（ブラウザ直接呼び出し）
 
 | ソース                    | 用途                                             | 連携状態                                                      |
 | ------------------------- | ------------------------------------------------ | ------------------------------------------------------------- |
@@ -144,18 +146,20 @@ docker compose ps                         # Docker の場合
 | Open-Meteo                | 7日予報（強雨・強風の抽出）                      | ✅ 実連携                                                     |
 | 国土地理院 地理院タイル   | 背景地図（淡色/標準/写真）・標高                 | ✅ 実連携                                                     |
 | ハザードマップポータル    | 洪水浸水想定・土砂災害の重ね合わせタイル         | ✅ 実連携（視覚確認向け）                                     |
-| 国土数値情報 (KSJ)        | 河川・施設（ローカルDB / PostGIS 空間検索）      | 🟡 条件付き実連携（`VITE_OCSRC_BACKEND_URL` 設定時・Phase 2） |
+| 国土数値情報 (KSJ)        | 河川・施設（ローカルDB / PostGIS 空間検索）      | ✅ 実連携（既定: same-origin `/api` プロキシ経由・Phase 2）   |
 | 気象庁 警報・注意報       | 都道府県（気象庁発表単位）の警報・注意報発表状況 | ✅ 実連携（Phase 3・認証不要・CORS開放）                      |
 | PLATEAU                   | 3D都市モデル                                     | ⏳ タイムアウト再現（取得失敗の扱いを実証）                   |
 | xROAD                     | 道路交通量                                       | ⏸ 未連携（利用規約同意が必要）                                |
 
-> ハザードの重なり判定はクライアント側では行わず、タイル重ね合わせによる**視覚確認**として表示します（出典明示・断定回避）。KSJ / PLATEAU / xROAD は「取得失敗・未連携」を誠実に区別表示します（要件 FR-503 / NFR-504）。
+> ハザードの重なり判定はクライアント側では行わず、タイル重ね合わせによる**視覚確認**として表示します（出典明示・断定回避）。KSJ はバックエンド停止・DB 未整備時に「取得失敗」、PLATEAU / xROAD は「未連携」として誠実に区別表示します（要件 FR-503 / NFR-504）。
 >
 > **気象庁 警報・注意報連携（Phase 3・Issue #22）**: 地点の都道府県を Nominatim 逆ジオコーディングで特定し、`https://www.jma.go.jp/bosai/warning/data/warning/{都道府県コード}.json` を直接取得します（バックエンド不要）。表示文は気象庁自身が作成した `headlineText` をそのまま採用し、アプリ側で警報名を合成しません。**北海道・鹿児島県・沖縄県は地域ごとに気象台が分かれ単一コードを持たないため、人口の多い代表地域（札幌／鹿児島県本土／沖縄本島）の発表状況を表示し、その旨を確認結果の注意事項に明記**します。
 
 ---
 
-## 品質ゲート / テスト
+## 🧪 品質ゲート / テスト
+
+ローカル実行コマンド（フロントエンド `frontend/`）:
 
 | ゲート         | コマンド             | 内容                                      |
 | -------------- | -------------------- | ----------------------------------------- |
@@ -165,7 +169,14 @@ docker compose ps                         # Docker の場合
 | スモークテスト | `npm run test:smoke` | esbuild ランナー（環境非依存の二重検証）  |
 | ビルド         | `npm run build`      | 本番ビルド成功確認                        |
 
-### テスト対象（純粋ロジック）
+ローカル実行コマンド（バックエンド `backend/`）:
+
+| ゲート         | コマンド       | 内容                                       |
+| -------------- | -------------- | ------------------------------------------ |
+| Lint           | `ruff check .` | Python Lint                                |
+| ユニットテスト | `pytest`       | KSJ パース・API・取込 CLI（PostGIS 統合テストは DB 到達時のみ） |
+
+### 🎯 テスト対象（純粋ロジック）
 
 DOM 非依存の純粋関数を中心に検証します。とくに**「断定表現を出力しない」コンプライアンス制約**（要件 §3.2）を回帰テストで保証します。
 
@@ -176,20 +187,80 @@ DOM 非依存の純粋関数を中心に検証します。とくに**「断定�
 - `src/api/jmaWarning.ts` — 都道府県→気象庁コード変換、警報コード→名称、発表中警報の抽出・確認項目化
 - `src/data/constants.ts` — ラベル辞書の網羅性・「該当なし／データ未取得」の区別
 
-### 二重ランナー構成（vitest + esbuild スモーク）
+### 🔁 二重ランナー構成（vitest + esbuild スモーク）
 
 テスト本体は1つ（`src/**/*.test.ts`, `import ... from 'vitest'`）で、2つのランナーから実行します。
 
 - **vitest**（CI・通常環境）: `npm test`。
 - **esbuild スモーク**（`scripts/smoke-test.mjs`）: `npm run test:smoke`。`'vitest'` を極小 shim（`scripts/smoke/shim.mjs`）に alias し、esbuild で単一バンドル化して node 上で実行します。仮想メモリ `ulimit` 制約により Vite/WASM 系ツールが起動できない環境でも、同じテスト資産をそのまま検証できます。
 
-### CI
+### ⚙️ CI（`.github/workflows/ci.yml`）
 
-`.github/workflows/ci.yml` が `main` への push / PR で lint → typecheck → test → smoke → build を実行します（Node 22・`npm ci`）。リモート未接続の間はローカルで上記コマンドを実行してください。
+`main` への push / PR で以下の 3 ジョブを実行します。
+
+| ジョブ       | 環境                                 | 内容                                                                     |
+| ------------ | ------------------------------------ | ------------------------------------------------------------------------ |
+| 🖥 frontend  | Node 22                              | `npm ci` → lint → typecheck → vitest → smoke → build                     |
+| 🐍 backend   | Python 3.12 + PostGIS サービスコンテナ | ruff → pytest（KSJ 空間検索の**実 DB 統合テスト**含む）                  |
+| 🔐 security  | Node 22 / Python 3.12                | `npm audit --audit-level=high` + `pip-audit`（既知脆弱性検出で fail）    |
+
+補助的な自動化・対策:
+
+- 🤖 **Dependabot**（`.github/dependabot.yml`）: npm / pip / GitHub Actions の 3 エコシステムを**週次**で更新チェックし PR を自動作成
+- 🛡️ Actions はコミット **SHA でピン留め**（サプライチェーン対策）、`permissions: contents: read`、`persist-credentials: false`
 
 ---
 
-## アーキテクチャ
+## 🏗 アーキテクチャ
+
+### 🗺️ システム全体（現行）
+
+本アプリは**フロントエンド中心の SPA** です。リスク判定・AI 調査メモ・レポート生成はすべてブラウザ内の TypeScript で実行し、外部公開 API はブラウザが直接 fetch します。バックエンド（FastAPI + PostGIS）は国土数値情報（KSJ）の空間検索補助に限定され、`server.mjs` の **`/api/*` same-origin プロキシ**経由で到達します（API 自体は 127.0.0.1 バインドで LAN へ直接露出しません）。
+
+```mermaid
+flowchart LR
+    subgraph LAN["🏠 信頼 LAN 内"]
+        B["🌐 ブラウザ（SPA / React + TS）<br/>入力検証・確認優先度判定・AIメモ・<br/>レポート生成・localStorage 保存"]
+    end
+
+    subgraph HOST["🖥️ Linux ホスト（systemd 常駐 / IP は DHCP 自動割当）"]
+        W["ocsrc-web（server.mjs）<br/>0.0.0.0:8700<br/>静的配信 + セキュリティヘッダ（CSP 等）"]
+        A["ocsrc-api（FastAPI）<br/>127.0.0.1:8000（LAN 非公開）<br/>/healthz・/api/v1/ping・/api/v1/nearby"]
+        D[("ocsrc-db（PostGIS）<br/>127.0.0.1:5432<br/>KSJ ローカル DB")]
+    end
+
+    subgraph EXT["☁️ 外部公開 API 群（ブラウザが直接 HTTPS fetch）"]
+        E1["Nominatim<br/>住所ジオコーディング"]
+        E2["Overpass<br/>道路・水域・施設"]
+        E3["Open-Meteo<br/>気象予報・標高"]
+        E4["地理院タイル / 標高 API"]
+        E5["ハザードマップポータル<br/>重ね合わせタイル"]
+        E6["気象庁<br/>警報・注意報"]
+        E7["Anthropic API<br/>AI 調査メモ（任意）"]
+    end
+
+    B -->|"HTTP :8700<br/>静的資材 + /api/*"| W
+    W -->|"/api/* same-origin プロキシ<br/>OCSRC_BACKEND_ORIGIN（GET/HEAD のみ）"| A
+    A --> D
+    B -.-> E1
+    B -.-> E2
+    B -.-> E3
+    B -.-> E4
+    B -.-> E5
+    B -.-> E6
+    B -.-> E7
+```
+
+| コンポーネント | 役割 | 備考 |
+| -------------- | ---- | ---- |
+| SPA（ブラウザ） | 取得・判定・メモ・出力のすべて | 利用者データは `localStorage` のみ（サーバ側に保存しない） |
+| `frontend/server.mjs`（ocsrc-web） | 静的配信 / セキュリティヘッダ / `/api/*` プロキシ | 依存ゼロ Node。転送先は環境変数固定（SSRF 防止） |
+| `backend/`（ocsrc-api） | KSJ 空間検索 API（読み取り専用 3 エンドポイント） | 127.0.0.1 バインド。SPA は**既定で same-origin `/api` プロキシ経由**で接続（Issue #57・カスタム URL で直結も可） |
+| PostGIS（ocsrc-db） | KSJ 取込データの近傍検索（`ST_DWithin`） | `python -m app.ingest` で取込（冪等） |
+
+> 📖 仕様の正本: 実装アーキテクチャの詳細は [`docs/detailed-specification.md`](docs/detailed-specification.md) §3、バックエンド中心構成（認証・案件管理）は同 §3.4 の**将来計画（Phase 4+）**として整理しています。
+
+### 📁 フロントエンド構成
 
 ```
 frontend/src/
@@ -215,7 +286,7 @@ frontend/src/
 └── screens/            SCR-001〜007 各画面
 ```
 
-### 本番データ（調査案件）の投入
+### 📥 本番データ（調査案件）の投入
 
 ダッシュボード（SCR-000）の調査案件は2種類を区別表示します。
 
@@ -243,11 +314,11 @@ frontend/src/
 
 > データの出所は `isDummy` フラグで常に追跡可能で、集計（KPI・優先度分布）はダミー込みの全件を対象にしつつ件数の内訳（実データ / ダミー）を併記します。
 
-### テーマ（ライト / ダーク）
+### 🎨 テーマ（ライト / ダーク）
 
 ヘッダーのトグルでライト/ダークを切り替えます。構造色は CSS 変数（`src/styles.css` の `:root` / `:root[data-ocsrc-theme='dark']`）、意味色（確認優先度 A〜D・状態・案件状態）は JS のテーマ別パレット（`getPrio(theme)` 等）で解決します。地図はダーク時にタイルペインへ `filter: invert(...)` を当ててダーク地図化します。選択は `localStorage` に保存され、`data-ocsrc-theme` 属性で適用されます。
 
-### 設計上の重要方針
+### 💡 設計上の重要方針
 
 1. **断定しない**：「安全 / 危険 / 施工可否 / リスクなし」を使わず、「要確認 / 追加確認推奨 / 参考情報 / データ不足」で表現する（要件 §3.2）。
 2. **アダプタ方式**：データソースは `src/api/` のアダプタに分離し、追加・差し替えを容易にする（要件 NFR-401/402）。将来のバックエンド（FastAPI）へ移設しやすい契約（`AdapterResult`）を採用。
@@ -256,39 +327,69 @@ frontend/src/
 
 ---
 
-## バックエンド（Phase 2・開発中）
+## 🐍 バックエンド（KSJ 空間検索・Phase 2 稼働中）
 
-`backend/` に FastAPI バックエンド（Phase 2 scaffold）を追加しました。国土数値情報のローカル DB 化（PostgreSQL + PostGIS）と空間検索 API をここに実装していきます（Issue #4）。
+`backend/` の FastAPI バックエンドは、国土数値情報（KSJ）のローカル DB 化（PostgreSQL + PostGIS）と空間検索 API を提供します。エンドポイントは**読み取り専用の 3 つ**（`/healthz` / `/api/v1/ping` / `/api/v1/nearby`）です。
+
+開発時（Docker で DB + backend を起動）:
 
 ```bash
 cd infra
-cp .env.example .env                          # DB パスワード等（コミット禁止）
+cp .env.example .env                          # DB パスワード等（コミット禁止・本番は強パスワード必須）
 docker compose --profile phase2 up -d --build # db(PostGIS) + backend を起動
 curl http://127.0.0.1:8000/healthz            # → {"status":"ok","db":"ok",...}
 ```
 
 - 既定の `docker compose up`（フロント配信のみ）には**影響しません**（profile 分離）
-- CI に backend ジョブ（ruff / pytest + PostGIS サービスコンテナでの統合テスト）を追加済み
-- 🗺️ **KSJ 空間検索（Phase 2-3/2-4 実装済み）**: `python -m app.ingest` で国土数値情報（GeoJSON）を PostGIS へ取込み、`GET /api/v1/nearby?lat=&lon=&radius_m=` で近傍の河川・施設を距離つきで返します（取込手順は `backend/data/README.md`）。**実データでの動作検証済み**: NII Geoshape 経由で荒川水系（日本橋川・隅田川等 2,937件、CC BY 4.0）を取込み、霞が関周辺の検索で実取得できることを確認
-- 🔌 バックエンド接続先は2通りで設定できます: ①ビルド時 `VITE_OCSRC_BACKEND_URL`（例 `http://127.0.0.1:8000`）、②**SCR-008 システム設定画面からランタイムで設定**（ビルド不要・保存後すぐ反映、①より優先）。**どちらも未設定なら従来どおり「未連携」表示**で動作は不変です
-- 詳細は `backend/README.md` を参照
+- 🚀 **本番デプロイ（systemd）**: `scripts/install-systemd-api.sh` で `ocsrc-api.service` を常駐化します（venv 自動構築・**127.0.0.1 バインド**・`ocsrc-web` へのプロキシ先自動注入・DB 資格情報は `/etc/ocsrc/api.env` で管理）。手順の正本は [`docs/deploy-backend.md`](docs/deploy-backend.md)
+- 🗺️ **KSJ 空間検索（Phase 2-3/2-4 実装済み）**: `python -m app.ingest` で国土数値情報（GeoJSON）を PostGIS へ取込み、`GET /api/v1/nearby?lat=&lon=&radius_m=` で近傍の河川・施設を距離つきで返します（取込手順は [`backend/data/README.md`](backend/data/README.md)）。**実データでの動作検証済み**: NII Geoshape 経由で荒川水系（日本橋川・隅田川等 2,937件、CC BY 4.0）を取込み、霞が関周辺の検索で実取得できることを確認
+- 🔌 **バックエンド接続先は既定で「このサイト経由（same-origin `/api` プロキシ）」です（Issue #57）**: 追加設定なしで、LAN 上の別端末のブラウザからも配信オリジン（`:8700`）の `/api/*` 経由で 127.0.0.1 バインドの API へ到達します。優先順位は ① **SCR-008 のカスタム URL**（localStorage 保存・ビルド不要で即時反映） > ② ビルド時 `VITE_OCSRC_BACKEND_URL`（例 `http://127.0.0.1:8000`） > ③ **未設定 = same-origin 既定（相対 `/api`）**。バックエンド停止・DB 未整備時は「取得失敗」として誠実に表示します（「該当なし」と区別・NFR-504）。SCR-008 の接続テストは、既定時はプロキシ特例の `/api/healthz`、カスタム URL 設定時は `{URL}/healthz` で DB 到達性まで確認します
+- 詳細は [`backend/README.md`](backend/README.md) を参照
 
 ---
 
-## 今後の拡張（要件 §18 / 詳細仕様準拠）
+## 🔐 セキュリティと運用境界
 
-| フェーズ | 内容                                                                                                                                  |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Phase 2  | 国土数値情報・ハザードのローカルDB化（PostgreSQL + PostGIS）、FastAPI バックエンド分離                                                |
-| Phase 3  | 気象庁 警報・注意報連携（実装済み・Issue #22）。xROAD は利用規約上の理由（匿名アクセス 403）、PLATEAU は試験運用・SLA無しのため見送り |
-| Phase 4  | 複数候補地比較・案件管理・社内レビュー機能                                                                                            |
-| Phase 5  | Civil Open Data Intelligence Platform への統合                                                                                        |
+### 🛡️ 実装済みのセキュリティ対策
+
+| 対策 | 実装 | 内容 |
+| ---- | ---- | ---- |
+| セキュリティヘッダ | `frontend/server.mjs` | 全レスポンスに **CSP**（外部オリジン許可リスト方式）・`X-Content-Type-Options: nosniff`・`X-Frame-Options: DENY`・`Referrer-Policy` を付与 |
+| same-origin プロキシ | `frontend/server.mjs` | `/api/*` を環境変数固定の転送先（`OCSRC_BACKEND_ORIGIN`）へ中継（**SSRF 防止**）。GET/HEAD のみ・パス正規化後の `/api` 配下再検証 |
+| API の非公開バインド | `scripts/install-systemd-api.sh` | FastAPI は **127.0.0.1 バインド**で LAN へ直接露出しない（多層防御） |
+| CORS 方針 | `backend/app/main.py` | **既定で CORS 無効**。`OCSRC_CORS_ORIGINS` の明示 allowlist のみ（開発用オプトイン）。ワイルドカードは起動時拒否・GET のみ・credentials なし |
+| 秘密情報の分離 | `/etc/ocsrc/api.env`（600） / `infra/.env` | DB 資格情報はリポジトリ外で管理（コミット禁止） |
+| CI 依存スキャン | `.github/workflows/ci.yml` | `npm audit --audit-level=high` + `pip-audit`（既知脆弱性で fail） |
+| Dependabot | `.github/dependabot.yml` | npm / pip / GitHub Actions を週次で更新チェック |
+| パストラバーサル対策 | `frontend/server.mjs` | 配信パスの正規化 + realpath 検証（シンボリックリンク脱出も遮断） |
+
+### 🚧 運用境界（この前提の範囲内で運用する）
+
+| 設計判断 | 内容 |
+| -------- | ---- |
+| 🔓 **無認証 = 公開読み取り API（設計判断）** | バックエンド API が扱うのは**国土交通省の公共オープンデータのみ**（個人情報なし・GET のみ・データ変更手段なし）。利用者の入力・結果はサーバに保存されないため、認証で保護すべきサーバ側リソースが存在しません |
+| 🏠 **HTTP 平文 = 信頼 LAN 内前提** | `:8700` の HTTP 配信は**信頼できる LAN 内**（家庭内・社内閉域）での利用が前提です。インターネットへのポート公開は行いません |
+| 🌍 **LAN 外へ公開する場合（必須要件）** | reverse proxy（nginx / Caddy 等）での **TLS 終端 + 認証 + レート制限**を**公開前に必ず**導入してください（詳細: [`docs/detailed-specification.md`](docs/detailed-specification.md) §15.2.3） |
+| 🔑 **本番 DB パスワード** | `infra/.env.example` の `dev_only_password` は**開発専用**。本番では `OCSRC_DB_PASSWORD` を強パスワード（例 `openssl rand -hex 24`）へ **override 必須**（手順: [`docs/deploy-backend.md`](docs/deploy-backend.md)） |
+
+> ⚠️ 認証・アクセス権限・サーバ側操作ログ（要件 NFR-201/203/204/205・権限ロール）は **MVP スコープ外（クライアント完結設計の意図的判断）**です。サーバ側で案件データを扱う Phase 4+ で導入します（[`docs/requirements.md`](docs/requirements.md) §11.3.1 / [`docs/detailed-specification.md`](docs/detailed-specification.md) §15.4）。
+
+---
+
+## 🔭 今後の拡張（要件 §18 / 詳細仕様準拠）
+
+| フェーズ | 状況 | 内容                                                                                                                                  |
+| -------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Phase 2  | ✅ KSJ 実装済み | 国土数値情報のローカルDB化（PostgreSQL + PostGIS）+ FastAPI 空間検索 API（稼働中）。ハザードデータのローカルDB化は未着手 |
+| Phase 3  | ✅ 一部実装 | 気象庁 警報・注意報連携（実装済み・Issue #22）。xROAD は利用規約上の理由（匿名アクセス 403）、PLATEAU は試験運用・SLA無しのため見送り |
+| Phase 4  | ⏳ 未着手 | 複数候補地比較・案件管理・社内レビュー機能（認証・権限・サーバ側保存を伴う**バックエンド中心構成への移行**をここで再評価） |
+| Phase 5  | ⏳ 未着手 | Civil Open Data Intelligence Platform への統合                                                                                        |
 
 詳細は `docs/requirements.md` / `docs/detailed-specification.md` を参照。
 
 ---
 
-## 出典・ライセンス表記
+## 📜 出典・ライセンス表記
 
 - © OpenStreetMap contributors（ODbL）/ Nominatim・Overpass
 - Open-Meteo（CC BY 4.0）
