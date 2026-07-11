@@ -14,6 +14,12 @@ const BASE_URLS: Record<BaseLayer, { url: string; attr: string; ext: string }> =
   photo: { url: 'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', attr: '地理院タイル(シームレス空中写真)', ext: 'jpg' },
 };
 
+// ハザードタイル専用ペイン。ダークテーマの invert フィルタ（styles.css の
+// .leaflet-tile-pane）の適用範囲外に置き、洪水浸水・土砂災害の色を凡例と一致させる。
+// zIndex はベースタイル（tilePane=200）とベクター重ね（overlayPane=400）の間。
+const HAZARD_PANE = 'ocsrc-hazard';
+const HAZARD_PANE_Z_INDEX = '250';
+
 export function SiteMap() {
   const { state } = useApp();
   const { location, features, baseLayer, overlays } = state;
@@ -36,6 +42,7 @@ export function SiteMap() {
     const center: [number, number] = [location.lat, location.lon];
     const map = L.map(el, { zoomControl: true, attributionControl: true }).setView(center, 16);
     mapRef.current = map;
+    map.createPane(HAZARD_PANE).style.zIndex = HAZARD_PANE_Z_INDEX;
 
     const b = BASE_URLS[baseRef.current];
     const base = L.tileLayer(b.url, { maxZoom: 18, attribution: b.attr }).addTo(map);
@@ -105,8 +112,8 @@ function buildOverlays(
   ov.range = L.circle(center, { radius: location.radius, color: '#15616d', weight: 2, fillColor: '#15616d', fillOpacity: 0.06, dashArray: '5 5' });
 
   ov.hillshade = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/hillshademap/{z}/{x}/{y}.png', { opacity: 0.5, attribution: '地理院タイル(陰影起伏図)' });
-  ov.flood = L.tileLayer('https://disaportaldata.gsi.go.jp/raster/01_flood_l2_shinsuishin_data/{z}/{x}/{y}.png', { opacity: 0.6, attribution: 'ハザードマップポータルサイト' });
-  ov.sediment = L.tileLayer('https://disaportaldata.gsi.go.jp/raster/05_dosekiryukeikaikuiki/{z}/{x}/{y}.png', { opacity: 0.6, attribution: 'ハザードマップポータルサイト' });
+  ov.flood = L.tileLayer('https://disaportaldata.gsi.go.jp/raster/01_flood_l2_shinsuishin_data/{z}/{x}/{y}.png', { opacity: 0.6, pane: HAZARD_PANE, attribution: 'ハザードマップポータルサイト' });
+  ov.sediment = L.tileLayer('https://disaportaldata.gsi.go.jp/raster/05_dosekiryukeikaikuiki/{z}/{x}/{y}.png', { opacity: 0.6, pane: HAZARD_PANE, attribution: 'ハザードマップポータルサイト' });
 
   ov.roads = L.layerGroup((features.roads || []).map((line) => L.polyline(line, { color: '#d98324', weight: 4, opacity: 0.8 })));
   ov.water = L.layerGroup((features.water || []).map((line) => L.polyline(line, { color: '#2f6fb0', weight: 5, opacity: 0.6 })));

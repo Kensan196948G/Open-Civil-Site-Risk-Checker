@@ -41,7 +41,7 @@ export function App() {
       }}
     >
       <Header />
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      <div className="ocsrc-body" style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <Sidebar />
         <main style={{ flex: 1, position: 'relative', minWidth: 0, background: 'var(--bg)' }}>
           {screen === 'dashboard' && <DashboardScreen />}

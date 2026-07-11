@@ -117,7 +117,9 @@ body {
   font-family: 'Noto Sans JP', sans-serif;
   background: var(--surface-3);
 }
-/* ダーク時はベースタイル/重ねタイルを反転してダーク地図化する（1行で全タイルに作用）。 */
+/* ダーク時は既定 tile pane（ベース地図・陰影起伏）を反転してダーク地図化する。
+   ハザードタイル（洪水浸水・土砂災害）は SiteMap.tsx の専用ペイン ocsrc-hazard に
+   置かれこのセレクタの対象外 — 凡例と色の意味を一致させるため反転しない。 */
 :root[data-ocsrc-theme='dark'] .leaflet-tile-pane {
   filter: invert(1) hue-rotate(180deg) brightness(0.93) contrast(0.92);
 }
@@ -172,4 +174,140 @@ textarea {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* ==== レスポンシブレイアウト（Issue #58-1） ====
+   対象はシェル（ヘッダー / サイドバー / ドロワー / フッター）と
+   カラム型スクリーン（リスク判定 / レポート / ダッシュボード / 設定）。
+   ここに書いたプロパティは対応コンポーネントの inline style から移してある
+   （inline に残すと media query で上書きできないため、両所併記は禁止）。
+   ブレークポイント: 〜1023px = タブレット、〜767px = モバイル。 */
+
+.ocsrc-sidebar {
+  width: 222px;
+  flex-direction: column;
+  border-right: 1px solid var(--chrome-border);
+}
+.ocsrc-nav-btn {
+  width: 100%;
+  border: none;
+  border-left: 3px solid transparent;
+}
+.ocsrc-nav-btn[data-active='true'] {
+  border-left-color: #3fd0e0;
+}
+.ocsrc-header {
+  gap: 14px;
+  padding: 0 18px;
+}
+.ocsrc-header-site {
+  max-width: 330px;
+}
+/* ドロワーは常に「440px か画面幅の小さい方」。狭幅端末では自動的に全幅化する。 */
+.ocsrc-drawer {
+  width: min(440px, 100%);
+}
+/* 取得中カードも同様に狭幅端末で自動縮小する（左右 16px の余白を確保）。 */
+.ocsrc-loading-card {
+  width: min(420px, calc(100% - 32px));
+}
+.ocsrc-analysis-columns {
+  height: 524px;
+}
+.ocsrc-analysis-left {
+  width: 286px;
+  border-right: 1px solid var(--border);
+}
+.ocsrc-analysis-right {
+  width: 296px;
+  border-left: 1px solid var(--border);
+}
+.ocsrc-report-columns {
+  height: 100%;
+}
+.ocsrc-report-left {
+  width: 320px;
+  border-right: 1px solid var(--border);
+}
+.ocsrc-grid-kpi {
+  grid-template-columns: repeat(4, 1fr);
+}
+.ocsrc-grid-2col {
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 1023px) {
+  .ocsrc-header-site {
+    max-width: 200px;
+  }
+  .ocsrc-grid-kpi {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
+  .ocsrc-body {
+    flex-direction: column;
+  }
+  /* サイドバーは上部の横スクロールタブバーに変形する。 */
+  .ocsrc-sidebar {
+    width: 100%;
+    flex-direction: row;
+    align-items: stretch;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--chrome-border);
+  }
+  .ocsrc-nav-btn {
+    width: auto;
+    white-space: nowrap;
+    border-left: none;
+    border-bottom: 3px solid transparent;
+  }
+  .ocsrc-nav-btn[data-active='true'] {
+    border-left-color: transparent;
+    border-bottom-color: #3fd0e0;
+  }
+  .ocsrc-nav-code,
+  .ocsrc-nav-heading,
+  .ocsrc-sidebar-note,
+  .ocsrc-nav-spacer,
+  .ocsrc-header-site,
+  .ocsrc-header-time,
+  .ocsrc-header-subtitle,
+  .ocsrc-header-editor,
+  .ocsrc-header-theme-label,
+  .ocsrc-footer-attr {
+    display: none;
+  }
+  .ocsrc-header {
+    gap: 10px;
+    padding: 0 12px;
+  }
+  /* リスク判定: 3カラム（条件 | 地図 | サマリー）を縦積みにし、地図に確保高さを与える。 */
+  .ocsrc-analysis-columns {
+    flex-direction: column;
+    height: auto;
+  }
+  .ocsrc-analysis-left,
+  .ocsrc-analysis-right {
+    width: 100%;
+    border-right: none;
+    border-left: none;
+  }
+  .ocsrc-analysis-map {
+    min-height: 320px;
+  }
+  /* レポート: 設定パネルとプレビューを縦積みにして自然な文書フローにする。 */
+  .ocsrc-report-columns {
+    flex-direction: column;
+    height: auto;
+  }
+  .ocsrc-report-left {
+    width: 100%;
+    border-right: none;
+  }
+  .ocsrc-grid-2col {
+    grid-template-columns: 1fr;
+  }
 }

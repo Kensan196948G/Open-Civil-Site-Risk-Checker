@@ -76,9 +76,9 @@ export function AnalysisScreen() {
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'auto' }}>
       <div>
-        <div style={{ display: 'flex', height: 524, borderBottom: '1px solid var(--border)' }}>
+        <div className="ocsrc-analysis-columns" style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
           {/* 条件パネル */}
-          <div style={{ width: 286, flex: 'none', background: 'var(--surface)', borderRight: '1px solid var(--border)', overflow: 'auto' }}>
+          <div className="ocsrc-analysis-left" style={{ flex: 'none', background: 'var(--surface)', overflow: 'auto' }}>
             <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-2)' }}>
               <div style={sectionLabel}>調査地点</div>
               <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.5, marginBottom: 6 }}>{location.address}</div>
@@ -160,7 +160,7 @@ export function AnalysisScreen() {
           </div>
 
           {/* 地図 */}
-          <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+          <div className="ocsrc-analysis-map" style={{ flex: 1, position: 'relative', minWidth: 0 }}>
             <SiteMap />
             <div style={{ position: 'absolute', left: 10, bottom: 10, zIndex: 500, display: 'flex', flexDirection: 'column', gap: 5, pointerEvents: 'none' }}>
               {[
@@ -177,7 +177,7 @@ export function AnalysisScreen() {
           </div>
 
           {/* サマリー */}
-          <div style={{ width: 296, flex: 'none', background: 'var(--surface)', borderLeft: '1px solid var(--border)', overflow: 'auto' }}>
+          <div className="ocsrc-analysis-right" style={{ flex: 'none', background: 'var(--surface)', overflow: 'auto' }}>
             <div style={{ padding: '15px 16px 10px' }}>
               <div style={sectionLabel}>確認優先度サマリー</div>
             </div>

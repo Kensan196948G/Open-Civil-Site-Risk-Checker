@@ -36,13 +36,13 @@ export function Sidebar() {
         key={n.key}
         onClick={() => go(n.key)}
         aria-current={active ? 'page' : undefined}
+        className="ocsrc-nav-btn"
+        data-active={active ? 'true' : undefined}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 10,
-          width: '100%',
           padding: '9px 16px',
-          border: 'none',
           background: active ? 'var(--accent)' : 'transparent',
           color: active ? '#fff' : 'var(--chrome-text-2)',
           fontSize: 13,
@@ -50,10 +50,9 @@ export function Sidebar() {
           cursor: 'pointer',
           textAlign: 'left',
           fontFamily: "'Noto Sans JP', sans-serif",
-          borderLeft: `3px solid ${active ? '#3fd0e0' : 'transparent'}`,
         }}
       >
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9.5, opacity: 0.7, width: 46, textAlign: 'left', flex: 'none' }}>
+        <span className="ocsrc-nav-code" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9.5, opacity: 0.7, width: 46, textAlign: 'left', flex: 'none' }}>
           {n.code}
         </span>
         <span style={{ flex: 1, textAlign: 'left' }}>{n.label}</span>
@@ -80,25 +79,23 @@ export function Sidebar() {
   return (
     <nav
       aria-label="メインナビゲーション"
+      className="ocsrc-sidebar"
       style={{
-        width: 222,
         flex: 'none',
         background: 'var(--chrome-2)',
         display: 'flex',
-        flexDirection: 'column',
-        borderRight: '1px solid var(--chrome-border)',
       }}
     >
-      <div style={{ padding: '14px 16px 8px', fontSize: 10, letterSpacing: '1.5px', color: 'var(--chrome-text-4)', fontWeight: 700 }}>
+      <div className="ocsrc-nav-heading" style={{ padding: '14px 16px 8px', fontSize: 10, letterSpacing: '1.5px', color: 'var(--chrome-text-4)', fontWeight: 700 }}>
         ワークフロー
       </div>
       {NAV.map((n) => renderNavButton(n))}
-      <div style={{ flex: 1 }} />
-      <div style={{ padding: '10px 16px 6px', fontSize: 10, letterSpacing: '1.5px', color: 'var(--chrome-text-4)', fontWeight: 700 }}>
+      <div className="ocsrc-nav-spacer" style={{ flex: 1 }} />
+      <div className="ocsrc-nav-heading" style={{ padding: '10px 16px 6px', fontSize: 10, letterSpacing: '1.5px', color: 'var(--chrome-text-4)', fontWeight: 700 }}>
         システム
       </div>
       {SYSTEM_NAV.map((n) => renderNavButton(n))}
-      <div style={{ margin: 14, padding: '11px 12px', background: 'var(--chrome-3)', border: '1px solid var(--chrome-border)', borderRadius: 7 }}>
+      <div className="ocsrc-sidebar-note" style={{ margin: 14, padding: '11px 12px', background: 'var(--chrome-3)', border: '1px solid var(--chrome-border)', borderRadius: 7 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
           <span style={{ color: '#d98324', fontSize: 13 }}>⚠</span>
           <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--chrome-text-2)' }}>判定は断定しません</span>
