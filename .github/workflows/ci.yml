@@ -23,7 +23,7 @@ jobs:
         working-directory: frontend
     steps:
       # サプライチェーン対策でアクションは SHA でピン留め（コメントは対応タグ）。
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false # トークンを .git/config に残さない
 
@@ -77,7 +77,7 @@ jobs:
     env:
       OCSRC_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ocsrc_test
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
@@ -104,7 +104,7 @@ jobs:
     name: security (npm audit / pip-audit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
