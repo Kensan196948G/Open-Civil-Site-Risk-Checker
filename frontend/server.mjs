@@ -153,7 +153,10 @@ function verifyBasicAuth(header) {
 function checkTunnelAuth(req, res) {
   const connectingIp = req.headers['cf-connecting-ip'];
   if (connectingIp === undefined) return true; // LAN 直アクセス
-  if ((req.url || '/').split('?')[0] === '/healthz') return true;
+  // healthz 除外は実ハンドラ（req.url === '/healthz' の完全一致）と条件を揃える。
+  // query を剥がして判定すると /healthz?x が「除外されるが healthz ハンドラには
+  // 一致せず SPA fallback へ流れる」経路になり、未認証で index.html が漏れる。
+  if (req.url === '/healthz') return true;
 
   const deny = (status, headers, message) => {
     res.writeHead(status, { 'Cache-Control': 'no-store', ...headers });

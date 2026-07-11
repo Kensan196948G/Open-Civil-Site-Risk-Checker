@@ -261,6 +261,11 @@ try {
   const hzTunnel = await request(webAuthPort, '/healthz', { headers: CF_IP });
   check('auth: /healthz stays open for tunnel monitoring', hzTunnel.status === 200 && hzTunnel.body === 'ok', `status=${hzTunnel.status}`);
 
+  // 回帰（Codex review）: /healthz?x は healthz ハンドラに一致せず SPA fallback へ流れるため、
+  // 認証除外の対象にしてはならない（未認証で index.html が漏れるのを防ぐ）。
+  const hzQuery = await request(webAuthPort, '/healthz?probe=1', { headers: CF_IP });
+  check('auth: /healthz with query still requires auth (no SPA leak)', hzQuery.status === 401, `status=${hzQuery.status}`);
+
   // 認証未設定インスタンスへ Tunnel 経由で到達した場合は fail-safe で 503。
   const unconfigured = await request(webUpPort, '/', { headers: CF_IP });
   check('auth: unconfigured instance rejects tunnel access with 503', unconfigured.status === 503, `status=${unconfigured.status}`);
