@@ -41,12 +41,15 @@ npm run test:smoke   # スモークテスト（esbuild ランナー / 制約環�
 
 現在の稼働 URL（Linux ホスト `kensan1969` / systemd 常駐 / IP は DHCP 自動割当）:
 
-| 種別                       | URL                                    |
-| -------------------------- | -------------------------------------- |
-| LAN（自動割当 IP・現在値） | `http://192.168.0.185:8700/`           |
-| ローカル                   | `http://127.0.0.1:8700/`               |
-| ヘルスチェック             | `http://127.0.0.1:8700/healthz` → `ok` |
+| 種別                       | URL                                    | 認証 |
+| -------------------------- | -------------------------------------- | ---- |
+| 🌐 インターネット公開       | `https://riskchecker.mirai-dx-platform.com/` | Basic 認証（Cloudflare Tunnel 経由） |
+| LAN（自動割当 IP・現在値） | `http://192.168.0.185:8700/`           | なし（信頼 LAN） |
+| ローカル                   | `http://127.0.0.1:8700/`               | なし |
+| ヘルスチェック             | `http://127.0.0.1:8700/healthz` → `ok` | なし（監視用に開放） |
 
+> **インターネット公開**（`riskchecker.mirai-dx-platform.com`）は Cloudflare Tunnel（TLS 終端）+ `server.mjs` の Basic 認証（Issue #66）で保護しています。LAN 内は認証なしで直接利用できます（信頼 LAN モデル）。公開の詳細手順・セキュリティ境界は [`docs/deploy-backend.md`](docs/deploy-backend.md) を参照。
+>
 > LAN の IP は DHCP 割当のため環境や再起動のタイミングで変わり得ます。固定 IP をコードや設定に書き込む必要はありません（`server.mjs` は `HOST=0.0.0.0` で全インタフェース待受のため、どの IP が割り当たっても自動的に到達可能）。現在値を確認したい場合は `scripts/install-systemd.sh` の実行結果（`LAN: http://<IP>:<PORT>/` 行）、または `hostname -I` / `ip route get 1.1.1.1` を使用してください。
 
 ### A. systemd（既定・稼働中・Linux ネイティブ）
@@ -68,6 +71,18 @@ journalctl -u ocsrc-web -f      # ログ追従
 > コード更新後は `scripts/install-systemd.sh` を再実行（再ビルド＋再起動）すれば反映されます。ポートは既存ユニットの値を引き継ぎます。
 
 > 🚀 **バックエンド API（KSJ 空間検索）も常駐させる場合**は `scripts/install-systemd-api.sh` を実行します（`ocsrc-api.service`・127.0.0.1 バインド・web へのプロキシ先自動注入）。DB（PostGIS）起動・パスワード設定を含む全体手順の正本は [`docs/deploy-backend.md`](docs/deploy-backend.md) を参照してください。
+
+> 🌐 **インターネット公開する場合**は `scripts/install-tunnel.sh` を実行します（`ocsrc-tunnel.service` / Cloudflare Tunnel）。**公開前に `/etc/ocsrc/web.env` へ Basic 認証を設定**すること（未設定だと Tunnel 経由は 503。スクリプトが実挙動プローブで検証します）。DNS ルート作成（一般公開スイッチ）は `CREATE_DNS_ROUTE=1` を付けたときだけ実行されます。本番の 3 サービス構成:
+
+```bash
+systemctl status ocsrc-web ocsrc-api ocsrc-tunnel   # web(:8700) / api(127.0.0.1:8000) / tunnel
+```
+
+| サービス | 役割 | バインド/経路 |
+| --- | --- | --- |
+| `ocsrc-web` | SPA 配信 + セキュリティヘッダ + `/api` プロキシ + Tunnel 認証 | `0.0.0.0:8700` |
+| `ocsrc-api` | KSJ 空間検索 API（FastAPI） | `127.0.0.1:8000`（LAN 非公開） |
+| `ocsrc-tunnel` | Cloudflare Tunnel（TLS 終端は Cloudflare） | アウトバウンドのみ |
 
 ### B. Docker（代替・別ホスト向け）
 
