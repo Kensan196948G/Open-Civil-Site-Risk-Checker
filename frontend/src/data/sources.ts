@@ -11,7 +11,8 @@ export const SOURCE_LEDGER: SourceLedgerEntry[] = [
   { key: 'nominatim', name: 'OpenStreetMap / Nominatim', provider: 'OSMF', type: 'api', license: 'ODbL', rank: 'A', stat: 'success', last: '—', enabled: true },
   { key: 'osm_overpass', name: 'OpenStreetMap / Overpass', provider: 'OSMF', type: 'api', license: 'ODbL', rank: 'B', stat: 'success', last: '—', enabled: true },
   { key: 'open_meteo', name: 'Open-Meteo Forecast', provider: 'Open-Meteo', type: 'api', license: 'CC BY 4.0', rank: 'A', stat: 'success', last: '—', enabled: true },
-  { key: 'ksj', name: '国土数値情報', provider: '国土交通省', type: 'db', license: 'KSJ規約', rank: 'A', stat: 'skipped', last: '—', enabled: false },
+  // KSJ は既定で same-origin /api プロキシ経由の実連携（Issue #57）。stat は接続テストで更新される。
+  { key: 'ksj', name: '国土数値情報', provider: '国土交通省', type: 'db', license: 'KSJ規約', rank: 'A', stat: 'skipped', last: '—', enabled: true },
   { key: 'hazard_portal', name: 'ハザードマップポータル', provider: '国土地理院', type: 'tile', license: '出典明示', rank: 'A', stat: 'success', last: '—', enabled: true },
   { key: 'gsi_tile', name: '地理院タイル', provider: '国土地理院', type: 'tile', license: '地理院条件', rank: 'A', stat: 'success', last: '—', enabled: true },
   { key: 'plateau', name: 'PLATEAU', provider: '国土交通省', type: 'api', license: 'CC BY 4.0', rank: 'B', stat: 'failed', last: '—', enabled: true },

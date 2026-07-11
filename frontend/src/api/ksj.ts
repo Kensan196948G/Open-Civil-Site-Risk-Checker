@@ -6,9 +6,10 @@ import type { Evidence, Finding } from '../types';
 // 国土数値情報（KSJ）アダプタ（要件 §18 Phase 2 / NFR-401）。
 // 自前バックエンド（FastAPI + PostGIS）の空間検索 API を呼び出し、
 // 取込済みローカル DB の河川・施設を確認項目化する。
-// バックエンド URL は SCR-008 の実行時設定（localStorage）を優先し、
-// 未設定時はビルド時の VITE_OCSRC_BACKEND_URL にフォールバックする。
-// どちらも未設定なら従来どおり「未連携」扱い。
+// バックエンド base は SCR-008 の実行時設定（localStorage） > ビルド時の
+// VITE_OCSRC_BACKEND_URL > ''（same-origin 既定）の順に解決する（Issue #57）。
+// '' のときは相対パス（/api/v1/...）となり、配信サーバの /api リバースプロキシ経由で
+// 同一オリジンのままバックエンドへ到達する（LAN 上の別端末のブラウザでも追加設定不要）。
 
 export interface KsjItem {
   dataset: 'river' | 'facility';
@@ -26,17 +27,32 @@ interface KsjNearbyResponse {
   items: KsjItem[];
 }
 
-/** バックエンド base URL（末尾スラッシュ除去済み）。未設定なら undefined。
- *  優先順位: SCR-008 の実行時設定（localStorage） > ビルド時の VITE_OCSRC_BACKEND_URL。 */
-export function ksjBaseUrl(): string | undefined {
-  const override = loadBackendUrlOverride();
-  if (override) return override;
-  const v = (import.meta as { env?: Record<string, string | undefined> }).env
-    ?.VITE_OCSRC_BACKEND_URL;
-  return v ? v.replace(/\/+$/, '') : undefined;
+/** base 解決（pure）: 保存済みカスタム URL > ビルド時 env > ''（same-origin 既定）。
+ *  戻り値は空白・末尾スラッシュ除去済み。'' は相対パス（= 配信オリジンの /api
+ *  リバースプロキシ経由）を意味する。後方互換: 保存済みのユーザー設定が常に最優先。 */
+export function resolveBackendBase(override: string | undefined, buildTime: string | undefined): string {
+  const strip = (s: string) => s.trim().replace(/\/+$/, '');
+  const o = override ? strip(override) : '';
+  if (o) return o;
+  return buildTime ? strip(buildTime) : '';
 }
 
-export const isKsjConfigured = (): boolean => ksjBaseUrl() !== undefined;
+/** ビルド時に焼き込まれた VITE_OCSRC_BACKEND_URL（整形済み）。未設定は ''。 */
+export function buildTimeBackendUrl(): string {
+  const v = (import.meta as { env?: Record<string, string | undefined> }).env
+    ?.VITE_OCSRC_BACKEND_URL;
+  return v ? v.trim().replace(/\/+$/, '') : '';
+}
+
+/** バックエンド base URL。'' は same-origin 既定（/api プロキシ経由の相対パス）。 */
+export function ksjBaseUrl(): string {
+  return resolveBackendBase(loadBackendUrlOverride(), buildTimeBackendUrl());
+}
+
+/** nearby API の URL（pure）。base=''（same-origin 既定）なら相対パスになる。 */
+export function ksjNearbyUrl(base: string, input: AnalysisInput): string {
+  return `${base}/api/v1/nearby?lat=${input.lat}&lon=${input.lon}&radius_m=${input.radius}`;
+}
 
 function ksjEvidence(item: KsjItem, fetchedAt: string): Evidence {
   return {
@@ -117,8 +133,9 @@ export function mapKsjItems(items: KsjItem[], fetchedAt: string): Finding[] {
 
 export async function fetchKsj(input: AnalysisInput): Promise<AdapterResult> {
   const base = ksjBaseUrl();
-  const endpoint = `/api/v1/nearby?lat=${input.lat}&lon=${input.lon}&radius_m=${input.radius}`;
-  const out = await fetchJson<KsjNearbyResponse>(`${base}${endpoint}`, { timeout: 10000 });
+  const url = ksjNearbyUrl(base, input);
+  const endpoint = url.slice(base.length); // 取得ログにはパス+クエリのみ記録する
+  const out = await fetchJson<KsjNearbyResponse>(url, { timeout: 10000 });
   const log = {
     time: nowHMS(),
     source: 'ksj',

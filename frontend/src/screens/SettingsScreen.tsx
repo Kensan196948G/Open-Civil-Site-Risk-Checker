@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../store';
-import { ksjBaseUrl } from '../api/ksj';
+import { buildTimeBackendUrl } from '../api/ksj';
 import { CATEGORY_OPTIONS, RADIUS_OPTIONS, radiusLabel } from '../data/constants';
 import {
   clearAiSettings,
@@ -17,6 +17,7 @@ import {
 import {
   canSaveAnalysisDefaults,
   clearAnalysisDefaults,
+  clearBackendUrlOverride,
   isValidBackendUrl,
   loadAnalysisDefaults,
   loadBackendUrlOverride,
@@ -151,19 +152,29 @@ export function SettingsScreen() {
   };
 
   // ---- バックエンド接続（KSJ 連携） ----
+  // 既定は same-origin（このサイト経由の /api プロキシ、Issue #57）。カスタム URL は直結したい場合のみ。
   const [backendUrl, setBackendUrl] = useState<string>(() => loadBackendUrlOverride());
+  const [savedBackendUrl, setSavedBackendUrl] = useState<string>(() => loadBackendUrlOverride());
   const [testingBackend, setTestingBackend] = useState(false);
   const [backendVerdict, setBackendVerdict] = useState<BackendTestVerdict | null>(null);
   const [backendNotice, setBackendNotice] = useState('');
 
   const backendUrlValid = isValidBackendUrl(backendUrl);
-  const backendBuildTime = ksjBaseUrl();
+  const backendInputEmpty = backendUrl.trim() === '';
+  const buildTimeBase = buildTimeBackendUrl();
+  // 保存済みの実効接続先ラベル（カスタム URL > ビルド時設定 > same-origin 既定）。
+  const backendEffectiveLabel = savedBackendUrl
+    ? `カスタム URL（${savedBackendUrl}）`
+    : buildTimeBase
+      ? `ビルド時設定（${buildTimeBase}）`
+      : 'このサイト経由（/api プロキシ・既定）';
 
   const onTestBackend = () => {
-    if (!backendUrlValid || testingBackend) return;
+    if ((!backendInputEmpty && !backendUrlValid) || testingBackend) return;
     setTestingBackend(true);
     setBackendVerdict(null);
-    void testBackendConnection(backendUrl).then((v) => {
+    // 空欄 = 既定をテスト（ビルド時設定があればそれ、なければこのサイト経由 /api/healthz）。
+    void testBackendConnection(backendInputEmpty ? buildTimeBase : backendUrl).then((v) => {
       setBackendVerdict(v);
       setTestingBackend(false);
     });
@@ -172,16 +183,23 @@ export function SettingsScreen() {
   const onSaveBackend = () => {
     if (!backendUrlValid) return;
     if (saveBackendUrlOverride(backendUrl)) {
-      setBackendNotice('バックエンド接続先を保存しました。次回の地点確認から反映されます。');
+      setSavedBackendUrl(loadBackendUrlOverride());
+      setBackendNotice('カスタム URL を保存しました。次回の地点確認から反映されます。');
     } else {
       setBackendNotice('保存できませんでした（この環境では localStorage が利用できません）。');
     }
   };
 
   const onClearBackend = () => {
+    clearBackendUrlOverride();
     setBackendUrl('');
+    setSavedBackendUrl('');
     setBackendVerdict(null);
-    setBackendNotice('バックエンド接続先の上書きを解除しました（ビルド時設定に戻ります）。');
+    setBackendNotice(
+      buildTimeBase
+        ? `カスタム URL を解除しました（ビルド時設定 ${buildTimeBase} で接続します）。`
+        : 'カスタム URL を解除しました（既定: このサイト経由で接続します）。',
+    );
   };
 
   // ---- 地点確認の既定値 ----
@@ -215,7 +233,7 @@ export function SettingsScreen() {
     window.location.reload();
   };
 
-  const backendUrlKind = backendUrl === '' ? undefined : backendUrlValid ? 'ok' : 'invalid';
+  const backendUrlKind = backendInputEmpty ? undefined : backendUrlValid ? 'ok' : 'invalid';
 
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'auto', padding: '26px 28px 50px' }}>
@@ -302,12 +320,15 @@ export function SettingsScreen() {
       <section style={sectionStyle}>
         <h2 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>バックエンド接続（KSJ 連携）</h2>
         <p style={{ margin: '0 0 14px', fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-3)' }}>
-          国土数値情報（河川・施設）の空間検索 API（FastAPI + PostGIS）の接続先を、ビルドし直さずにこの画面から設定できます。未設定時はビルド時の
-          <code style={{ fontFamily: "'JetBrains Mono', monospace" }}> VITE_OCSRC_BACKEND_URL </code>
-          {backendBuildTime ? `（現在: ${backendBuildTime}）` : '（未設定）'}が使われます。
+          国土数値情報（河川・施設）の空間検索 API（FastAPI + PostGIS）の接続先です。既定は
+          <strong>このサイト経由（同一オリジンの /api プロキシ・推奨）</strong>
+          で、LAN 上の他の端末のブラウザからも追加設定なしで動作します。別ホストのバックエンドへ直接接続する場合のみカスタム URL を設定してください。
         </p>
+        <div style={{ marginBottom: 12, fontSize: 11.5, color: 'var(--text-2)' }}>
+          現在の接続先: <strong>{backendEffectiveLabel}</strong>
+        </div>
 
-        <label style={labelStyle}>バックエンド URL</label>
+        <label style={labelStyle}>カスタム URL（空欄 = 既定: このサイト経由）</label>
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <input
             value={backendUrl}
@@ -315,7 +336,7 @@ export function SettingsScreen() {
               setBackendUrl(e.target.value);
               setBackendVerdict(null);
             }}
-            placeholder="http://127.0.0.1:8000"
+            placeholder="例: http://192.168.0.10:8000（空欄で既定のまま）"
             style={{
               ...inputStyle,
               flex: 1,
@@ -328,14 +349,19 @@ export function SettingsScreen() {
         )}
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={onTestBackend} disabled={!backendUrlValid || testingBackend} style={btnStyle('ghost', !backendUrlValid || testingBackend)}>
-            {testingBackend ? 'テスト中…' : '接続テスト'}
+          <button
+            onClick={onTestBackend}
+            disabled={(!backendInputEmpty && !backendUrlValid) || testingBackend}
+            style={btnStyle('ghost', (!backendInputEmpty && !backendUrlValid) || testingBackend)}
+            title={backendInputEmpty ? '既定の接続先（このサイト経由）をテストします' : '入力したカスタム URL をテストします'}
+          >
+            {testingBackend ? 'テスト中…' : backendInputEmpty ? '接続テスト（既定）' : '接続テスト'}
           </button>
           <button onClick={onClearBackend} style={btnStyle('ghost')}>
-            上書きを解除
+            既定に戻す
           </button>
           <button onClick={onSaveBackend} disabled={!backendUrlValid} style={btnStyle('primary', !backendUrlValid)}>
-            設定を保存
+            カスタム URL を保存
           </button>
         </div>
 
@@ -454,7 +480,7 @@ export function SettingsScreen() {
             ['アプリ', 'Open Civil Site Risk Checker（工事候補地リスクチェッカー）'],
             ['フェーズ', 'MVP（Phase 1）+ Phase 2（KSJ ローカルDB / 空間検索）'],
             ['AI 連携', `${PROVIDER_NAME} のみ対応（AI調査メモ生成）`],
-            ['バックエンド連携', backendBuildTime ? `${backendBuildTime}（KSJ 実連携）` : '未設定（KSJ は未連携表示）'],
+            ['バックエンド連携', `${backendEffectiveLabel}（KSJ 空間検索）`],
             ['テーマ', state.theme === 'dark' ? 'ダーク' : 'ライト'],
             ['ローカル保存データ', 'ocsrc-cases / ocsrc-theme / ocsrc-ai-settings / ocsrc-backend-url / ocsrc-default-analysis'],
           ] as const

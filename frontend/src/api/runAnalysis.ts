@@ -2,7 +2,7 @@ import { geocode } from './nominatim';
 import { fetchWeather } from './openMeteo';
 import { fetchOverpass } from './overpass';
 import { fetchElevation } from './elevation';
-import { fetchKsj, isKsjConfigured } from './ksj';
+import { fetchKsj } from './ksj';
 import { fetchJmaWarning } from './jmaWarning';
 import { nowHMS, nowStamp } from './http';
 import { radiusLabel } from '../data/constants';
@@ -17,8 +17,8 @@ import type {
 } from '../types';
 
 // 地点確認のオーケストレーション（要件 §6.1 / NFR-003 部分結果表示）。
-// 実 API（Nominatim / Overpass / Open-Meteo / 地理院標高）を並行実行し、
-// 取得できないソース（KSJ ローカルDB未整備 / PLATEAU タイムアウト / xROAD 規約未同意）は
+// 実 API（Nominatim / Overpass / Open-Meteo / 地理院標高 / KSJ バックエンド）を並行実行し、
+// 取得できないソース（KSJ バックエンド停止・DB未整備 / PLATEAU タイムアウト / xROAD 規約未同意）は
 // 誠実に skipped / failed として表示する。
 
 export interface AnalysisInputForm {
@@ -141,23 +141,22 @@ export async function runAnalysis(form: AnalysisInputForm, opts: RunOpts = {}): 
       })
     : Promise.resolve().then(() => onStep('gsi_tile', 'skipped'));
 
-  // ---- 3) KSJ ローカルDB（Phase 2: バックエンド設定時のみ実連携） ----
-  // VITE_OCSRC_BACKEND_URL 未設定時は従来どおり「未連携」を誠実に表示する。
+  // ---- 3) KSJ ローカルDB（Phase 2） ----
+  // 既定で same-origin /api プロキシ経由の実連携（Issue #57）。バックエンド停止・DB 未整備は
+  // fetchKsj 側が failed として誠実に表示する（NFR-504）。
   const needKsj = cat.rivers || cat.facilities;
-  const ksjP =
-    needKsj && isKsjConfigured()
-      ? fetchKsj(input).then((r) => {
-          logs.push(r.log);
-          r.findings.forEach((f) => {
-            if (cat[f.category as Exclude<Category, 'data_quality'>]) findings.push(f);
-          });
-          onStep('ksj', r.stepStatus);
-        })
-      : delay(300).then(() => {
-          const reason = needKsj ? 'バックエンド未設定（VITE_OCSRC_BACKEND_URL）のためスキップ' : '対象カテゴリ未選択のためスキップ';
-          logs.push({ time: nowHMS(), source: 'ksj', endpoint: 'PostGIS ST_DWithin', code: '—', status: 'skipped', ms: '—', error: reason });
-          onStep('ksj', 'skipped');
+  const ksjP = needKsj
+    ? fetchKsj(input).then((r) => {
+        logs.push(r.log);
+        r.findings.forEach((f) => {
+          if (cat[f.category as Exclude<Category, 'data_quality'>]) findings.push(f);
         });
+        onStep('ksj', r.stepStatus);
+      })
+    : delay(300).then(() => {
+        logs.push({ time: nowHMS(), source: 'ksj', endpoint: 'PostGIS ST_DWithin', code: '—', status: 'skipped', ms: '—', error: '対象カテゴリ未選択のためスキップ' });
+        onStep('ksj', 'skipped');
+      });
 
   // ハザードマップ: タイル重ね合わせは可能。重なりの自動判定はしない（視覚確認要）。
   const hazardP = delay(500).then(() => {

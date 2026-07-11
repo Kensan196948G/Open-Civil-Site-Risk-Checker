@@ -20,7 +20,10 @@ export const FALLBACK_DEFAULTS: AnalysisDefaults = {
   categories: { roads: true, rivers: true, hazard: true, terrain: true, weather: true, facilities: true },
 };
 
-// ---- バックエンド接続 URL（KSJ 連携。ビルド時の VITE_OCSRC_BACKEND_URL をランタイムで上書きする） ----
+// ---- バックエンド接続 URL（KSJ 連携） ----
+// 既定は same-origin（'' = 相対パスで配信サーバの /api プロキシ経由、Issue #57）。
+// この localStorage 値はカスタム URL（直結）を指定したい場合のみ保存する。
+// ビルド時の VITE_OCSRC_BACKEND_URL とあわせて優先順位は ksj.ts の resolveBackendBase を参照。
 
 /** 保存済みの上書き URL（末尾スラッシュ除去済み）。未設定は ''。 */
 export function loadBackendUrlOverride(): string {
@@ -87,10 +90,26 @@ export function interpretBackendTest(
   return { ok: false, message: `バックエンドには接続できましたが、DB に問題があります（db=${db ?? '不明'}）。` };
 }
 
-/** バックエンドの healthz を確認する（DB到達性まで報告）。 */
+/** 接続テスト用の healthz URL（pure）。
+ *  - base 空（same-origin 既定）: 配信サーバのプロキシ特例 `/api/healthz` を叩く。
+ *    静的サーバ自身の text 応答 `/healthz` に当たって誤判定するのを防ぐ。
+ *  - base が配信オリジン自身: 同上（プロキシ経由でバックエンドの健全性を見る）。
+ *  - それ以外（直結 URL）: 従来どおり `${base}/healthz`。 */
+export function backendHealthzUrl(base: string, pageOrigin?: string): string {
+  const trimmed = base.trim().replace(/\/+$/, '');
+  if (!trimmed) return '/api/healthz';
+  try {
+    if (pageOrigin && new URL(trimmed).origin === pageOrigin) return '/api/healthz';
+  } catch {
+    /* URL として解釈できない base は直結扱いのまま（fetch 側でエラーになる） */
+  }
+  return `${trimmed}/healthz`;
+}
+
+/** バックエンドの healthz を確認する（DB到達性まで報告）。url='' は same-origin 既定。 */
 export async function testBackendConnection(url: string): Promise<BackendTestVerdict> {
-  const trimmed = url.trim().replace(/\/+$/, '');
-  const out = await fetchJson<BackendHealthResponse>(`${trimmed}/healthz`, { timeout: 8000 });
+  const pageOrigin = typeof location !== 'undefined' ? location.origin : undefined;
+  const out = await fetchJson<BackendHealthResponse>(backendHealthzUrl(url, pageOrigin), { timeout: 8000 });
   return interpretBackendTest(out);
 }
 
