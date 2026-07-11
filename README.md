@@ -80,7 +80,7 @@ systemctl status ocsrc-web ocsrc-api ocsrc-tunnel   # web(:8700) / api(127.0.0.1
 
 | サービス | 役割 | バインド/経路 |
 | --- | --- | --- |
-| `ocsrc-web` | SPA 配信 + セキュリティヘッダ + `/api` プロキシ + Tunnel 認証 | `0.0.0.0:8700` |
+| `ocsrc-web` | SPA 配信 + セキュリティヘッダ + `/api` プロキシ + Basic 認証（server.mjs・Tunnel 経由リクエストのみ） | `0.0.0.0:8700` |
 | `ocsrc-api` | KSJ 空間検索 API（FastAPI） | `127.0.0.1:8000`（LAN 非公開） |
 | `ocsrc-tunnel` | Cloudflare Tunnel（TLS 終端は Cloudflare） | アウトバウンドのみ |
 
