@@ -117,7 +117,9 @@ body {
   font-family: 'Noto Sans JP', sans-serif;
   background: var(--surface-3);
 }
-/* ダーク時はベースタイル/重ねタイルを反転してダーク地図化する（1行で全タイルに作用）。 */
+/* ダーク時は既定 tile pane（ベース地図・陰影起伏）を反転してダーク地図化する。
+   ハザードタイル（洪水浸水・土砂災害）は SiteMap.tsx の専用ペイン ocsrc-hazard に
+   置かれこのセレクタの対象外 — 凡例と色の意味を一致させるため反転しない。 */
 :root[data-ocsrc-theme='dark'] .leaflet-tile-pane {
   filter: invert(1) hue-rotate(180deg) brightness(0.93) contrast(0.92);
 }
