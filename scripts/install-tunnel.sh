@@ -89,7 +89,9 @@ sudo systemctl --no-pager --full status "${SERVICE}.service" | head -8 || true
 # 既定では作成しない。CREATE_DNS_ROUTE=1 のときだけ CNAME を張る。
 if [[ "${CREATE_DNS_ROUTE:-0}" == "1" ]]; then
   echo "==> DNS ルート作成: ${HOSTNAME_FQDN} -> ${TUNNEL_NAME}"
-  "${CLOUDFLARED_BIN}" tunnel route dns "${TUNNEL_NAME}" "${HOSTNAME_FQDN}"
+  # cloudflared は HOME/.cloudflared/cert.pem でアカウント認証する。sudo 実行時は
+  # HOME=/root になり cert.pem を見失うため、tunnel 所有ユーザの HOME を明示する。
+  sudo -u "${RUN_USER}" env HOME="${USER_HOME}" "${CLOUDFLARED_BIN}" tunnel route dns "${TUNNEL_NAME}" "${HOSTNAME_FQDN}"
   echo "    公開しました: https://${HOSTNAME_FQDN}/"
 else
   echo "==> DNS ルート未作成（公開保留）。公開する場合は次を実行:"
