@@ -322,7 +322,7 @@ export function SettingsScreen() {
         <p style={{ margin: '0 0 14px', fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-3)' }}>
           国土数値情報（河川・施設）の空間検索 API（FastAPI + PostGIS）の接続先です。既定は
           <strong>このサイト経由（同一オリジンの /api プロキシ・推奨）</strong>
-          で、LAN 上の他の端末のブラウザからも追加設定なしで動作します。別ホストのバックエンドへ直接接続する場合のみカスタム URL を設定してください。
+          で、LAN 上の他の端末のブラウザからもそのまま動作します。カスタム URL は、同一マシンで動くバックエンドへ直接接続する場合（開発用途など）のみ設定してください。別ホストの URL を指定するには、本番配信側のセキュリティ設定（CSP の connect-src）とバックエンド側の CORS 許可の追加設定が必要です。
         </p>
         <div style={{ marginBottom: 12, fontSize: 11.5, color: 'var(--text-2)' }}>
           現在の接続先: <strong>{backendEffectiveLabel}</strong>
@@ -336,7 +336,7 @@ export function SettingsScreen() {
               setBackendUrl(e.target.value);
               setBackendVerdict(null);
             }}
-            placeholder="例: http://192.168.0.10:8000（空欄で既定のまま）"
+            placeholder="例: http://127.0.0.1:8000（空欄で既定のまま）"
             style={{
               ...inputStyle,
               flex: 1,
