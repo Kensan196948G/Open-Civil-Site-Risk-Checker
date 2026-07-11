@@ -174,8 +174,8 @@ docker exec -it ocsrc-db psql -U app -d site_risk_checker \
 # 2. DSN を対話入力（-s で非エコー・履歴に残らない。sslmode=require を含めること）
 read -rs -p "Neon DSN: " OCSRC_DATABASE_URL; export OCSRC_DATABASE_URL; echo
 
-# 3. PostGIS 拡張を有効化（psql は環境変数 PGURL を使い引数に資格情報を置かない）
-PGURL="$OCSRC_DATABASE_URL" psql "$PGURL" -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+# 3. PostGIS 拡張を有効化（export 済み変数を直接使い、引数に資格情報リテラルを置かない）
+psql "$OCSRC_DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 
 # 4. KSJ データを投入（ローカルと同じ ingest CLI。接続先は環境変数から取得）
 cd backend
@@ -192,8 +192,8 @@ EOF
 sudo systemctl restart ocsrc-api
 curl -s http://127.0.0.1:8000/healthz   # → {"status":"ok","db":"ok",...}
 
-# 6. 履歴から DSN を消す（任意）
-unset OCSRC_DATABASE_URL PGURL
+# 6. 環境変数から DSN を消す（任意）
+unset OCSRC_DATABASE_URL
 ```
 
 > 接続文字列は秘密情報です。`/etc/ocsrc/api.env`（600・リポジトリ外）だけに置き、コミット・ログ出力しないこと。`read -s` で入力すれば `~/.bash_history` にも残りません。

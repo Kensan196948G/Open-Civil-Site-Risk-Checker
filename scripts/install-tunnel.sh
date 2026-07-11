@@ -92,6 +92,9 @@ EOF
 echo "==> 有効化 & 起動"
 sudo systemctl daemon-reload
 sudo systemctl enable --now "${SERVICE}.service"
+# enable --now は稼働中ユニットを再起動しない。再実行で unit（cloudflared パス・
+# config パス・User 等）が変わっても反映されるよう try-restart する（web 側と同じ）。
+sudo systemctl try-restart "${SERVICE}.service"
 sleep 2
 sudo systemctl --no-pager --full status "${SERVICE}.service" | head -8 || true
 
