@@ -1,10 +1,11 @@
 import { fetchJson, nowHMS } from './http';
 import { ksjBaseUrl } from './ksj';
+import { backendHealthzUrl } from '../settings/appSettings';
 import type { SourceKey, SourceStatus } from '../types';
 
 // データソース接続テスト（要件 FR-603）。
 // HTTP API は軽量リクエストで実疎通を確認し、タイルサーバは画像ロードで確認する。
-// 規約同意や事前整備が必要なソース（ksj / xroad）は未連携として扱う。
+// 規約同意や事前整備が必要なソース（xroad）は未連携として扱う。
 
 export interface PingResult {
   stat: SourceStatus;
@@ -57,10 +58,11 @@ export async function pingSource(key: SourceKey): Promise<PingResult> {
       return good ? ok() : fail();
     }
     case 'ksj': {
-      // Phase 2: バックエンド設定時は healthz で DB 到達性まで確認する。
+      // Phase 2: healthz で DB 到達性まで確認する。既定（base=''）は配信オリジンの
+      // /api/healthz（プロキシ特例）、カスタム URL 設定時は ${base}/healthz を叩く。
       const base = ksjBaseUrl();
-      if (!base) return skip();
-      const r = await fetchJson<{ db?: string }>(`${base}/healthz`, { timeout: 8000 });
+      const pageOrigin = typeof location !== 'undefined' ? location.origin : undefined;
+      const r = await fetchJson<{ db?: string }>(backendHealthzUrl(base, pageOrigin), { timeout: 8000 });
       return r.ok && r.data?.db === 'ok' ? ok() : fail();
     }
     case 'plateau':
