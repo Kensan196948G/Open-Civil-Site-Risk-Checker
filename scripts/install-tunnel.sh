@@ -100,8 +100,10 @@ echo "==> 公開前プローブ OK: Tunnel 経由リクエストは 403（Access
 # エンドポイント到達不可でも 403 は返るので、本物の認証済みリクエストが検証できず
 # 全て 403 になる「誰も入れない」公開を招きうる。JWKS が実際に取得でき署名鍵を
 # 含むことを確認して、本物の JWT を検証できる状態であることを担保する。
-ACCESS_TEAM="$(sudo grep -oP '^OCSRC_ACCESS_TEAM_DOMAIN=\K.*' "${WEB_ENV}" 2>/dev/null | tail -1 | tr -d '"' | sed -E 's#^https?://##; s#/+$##')"
-CERTS_OVERRIDE="$(sudo grep -oP '^OCSRC_ACCESS_CERTS_URL=\K.*' "${WEB_ENV}" 2>/dev/null | tail -1 | tr -d '"')"
+# grep がマッチしないと exit 1 を返し、pipefail + set -e でスクリプトが落ちる。
+# TEAM_DOMAIN は必須（上でチェック済み）だが CERTS_URL は任意のため、両方 || true でガードする。
+ACCESS_TEAM="$(sudo grep -oP '^OCSRC_ACCESS_TEAM_DOMAIN=\K.*' "${WEB_ENV}" 2>/dev/null | tail -1 | tr -d '"' | sed -E 's#^https?://##; s#/+$##' || true)"
+CERTS_OVERRIDE="$(sudo grep -oP '^OCSRC_ACCESS_CERTS_URL=\K.*' "${WEB_ENV}" 2>/dev/null | tail -1 | tr -d '"' || true)"
 CERTS_URL="${CERTS_OVERRIDE:-https://${ACCESS_TEAM}/cdn-cgi/access/certs}"
 JWKS_BODY="$(curl -s -m 10 "${CERTS_URL}" 2>/dev/null || true)"
 if ! printf '%s' "${JWKS_BODY}" | grep -q '"keys"'; then
