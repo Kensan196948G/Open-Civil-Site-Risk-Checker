@@ -134,10 +134,14 @@ function recordAuthFailure(ip) {
 
 /** Basic 資格情報を検証する（ヘッダ不正・不一致は false）。 */
 function verifyBasicAuth(header) {
-  if (typeof header !== 'string' || !header.startsWith('Basic ')) return false;
+  if (typeof header !== 'string') return false;
+  // スキーム名は case-insensitive（RFC 7617/9110）。スキーム部だけ無視し、
+  // Base64 エンコード済みの資格情報部（case-sensitive）はそのまま取り出す。
+  const match = /^Basic +(.*)$/i.exec(header);
+  if (!match) return false;
   let decoded;
   try {
-    decoded = Buffer.from(header.slice(6).trim(), 'base64').toString('utf8');
+    decoded = Buffer.from(match[1].trim(), 'base64').toString('utf8');
   } catch {
     return false;
   }

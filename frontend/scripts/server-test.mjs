@@ -64,8 +64,12 @@ function getPort() {
 /** server.mjs を起動し、listen ログを待って child を返す。 */
 function startWeb(env) {
   return new Promise((res, rej) => {
+    // 親シェルに OCSRC_TUNNEL_BASIC_* が export されていると子へ継承され、
+    // 「未設定インスタンス」の 503 テストが 401 になる（Codex review）。
+    // 認証系変数は既定でクリアし、テストが明示的に渡した場合のみ有効化する。
+    const childEnv = { ...process.env, HOST: '127.0.0.1', OCSRC_TUNNEL_BASIC_USER: '', OCSRC_TUNNEL_BASIC_PASS: '', ...env };
     const child = spawn(process.execPath, [serverPath], {
-      env: { ...process.env, HOST: '127.0.0.1', ...env },
+      env: childEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const timer = setTimeout(() => rej(new Error('server start timeout')), 8000);
@@ -257,6 +261,12 @@ try {
 
   const okCred = await request(webAuthPort, '/', { headers: { ...CF_IP, Authorization: basic(AUTH_USER, AUTH_PASS) } });
   check('auth: tunnel request with valid credentials is 200', okCred.status === 200 && okCred.body.includes('ocsrc-test'), `status=${okCred.status}`);
+
+  // スキーム名は case-insensitive（RFC 7617）: "basic" でも認証成功すること。
+  const lowerScheme = await request(webAuthPort, '/', {
+    headers: { ...CF_IP, Authorization: basic(AUTH_USER, AUTH_PASS).replace(/^Basic/, 'basic') },
+  });
+  check('auth: lowercase "basic" scheme is accepted (RFC 7617)', lowerScheme.status === 200, `status=${lowerScheme.status}`);
 
   const hzTunnel = await request(webAuthPort, '/healthz', { headers: CF_IP });
   check('auth: /healthz stays open for tunnel monitoring', hzTunnel.status === 200 && hzTunnel.body === 'ok', `status=${hzTunnel.status}`);
