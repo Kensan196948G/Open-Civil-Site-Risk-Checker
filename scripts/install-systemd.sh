@@ -24,8 +24,16 @@ fi
 
 # --- ポート決定: 明示 PORT > 既存ユニットの PORT > 8700 から空きを探索 ---
 port_in_use() { ss -ltnH "sport = :$1" 2>/dev/null | grep -q . ; }
+# PORT はユニットの Environment=PORT へ直接埋め込まれるため、非数値や範囲外を弾く。
+validate_port() {
+  local p="$1"
+  if [[ ! "${p}" =~ ^[0-9]+$ ]] || (( p < 1 || p > 65535 )); then
+    echo "ERROR: PORT は 1-65535 の整数で指定してください（受け取った値: '${p}'）。" >&2
+    exit 1
+  fi
+}
 choose_port() {
-  if [[ -n "${PORT:-}" ]]; then echo "${PORT}"; return; fi
+  if [[ -n "${PORT:-}" ]]; then validate_port "${PORT}"; echo "${PORT}"; return; fi
   if [[ -f "${UNIT_PATH}" ]]; then
     local existing
     existing="$(grep -oP 'Environment=PORT=\K[0-9]+' "${UNIT_PATH}" 2>/dev/null || true)"
@@ -45,6 +53,18 @@ SEL_PORT="$(choose_port)"
 BACKEND_ORIGIN=""
 if [[ -f "${UNIT_PATH}" ]]; then
   BACKEND_ORIGIN="$(grep -oP '^Environment=OCSRC_BACKEND_ORIGIN=\K\S+' "${UNIT_PATH}" 2>/dev/null || true)"
+fi
+# フォールバック: 「API 先 → web 後から新規」の順序では、API installer が web ユニット未在で
+# 注入をスキップしており引き継ぎ元が無い。その場合は ocsrc-api ユニットの --port から補完する。
+if [[ -z "${BACKEND_ORIGIN}" ]]; then
+  API_UNIT_PATH="/etc/systemd/system/ocsrc-api.service"
+  if [[ -f "${API_UNIT_PATH}" ]]; then
+    API_PORT="$(grep -oP -- '--port \K[0-9]+' "${API_UNIT_PATH}" 2>/dev/null || true)"
+    if [[ -n "${API_PORT}" ]]; then
+      BACKEND_ORIGIN="http://127.0.0.1:${API_PORT}"
+      echo "==> ocsrc-api の --port ${API_PORT} から OCSRC_BACKEND_ORIGIN を補完"
+    fi
+  fi
 fi
 
 echo "==> ビルド (${FRONTEND_DIR})"
@@ -73,6 +93,13 @@ ExecStart=${NODE_BIN} server.mjs
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
+# --- 低リスク sandboxing（WorkingDirectory が \$HOME 配下のため ProtectHome は付けない） ---
+PrivateTmp=true
+ProtectSystem=full
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+RestrictSUIDSGID=true
 
 [Install]
 WantedBy=multi-user.target

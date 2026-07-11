@@ -22,6 +22,13 @@ ExecStart=/home/kensan/.nvm/versions/node/v25.2.1/bin/node server.mjs
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
+# --- 低リスク sandboxing（WorkingDirectory が $HOME 配下のため ProtectHome は付けない） ---
+PrivateTmp=true
+ProtectSystem=full
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+RestrictSUIDSGID=true
 
 [Install]
 WantedBy=multi-user.target

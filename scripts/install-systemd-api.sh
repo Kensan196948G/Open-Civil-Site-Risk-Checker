@@ -34,8 +34,16 @@ fi
 
 # --- ポート決定: 明示 PORT > 既存ユニットの --port > 8000 から空きを探索 ---
 port_in_use() { ss -ltnH "sport = :$1" 2>/dev/null | grep -q . ; }
+# PORT はユニット生成時に sed/ExecStart へ直接埋め込まれるため、非数値や範囲外を弾く。
+validate_port() {
+  local p="$1"
+  if [[ ! "${p}" =~ ^[0-9]+$ ]] || (( p < 1 || p > 65535 )); then
+    echo "ERROR: PORT は 1-65535 の整数で指定してください（受け取った値: '${p}'）。" >&2
+    exit 1
+  fi
+}
 choose_port() {
-  if [[ -n "${PORT:-}" ]]; then echo "${PORT}"; return; fi
+  if [[ -n "${PORT:-}" ]]; then validate_port "${PORT}"; echo "${PORT}"; return; fi
   if [[ -f "${UNIT_PATH}" ]]; then
     local existing
     existing="$(grep -oP -- '--port \K[0-9]+' "${UNIT_PATH}" 2>/dev/null || true)"
@@ -110,6 +118,13 @@ ExecStart=${UVICORN_BIN} app.main:app --host 127.0.0.1 --port ${SEL_PORT}
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
+# --- 低リスク sandboxing（venv/WorkingDirectory が \$HOME 配下のため ProtectHome は付けない） ---
+PrivateTmp=true
+ProtectSystem=full
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+RestrictSUIDSGID=true
 
 [Install]
 WantedBy=multi-user.target

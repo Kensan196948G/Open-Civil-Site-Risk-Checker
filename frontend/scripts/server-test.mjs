@@ -34,15 +34,17 @@ function check(name, cond, detail = '') {
   }
 }
 
-/** 生の path をそのまま送る HTTP リクエスト（fetch は URL 正規化するため使わない）。 */
-function request(port, path, { method = 'GET' } = {}) {
+/** 生の path をそのまま送る HTTP リクエスト（fetch は URL 正規化するため使わない）。
+ *  headers/body を渡すと中継ヘッダ精製（Content-Length/Content-Type 除去）を検証できる。 */
+function request(port, path, { method = 'GET', headers = {}, body } = {}) {
   return new Promise((res, rej) => {
-    const req = http.request({ host: '127.0.0.1', port, path, method }, (r) => {
+    const req = http.request({ host: '127.0.0.1', port, path, method, headers }, (r) => {
       const chunks = [];
       r.on('data', (c) => chunks.push(c));
       r.on('end', () => res({ status: r.statusCode, headers: r.headers, body: Buffer.concat(chunks).toString('utf8') }));
     });
     req.on('error', rej);
+    if (body !== undefined) req.write(body);
     req.end();
   });
 }
@@ -105,8 +107,15 @@ const backend = http.createServer((req, res) => {
     return;
   }
   if (req.url.startsWith('/api/slow')) return; // never respond
-  res.writeHead(200, { 'Content-Type': 'application/json', 'X-Upstream': 'mini-backend' });
-  res.end(JSON.stringify({ echo: { method: req.method, url: req.url, host: req.headers.host } }));
+  // あえて web 層と衝突するセキュリティヘッダを返し、上流優先にならない（item 6）ことを検証する。
+  // 受信ヘッダを echo し、bodyless 中継で Content-Length/Content-Type が剥がれる（item 7）ことを検証する。
+  res.writeHead(200, {
+    'Content-Type': 'application/json',
+    'X-Upstream': 'mini-backend',
+    'X-Frame-Options': 'SAMEORIGIN',
+    'Content-Security-Policy': "default-src 'none'",
+  });
+  res.end(JSON.stringify({ echo: { method: req.method, url: req.url, host: req.headers.host, headers: req.headers } }));
 });
 const backendPort = await getPort();
 await new Promise((res) => backend.listen(backendPort, '127.0.0.1', res));
@@ -170,6 +179,30 @@ try {
 
   const postApi = await request(webUpPort, '/api/v1/ping', { method: 'POST' });
   check('POST /api/* is 405', postApi.status === 405);
+
+  // ---- 2b. /api プロキシ（ヘッダ精製: Issue #43 items 6/7） ----
+  console.log('▶ /api proxy (header hygiene)');
+  // item 6: 上流が返すセキュリティヘッダは web 層の値で上書きされない（web が常に優先）。
+  const hdr = await request(webUpPort, '/api/v1/ping');
+  check('item6: web X-Frame-Options DENY wins over upstream SAMEORIGIN', hdr.headers['x-frame-options'] === 'DENY', `got=${hdr.headers['x-frame-options']}`);
+  check(
+    'item6: web CSP wins over upstream CSP',
+    (hdr.headers['content-security-policy'] || '').includes("default-src 'self'") &&
+      !(hdr.headers['content-security-policy'] || '').includes("default-src 'none'"),
+    `got=${(hdr.headers['content-security-policy'] || '').slice(0, 40)}`,
+  );
+  check('item6: non-security upstream header still passes through', hdr.headers['x-upstream'] === 'mini-backend');
+  // item 7: bodyless 中継では Content-Length / Content-Type を上流へ渡さない。
+  // 実アプリの GET/HEAD は本来 body を持たないため、ここも未読 body を作らない well-formed
+  // リクエスト（Content-Length: 0 + body なし）で検証する。剥がしは値に依らず効くため、
+  // ヘッダが上流へ届かない（echo に現れない）ことを見れば slowloris 増幅も塞げている。
+  const entity = await request(webUpPort, '/api/v1/ping', {
+    headers: { 'Content-Type': 'application/json', 'Content-Length': '0' },
+  });
+  check('item7: entity request still relays 200', entity.status === 200, `status=${entity.status}`);
+  const seen = JSON.parse(entity.body).echo?.headers || {};
+  check('item7: content-length not forwarded to backend', seen['content-length'] === undefined, `got=${seen['content-length']}`);
+  check('item7: content-type not forwarded to backend', seen['content-type'] === undefined, `got=${seen['content-type']}`);
 
   // ---- 3. /api プロキシ（防御系） ----
   console.log('▶ /api proxy (guards)');

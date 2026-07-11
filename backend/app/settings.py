@@ -28,8 +28,16 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        """cors_origins parsed into origins (whitespace stripped, empties dropped)."""
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        """cors_origins parsed into origins.
+
+        Each entry is whitespace-stripped and has a trailing slash removed so
+        that a configured "http://localhost:5173/" still matches the browser
+        Origin header (which never carries a path); empty entries are dropped.
+        """
+        normalized = (
+            origin.strip().rstrip("/") for origin in self.cors_origins.split(",")
+        )
+        return [origin for origin in normalized if origin]
 
 
 @lru_cache
