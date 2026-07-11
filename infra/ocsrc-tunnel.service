@@ -2,8 +2,13 @@
 # Open Civil Site Risk Checker — Cloudflare Tunnel (cloudflared) systemd unit.
 # Publishes the WebUI on riskchecker.mirai-dx-platform.com by tunnelling to
 # the local ocsrc-web service (server.mjs on :8700).
-# This is a reference copy; the live unit is installed by
-# scripts/install-tunnel.sh at /etc/systemd/system/ocsrc-tunnel.service.
+#
+# REFERENCE/TEMPLATE ONLY — prefer `bash scripts/install-tunnel.sh`, which
+# generates the authoritative unit with the correct User and an absolute
+# --config path. If you install THIS file manually you MUST set User= below
+# to the tunnel-owning (non-root) user; otherwise systemd runs cloudflared as
+# root, %h expands to /root, the config under the real user's ~/.cloudflared
+# is not found, and the unit restart-loops.
 Description=Open Civil Site Risk Checker Cloudflare Tunnel (cloudflared)
 Documentation=https://github.com/Kensan196948G/Open-Civil-Site-Risk-Checker/blob/main/docs/deploy-backend.md
 After=network-online.target ocsrc-web.service
@@ -12,6 +17,9 @@ Requires=ocsrc-web.service
 
 [Service]
 Type=simple
+# REQUIRED: the non-root user that owns ~/.cloudflared (cert.pem + config).
+# %h below resolves to THIS user's home. Uncomment and set before installing.
+#User=REPLACE_WITH_TUNNEL_OWNER
 Restart=always
 RestartSec=5
 # Config lives at ~/.cloudflared/ocsrc-config.yml (tunnel id + ingress).
