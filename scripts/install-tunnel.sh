@@ -135,15 +135,24 @@ sudo systemctl --no-pager --full status "${SERVICE}.service" | head -8 || true
 # --- DNS ルート（一般公開スイッチ） ---
 # 既定では作成しない。CREATE_DNS_ROUTE=1 のときだけ CNAME を張る。
 CERT_PEM="${USER_HOME}/.cloudflared/cert.pem"
+# route dns にトンネル「名」を渡すと別トンネルへ誤ルーティングする事例があったため、
+# 実際に稼働している config の tunnel UUID を使う（config が単一の真実）。--overwrite-dns で冪等。
+TUNNEL_UUID="$(grep -oP '^tunnel:\s*\K[0-9a-f-]+' "${CONFIG}" 2>/dev/null | head -1 || true)"
 if [[ "${CREATE_DNS_ROUTE:-0}" == "1" ]]; then
-  echo "==> DNS ルート作成: ${HOSTNAME_FQDN} -> ${TUNNEL_NAME}"
+  # UUID は DNS route にのみ必要。公開時だけ取得失敗を hard fail にする
+  # （トンネル常駐化だけの非公開経路はブロックしない）。
+  if [[ -z "${TUNNEL_UUID}" ]]; then
+    echo "ERROR: ${CONFIG} から tunnel UUID を取得できません。config の 'tunnel:' 行を確認してください。" >&2
+    exit 1
+  fi
+  echo "==> DNS ルート作成: ${HOSTNAME_FQDN} -> ${TUNNEL_UUID}"
   # cloudflared は HOME/.cloudflared/cert.pem でアカウント認証する。sudo 実行時は
   # HOME=/root になり cert.pem を見失うため、tunnel 所有ユーザで実行し cert を明示する。
   sudo -u "${RUN_USER}" env HOME="${USER_HOME}" \
-    "${CLOUDFLARED_BIN}" --origincert "${CERT_PEM}" tunnel route dns "${TUNNEL_NAME}" "${HOSTNAME_FQDN}"
+    "${CLOUDFLARED_BIN}" --origincert "${CERT_PEM}" tunnel route dns --overwrite-dns "${TUNNEL_UUID}" "${HOSTNAME_FQDN}"
   echo "    公開しました: https://${HOSTNAME_FQDN}/"
 else
   echo "==> DNS ルート未作成（公開保留）。公開する場合は次を実行:"
-  echo "      cloudflared --origincert ${CERT_PEM} tunnel route dns ${TUNNEL_NAME} ${HOSTNAME_FQDN}"
+  echo "      cloudflared --origincert ${CERT_PEM} tunnel route dns --overwrite-dns ${TUNNEL_UUID:-<tunnel-uuid>} ${HOSTNAME_FQDN}"
   echo "    または CREATE_DNS_ROUTE=1 scripts/install-tunnel.sh"
 fi
