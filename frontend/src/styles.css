@@ -154,3 +154,22 @@ input,
 textarea {
   font-family: inherit;
 }
+
+/* 動きに敏感なユーザー向けに、装飾アニメーションを実質無効化する（WCAG 2.3.3）。
+   スライドイン/フェード/スピナーの回転を抑え、瞬時表示に切り替える。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* キーボードフォーカスを可視化する（マウス :focus は既存のまま、:focus-visible のみ強調）。 */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
