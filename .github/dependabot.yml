@@ -1,0 +1,18 @@
+# Dependabot: 依存関係の脆弱性・更新を週次でチェックし PR を自動作成する。
+# CI の security ジョブ（npm audit / pip-audit）と組み合わせて回帰を防ぐ。
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
