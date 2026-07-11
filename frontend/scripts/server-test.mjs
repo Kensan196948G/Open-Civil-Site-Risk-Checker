@@ -164,7 +164,9 @@ await new Promise((res) => backend.listen(backendPort, '127.0.0.1', res));
 const webUpPort = await getPort();
 const webDownPort = await getPort();
 const webAuthPort = await getPort();
+const webJwksDownPort = await getPort();
 const deadPort = await getPort(); // 取得後 listen しない = backend 停止相当
+const jwksDeadPort = await getPort(); // 取得後 listen しない = JWKS 到達不可相当
 
 // JWKS モックサーバ（Access の署名公開鍵を配信）。webAuth の検証先に指定する。
 const jwksServer = http.createServer((req, res) => {
@@ -175,7 +177,7 @@ const jwksPort = await getPort();
 await new Promise((res) => jwksServer.listen(jwksPort, '127.0.0.1', res));
 const jwksUrl = `http://127.0.0.1:${jwksPort}/certs`;
 
-let webUp, webDown, webAuth;
+let webUp, webDown, webAuth, webJwksDown;
 try {
   webUp = await startWeb({
     PORT: String(webUpPort),
@@ -348,10 +350,34 @@ try {
   // 別 IP は影響を受けない（IP 単位の窓であることの確認）。
   const otherIp = await request(webAuthPort, '/', { headers: { 'CF-Connecting-IP': '203.0.113.100', 'Cf-Access-Jwt-Assertion': validJwt } });
   check('access: other IP unaffected by rate limit', otherIp.status === 200, `status=${otherIp.status}`);
+
+  // ---- 6. JWKS 取得失敗時は 503（一時障害・失敗記録しない） ----
+  console.log('▶ access jwks-unavailable');
+  // JWKS URL を未 listen ポートに向けた別インスタンス。有効 JWT でも署名検証不能。
+  webJwksDown = await startWeb({
+    PORT: String(webJwksDownPort),
+    DIST: distTmp,
+    OCSRC_BACKEND_ORIGIN: `http://127.0.0.1:${backendPort}`,
+    OCSRC_ACCESS_TEAM_DOMAIN: ACCESS_TEAM,
+    OCSRC_ACCESS_AUD: ACCESS_AUD,
+    OCSRC_ACCESS_CERTS_URL: `http://127.0.0.1:${jwksDeadPort}/certs`, // listen していない
+  });
+  const jd = { 'CF-Connecting-IP': '203.0.113.200' };
+  const unavailable = await request(webJwksDownPort, '/', { headers: { ...jd, 'Cf-Access-Jwt-Assertion': validJwt } });
+  check('access: JWKS unreachable yields 503 (not 403)', unavailable.status === 503, `status=${unavailable.status}`);
+  check('access: 503 carries Retry-After', unavailable.headers['retry-after'] === '30', `got=${unavailable.headers['retry-after']}`);
+  // 503（一時障害）は失敗記録しないため、同一 IP を繰り返しても 429 にならない。
+  let stayed503 = true;
+  for (let i = 0; i < 12; i++) {
+    const r = await request(webJwksDownPort, '/', { headers: { ...jd, 'Cf-Access-Jwt-Assertion': validJwt } });
+    if (r.status !== 503) stayed503 = false;
+  }
+  check('access: repeated JWKS-unavailable never rate-limits (stays 503)', stayed503, 'expected all 503');
 } finally {
   webUp?.kill('SIGTERM');
   webDown?.kill('SIGTERM');
   webAuth?.kill('SIGTERM');
+  webJwksDown?.kill('SIGTERM');
   jwksServer.closeAllConnections?.();
   await new Promise((res) => jwksServer.close(res));
   backend.closeAllConnections?.();

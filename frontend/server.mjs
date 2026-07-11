@@ -208,47 +208,52 @@ async function getSigningKey(kid) {
   return keys.get(kid) || null;
 }
 
-/** Cloudflare Access JWT を検証する（署名・aud・iss・exp）。有効なら true。 */
+/** Cloudflare Access JWT を検証する（署名・aud・iss・exp）。
+ *  戻り値は 'valid'（有効）/ 'invalid'（確定的に無効）/ 'unavailable'（JWKS 取得失敗で
+ *  検証不能・一時的）の 3 値。いずれも「拒否」は同じだが、呼び出し側で 403（無効・失敗記録）
+ *  と 503（一時障害・Retry-After・失敗記録なし）を区別するために分ける。 */
 async function verifyAccessJwt(token) {
-  if (typeof token !== 'string' || token === '') return false;
+  if (typeof token !== 'string' || token === '') return 'invalid';
   const parts = token.split('.');
-  if (parts.length !== 3) return false;
+  if (parts.length !== 3) return 'invalid';
   let header, payload;
   try {
     header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
     payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
   } catch {
-    return false;
+    return 'invalid';
   }
-  if (header.alg !== 'RS256' || typeof header.kid !== 'string') return false;
+  if (header.alg !== 'RS256' || typeof header.kid !== 'string') return 'invalid';
   // aud はアプリ固有の AUD タグ（文字列 or 配列）。当該アプリ向けのみ受理する。
   const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-  if (!auds.includes(ACCESS_AUD)) return false;
+  if (!auds.includes(ACCESS_AUD)) return 'invalid';
   // iss はチームドメイン。別テナントのトークンを弾く。
-  if (payload.iss !== ACCESS_ISSUER) return false;
+  if (payload.iss !== ACCESS_ISSUER) return 'invalid';
   const now = Math.floor(Date.now() / 1000);
-  if (typeof payload.exp !== 'number' || payload.exp <= now) return false;
+  if (typeof payload.exp !== 'number' || payload.exp <= now) return 'invalid';
   // iat/nbf は軽微なクロックスキュー（60s）を許容する。
-  if (typeof payload.nbf === 'number' && payload.nbf > now + 60) return false;
-  if (typeof payload.iat === 'number' && payload.iat > now + 60) return false;
+  if (typeof payload.nbf === 'number' && payload.nbf > now + 60) return 'invalid';
+  if (typeof payload.iat === 'number' && payload.iat > now + 60) return 'invalid';
   let key;
   try {
     key = await getSigningKey(header.kid);
   } catch {
-    return false; // JWKS 取得失敗時は検証不能＝拒否（fail-secure）
+    // JWKS 取得失敗は「検証不能（一時的）」。有効トークンのユーザを 403 で締め出さない。
+    return 'unavailable';
   }
-  if (!key) return false;
+  // kid が取得済み JWKS に無い場合は確定的に無効（攻撃者 kid・非対応鍵）。
+  if (!key) return 'invalid';
   const signed = Buffer.from(`${parts[0]}.${parts[1]}`);
   let sig;
   try {
     sig = Buffer.from(parts[2], 'base64url');
   } catch {
-    return false;
+    return 'invalid';
   }
   try {
-    return crypto.verify('RSA-SHA256', signed, key, sig);
+    return crypto.verify('RSA-SHA256', signed, key, sig) ? 'valid' : 'invalid';
   } catch {
-    return false;
+    return 'invalid';
   }
 }
 
@@ -277,7 +282,17 @@ async function checkTunnelAuth(req, res) {
   }
   // Cloudflare Access がエッジで付与する JWT を検証する。通常は未認証がエッジで
   // 弾かれるため有効 JWT が届くが、多層防御として origin でも必須にする。
-  if (await verifyAccessJwt(req.headers['cf-access-jwt-assertion'])) return true;
+  const result = await verifyAccessJwt(req.headers['cf-access-jwt-assertion']);
+  if (result === 'valid') return true;
+  if (result === 'unavailable') {
+    // JWKS 取得失敗（一時障害）。有効トークンかもしれないので失敗記録せず 503 で再試行を促す。
+    return deny(
+      503,
+      { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '30' },
+      'access verification temporarily unavailable',
+    );
+  }
+  // 確定的に無効なトークン（署名・claim 不正・欠如）は失敗記録のうえ 403。
   recordAuthFailure(ip);
   return deny(
     403,
