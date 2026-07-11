@@ -322,14 +322,16 @@ const DROP_HEADERS = new Set([
 // リクエスト方向の追加除去: GET/HEAD のみ中継し body を転送しないため、エンティティ
 // ヘッダを落とす。クライアントが送った過大な Content-Length を残すとバックエンドが
 // 到着しない body を待ってソケットを PROXY_TIMEOUT_MS まで保持し得る（軽微な slowloris 増幅）。
-// authorization / cf-access-jwt-assertion は web 層（Access 認証）で消費する資格情報の
-// ためバックエンドへ渡さない（backend は検証しない・秘匿情報の最小伝播）。
+// authorization / cf-access-jwt-assertion / cookie は web 層（Access 認証）で消費する
+// 資格情報のためバックエンドへ渡さない（backend は検証も cookie 利用もしない・秘匿情報の
+// 最小伝播）。cookie には Access セッション（CF_Authorization）が載るため必ず落とす。
 const DROP_REQUEST_HEADERS = new Set([
   ...DROP_HEADERS,
   'content-length',
   'content-type',
   'authorization',
   'cf-access-jwt-assertion',
+  'cookie',
 ]);
 // レスポンス方向の追加除去: web 層が全応答へ付与するセキュリティヘッダは上流の値で
 // 上書きさせない（writeHead はマージ時に自身の引数を優先するため、上流が同名ヘッダを

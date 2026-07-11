@@ -330,11 +330,15 @@ try {
   const unconfigured = await request(webUpPort, '/', { headers: jwtHeader(validJwt) });
   check('access: unconfigured instance rejects tunnel access with 503', unconfigured.status === 503, `status=${unconfigured.status}`);
 
-  // JWT は web 層で消費し、バックエンドへは転送しない。
-  const authApi = await request(webAuthPort, '/api/v1/ping', { headers: jwtHeader(validJwt) });
+  // JWT・cookie は web 層で消費し、バックエンドへは転送しない（Access セッションの
+  // CF_Authorization cookie が backend やそのログへ漏れないこと）。
+  const authApi = await request(webAuthPort, '/api/v1/ping', {
+    headers: { ...jwtHeader(validJwt), Cookie: 'CF_Authorization=secret-access-session; other=1' },
+  });
   check('access: authenticated /api relays 200', authApi.status === 200, `status=${authApi.status}`);
   const authSeen = JSON.parse(authApi.body).echo?.headers || {};
   check('access: jwt header not forwarded to backend', authSeen['cf-access-jwt-assertion'] === undefined, `got=${authSeen['cf-access-jwt-assertion']}`);
+  check('access: cookie (CF_Authorization) not forwarded to backend', authSeen['cookie'] === undefined, `got=${authSeen['cookie']}`);
 
   // 失敗レート制限: 同一 IP で 10 回失敗すると、以後は有効 JWT でも窓内は 429。
   const RL_IP = { 'CF-Connecting-IP': '203.0.113.99' };
