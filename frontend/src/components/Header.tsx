@@ -8,12 +8,11 @@ export function Header() {
 
   return (
     <header
+      className="ocsrc-header"
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 14,
         height: 56,
-        padding: '0 18px',
         background: 'var(--chrome)',
         color: 'var(--chrome-text)',
         flex: 'none',
@@ -40,11 +39,12 @@ export function Header() {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
         <span style={{ fontSize: 14.5, fontWeight: 700, letterSpacing: '.2px' }}>Open Civil Site Risk Checker</span>
-        <span style={{ fontSize: 11, color: 'var(--chrome-text-3)', fontWeight: 400 }}>工事候補地リスクチェッカー</span>
+        <span className="ocsrc-header-subtitle" style={{ fontSize: 11, color: 'var(--chrome-text-3)', fontWeight: 400 }}>工事候補地リスクチェッカー</span>
       </div>
       <div style={{ flex: 1 }} />
       {ranOnce && location && (
         <div
+          className="ocsrc-header-site"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -53,7 +53,6 @@ export function Header() {
             background: 'var(--chrome-3)',
             border: '1px solid var(--chrome-border)',
             borderRadius: 6,
-            maxWidth: 330,
           }}
         >
           <span style={{ fontSize: 11, color: '#15a3b8', fontWeight: 700 }}>地点</span>
@@ -63,7 +62,7 @@ export function Header() {
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5, color: 'var(--chrome-text-3)' }}>{location.coordLabel}</span>
         </div>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.3 }}>
+      <div className="ocsrc-header-time" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.3 }}>
         <span style={{ fontSize: 9.5, color: 'var(--chrome-text-4)', letterSpacing: '.3px' }}>取得日時</span>
         <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--chrome-text-2)' }}>{fetchedAt}</span>
       </div>
@@ -86,9 +85,10 @@ export function Header() {
         }}
       >
         <span style={{ fontSize: 13, lineHeight: 1 }}>{dark ? '☾' : '☀'}</span>
-        <span>{dark ? 'ダーク' : 'ライト'}</span>
+        <span className="ocsrc-header-theme-label">{dark ? 'ダーク' : 'ライト'}</span>
       </button>
       <div
+        className="ocsrc-header-editor"
         style={{
           display: 'flex',
           alignItems: 'center',

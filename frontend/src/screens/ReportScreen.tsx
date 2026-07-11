@@ -54,8 +54,8 @@ export function ReportScreen() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'auto' }}>
-      <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
-        <div style={{ width: 320, flex: 'none', background: 'var(--surface)', borderRight: '1px solid var(--border)', overflow: 'auto', padding: '22px 20px' }}>
+      <div className="ocsrc-report-columns" style={{ display: 'flex', minHeight: 0 }}>
+        <div className="ocsrc-report-left" style={{ flex: 'none', background: 'var(--surface)', overflow: 'auto', padding: '22px 20px' }}>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-005</div>
           <h1 style={{ margin: '3px 0 18px', fontSize: 20, fontWeight: 700 }}>レポート出力</h1>
 

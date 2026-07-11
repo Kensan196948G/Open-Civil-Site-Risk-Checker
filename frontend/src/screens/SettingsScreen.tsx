@@ -250,7 +250,7 @@ export function SettingsScreen() {
           API キーは<strong>このブラウザの localStorage のみ</strong>に保存され、送信先は接続テスト・メモ生成時の Anthropic API だけです（本アプリのサーバへは送信しません）。共有端末では保存後の取り扱いに注意してください。
         </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+        <div className="ocsrc-grid-2col" style={{ display: 'grid', gap: 14, marginBottom: 14 }}>
           <div>
             <label style={labelStyle}>AI プロバイダ</label>
             <div style={{ ...inputStyle, fontFamily: "'Noto Sans JP', sans-serif", background: 'var(--surface-3)', color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 8 }}>

@@ -66,12 +66,12 @@ export function FindingDrawer() {
         aria-modal="true"
         aria-labelledby={TITLE_ID}
         tabIndex={-1}
+        className="ocsrc-drawer"
         style={{
           position: 'absolute',
           top: 0,
           right: 0,
           bottom: 0,
-          width: 440,
           background: 'var(--surface)',
           zIndex: 901,
           boxShadow: '-6px 0 24px rgba(15,23,34,.18)',

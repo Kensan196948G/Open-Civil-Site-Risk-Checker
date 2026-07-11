@@ -113,7 +113,7 @@ export function DashboardScreen() {
         )}
 
         {/* KPI カード */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 13, marginBottom: 16 }}>
+        <div className="ocsrc-grid-kpi" style={{ display: 'grid', gap: 13, marginBottom: 16 }}>
           {kpiCards.map((k) => (
             <div key={k.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 11, padding: '16px 17px', boxShadow: '0 1px 3px var(--shadow)' }}>
               <div style={{ fontSize: 11.5, color: 'var(--text-3)', fontWeight: 500, marginBottom: 9 }}>{k.label}</div>
