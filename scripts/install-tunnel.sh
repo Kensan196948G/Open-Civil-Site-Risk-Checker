@@ -9,7 +9,7 @@
 #   - トンネル ocsrc-riskchecker が作成済み（cloudflared tunnel create ocsrc-riskchecker）
 #   - ~/.cloudflared/ocsrc-config.yml が存在（tunnel id + ingress + credentials-file）
 #   - ocsrc-web.service が稼働（scripts/install-systemd.sh）
-#   - 【重要】公開前に Basic 認証を設定していること（/etc/ocsrc/web.env、Issue #66）
+#   - 【重要】公開前に Cloudflare Access を設定していること（/etc/ocsrc/web.env、Issue #70）
 #
 # このスクリプトは unit の導入 + enable + start までを行う。
 # DNS ルート（= 一般公開スイッチ）は既定で作成せず、環境変数 CREATE_DNS_ROUTE=1 の
@@ -57,33 +57,34 @@ fi
 
 # --- 公開前の認証設定チェック（fail-safe: 未設定なら公開を止める） ---
 # server.mjs は未設定でも Tunnel 経由を 503 にするが、運用ミスを二重で防ぐ。
-# USER / PASS の両方が非空であることを要求する（PASS 欠落だと TUNNEL_AUTH_ENABLED=false）。
+# Cloudflare Access の TEAM_DOMAIN / AUD の両方が非空であることを要求する。
 # web.env は root:root 600 のため一般ユーザでは読めない。存在確認・内容検証とも
 # sudo 経由で行う（このスクリプトは一般ユーザ実行・sudo は内部利用という前提）。
 if ! sudo test -f "${WEB_ENV}" \
-  || ! sudo grep -q '^OCSRC_TUNNEL_BASIC_USER=..*' "${WEB_ENV}" \
-  || ! sudo grep -q '^OCSRC_TUNNEL_BASIC_PASS=..*' "${WEB_ENV}"; then
-  echo "ERROR: ${WEB_ENV} に OCSRC_TUNNEL_BASIC_USER / OCSRC_TUNNEL_BASIC_PASS（両方）が未設定です。" >&2
-  echo "       インターネット公開前に Basic 認証を設定してください（Issue #66）:" >&2
+  || ! sudo grep -q '^OCSRC_ACCESS_TEAM_DOMAIN=..*' "${WEB_ENV}" \
+  || ! sudo grep -q '^OCSRC_ACCESS_AUD=..*' "${WEB_ENV}"; then
+  echo "ERROR: ${WEB_ENV} に OCSRC_ACCESS_TEAM_DOMAIN / OCSRC_ACCESS_AUD（両方）が未設定です。" >&2
+  echo "       インターネット公開前に Cloudflare Access を設定してください（Issue #70）:" >&2
+  echo "         1) Zero Trust ダッシュボードで Access アプリ（self-hosted）を作成し AUD を取得" >&2
   echo "         sudo install -m 600 /dev/null ${WEB_ENV}" >&2
-  echo "         echo 'OCSRC_TUNNEL_BASIC_USER=<user>' | sudo tee -a ${WEB_ENV}" >&2
-  echo "         echo 'OCSRC_TUNNEL_BASIC_PASS=<strong-pass>' | sudo tee -a ${WEB_ENV}" >&2
+  echo "         echo 'OCSRC_ACCESS_TEAM_DOMAIN=<team>.cloudflareaccess.com' | sudo tee -a ${WEB_ENV}" >&2
+  echo "         echo 'OCSRC_ACCESS_AUD=<application-aud-tag>' | sudo tee -a ${WEB_ENV}" >&2
   echo "         sudo systemctl restart ocsrc-web" >&2
   exit 1
 fi
 
 # --- 公開前ランタイムプローブ（実挙動で認証が効いているか確認） ---
 # web.env が存在しても、稼働中の ocsrc-web が unit に EnvironmentFile 未配線・未再起動
-# だと server.mjs は認証を無効と見なし Tunnel 経由を 503 にする。静的チェックだけでは
-# これを検出できないため、cf-connecting-ip 付きリクエストを実際に打って 401（＝認証有効）
-# を確認する。503（未設定）や 200（ゲート無効）なら壊れた公開を防ぐため停止する。
+# だと server.mjs は Access 無効と見なし Tunnel 経由を 503 にする。静的チェックだけでは
+# これを検出できないため、JWT なしの cf-connecting-ip 付きリクエストを実際に打って
+# 403（＝Access 有効・トークン必須）を確認する。503（未設定）や 200（ゲート無効）は停止。
 PROBE_PORT="${WEB_PORT:-8700}"
 PROBE_CODE="$(curl -s -o /dev/null -w '%{http_code}' -m 5 \
   -H 'CF-Connecting-IP: 203.0.113.1' "http://127.0.0.1:${PROBE_PORT}/" 2>/dev/null || true)"
-if [[ "${PROBE_CODE}" != "401" ]]; then
-  echo "ERROR: ocsrc-web が Tunnel 経由の認証を有効化していません（probe=${PROBE_CODE:-無応答}, 期待=401）。" >&2
+if [[ "${PROBE_CODE}" != "403" ]]; then
+  echo "ERROR: ocsrc-web が Cloudflare Access 認証を有効化していません（probe=${PROBE_CODE:-無応答}, 期待=403）。" >&2
   if [[ "${PROBE_CODE}" == "503" ]]; then
-    echo "       web.env が unit に未反映です。unit を再生成して再起動してください:" >&2
+    echo "       web.env（Access 設定）が unit に未反映です。unit を再生成して再起動してください:" >&2
     echo "         bash scripts/install-systemd.sh" >&2
   elif [[ "${PROBE_CODE}" == "200" ]]; then
     echo "       cf-connecting-ip 付きでも認証されていません（想定外）。server.mjs のバージョンを確認してください。" >&2
@@ -92,7 +93,7 @@ if [[ "${PROBE_CODE}" != "401" ]]; then
   fi
   exit 1
 fi
-echo "==> 公開前プローブ OK: Tunnel 経由リクエストは 401（認証有効）を返しています。"
+echo "==> 公開前プローブ OK: Tunnel 経由リクエストは 403（Access 認証・トークン必須）を返しています。"
 
 # --- ネットワーク境界の注意喚起（対抗レビュー指摘・多層防御） ---
 # 認証は「Tunnel 経由（cf-connecting-ip 付き）」にのみ効く。origin(:8700) を

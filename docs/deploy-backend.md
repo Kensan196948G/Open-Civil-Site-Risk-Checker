@@ -200,29 +200,37 @@ unset OCSRC_DATABASE_URL
 
 ---
 
-## 🌐 インターネット公開（Cloudflare Tunnel + Basic 認証）
+## 🌐 インターネット公開（Cloudflare Tunnel + Cloudflare Access）
 
-LAN 内利用は認証不要のままで、**インターネット公開時のみ** Cloudflare Tunnel（TLS 終端）＋ `server.mjs` の Basic 認証（Issue #66）を通します。要件 §11.3.1（TLS + 認証 + レート制限）を満たすための構成です。
+LAN 内利用は認証不要のままで、**インターネット公開時のみ** Cloudflare Tunnel（TLS 終端）＋ **Cloudflare Access**（ID ベース認証・Issue #70）を通します。共有パスワードは持たず、誰を許可するかは Access アプリのポリシー（メール / OTP / IdP）で管理します。要件 §11.3.1（TLS + 認証 + レート制限）を満たす構成です。
 
 ```mermaid
 flowchart LR
-  U["利用者ブラウザ"] -->|HTTPS 要認証| CF["Cloudflare Edge<br/>TLS 終端"]
-  CF <-->|Tunnel| T["cloudflared<br/>(ocsrc-tunnel)"]
-  T --> W["ocsrc-web :8700<br/>Basic 認証 + レート制限"]
+  U["利用者ブラウザ"] -->|HTTPS + Access ログイン| CF["Cloudflare Edge<br/>TLS 終端 + Access 認証"]
+  CF <-->|Tunnel（JWT 付与）| T["cloudflared<br/>(ocsrc-tunnel)"]
+  T --> W["ocsrc-web :8700<br/>Access JWT 検証 + レート制限"]
   W -->|/api same-origin| A["ocsrc-api 127.0.0.1:8000"]
   A -->|"OCSRC_DATABASE_URL<br/>で択一"| D{"DB を 1 つ選択"}
   D -.->|ローカル| D1[("PostGIS<br/>127.0.0.1:5432")]
   D -.->|本番| D2[("Neon<br/>マネージド PostGIS")]
 ```
 
-### 1. Basic 認証の設定（公開前に必須）
+### 1. Cloudflare Access アプリの作成（公開前に必須・ダッシュボード）
 
-未設定のまま Tunnel 経由アクセスが来ると `server.mjs` は **503** を返します（設定漏れのまま公開されない fail-safe）。
+未設定のまま Tunnel 経由アクセスが来ると `server.mjs` は **503** を返します（設定漏れのまま公開されない fail-safe）。まず Zero Trust ダッシュボードで Access アプリを作成します（API では作成不可・アクセス許可の管理はここで行う）:
+
+1. **Zero Trust** → **Access** → **Applications** → **Add an application** → **Self-hosted**
+2. Application domain = `riskchecker.mirai-dx-platform.com`
+3. **Policy** を追加（例: Action=Allow / Include=Emails に許可メールを列挙、または Emails ending in / One-time PIN）
+4. 作成後、アプリの **Overview** で **Application Audience (AUD) Tag** をコピー
+5. チームドメイン（`<team>.cloudflareaccess.com`）は **Settings → Custom Pages** 等で確認
+
+取得した AUD とチームドメインを web.env に設定します（値は秘密ではないが 600 で一元管理）:
 
 ```bash
 sudo install -m 600 /dev/null /etc/ocsrc/web.env
-printf 'OCSRC_TUNNEL_BASIC_USER=%s\nOCSRC_TUNNEL_BASIC_PASS=%s\n' \
-  'riskchecker' "$(openssl rand -base64 18 | tr -d '/+=' | head -c 24)" | sudo tee /etc/ocsrc/web.env >/dev/null
+printf 'OCSRC_ACCESS_TEAM_DOMAIN=%s\nOCSRC_ACCESS_AUD=%s\n' \
+  '<team>.cloudflareaccess.com' '<application-aud-tag>' | sudo tee /etc/ocsrc/web.env >/dev/null
 sudo chmod 600 /etc/ocsrc/web.env
 # unit に EnvironmentFile を反映して再起動
 bash scripts/install-systemd.sh
@@ -231,12 +239,15 @@ bash scripts/install-systemd.sh
 | 挙動 | 条件 |
 |---|---|
 | 認証なしで通す | LAN 直アクセス（`cf-connecting-ip` ヘッダなし） |
-| Basic 認証を要求 | Tunnel 経由（Cloudflare が `cf-connecting-ip` を付与） |
-| 503 で拒否 | Tunnel 経由かつ資格情報が未設定（fail-safe） |
-| 429 で拒否 | 同一 IP から 60 秒に 10 回認証失敗（レート制限） |
+| Access ログインを要求 | Tunnel 経由（エッジで未認証は Access ログイン画面へ） |
+| 有効 JWT を要求（多層防御） | origin で `Cf-Access-Jwt-Assertion` を署名・aud・iss・exp 検証。無効/欠如は **403** |
+| 503 で拒否 | Tunnel 経由かつ Access 未設定（fail-safe） |
+| 429 で拒否 | 同一 IP から 60 秒に 10 回検証失敗（レート制限） |
 | 認証なしで通す（例外） | `/healthz` の完全一致のみ（死活監視用） |
 
-> **🔒 ネットワーク境界（重要・多層防御）**: この認証は「Tunnel 経由（Cloudflare が付与する `cf-connecting-ip` あり）」のリクエストにのみ効きます。`server.mjs` は `0.0.0.0:8700` で待ち受けるため、**信頼できないネットワークから 8700 に直接到達できると `cf-connecting-ip` なし＝認証なしで通ってしまいます**。Cloudflare Tunnel はアウトバウンド専用でインバウンドのポート開放を必要としないので、**8700 を WAN へ port-forward しないこと**。インターネットからの到達は必ず Tunnel だけに限定し、8700 は LAN 内のみ到達可能に保ってください（本番ホストが NAT 配下のプライベート IP であることが前提）。
+> アクセス許可の追加・削除（誰を入れるか）は **Access アプリのポリシー**をダッシュボードで編集するだけで即反映されます。パスワードの再配布は不要です。
+
+> **🔒 ネットワーク境界（重要・多層防御）**: origin の JWT 検証は「Tunnel 経由（Cloudflare が付与する `cf-connecting-ip` あり）」のリクエストにのみ効きます。`server.mjs` は `0.0.0.0:8700` で待ち受けるため、**信頼できないネットワークから 8700 に直接到達できると `cf-connecting-ip` なし＝認証なしで通ってしまいます**。Cloudflare Tunnel はアウトバウンド専用でインバウンドのポート開放を必要としないので、**8700 を WAN へ port-forward しないこと**。インターネットからの到達は必ず Tunnel（＝エッジ Access）だけに限定し、8700 は LAN 内のみ到達可能に保ってください（本番ホストが NAT 配下のプライベート IP であることが前提）。
 
 ### 2. Tunnel の作成と常駐化
 
@@ -254,7 +265,7 @@ DNS ルートを作成した瞬間に外部から到達可能になります。*
 ```bash
 cloudflared tunnel route dns ocsrc-riskchecker riskchecker.mirai-dx-platform.com
 # または: CREATE_DNS_ROUTE=1 bash scripts/install-tunnel.sh
-# 公開後: https://riskchecker.mirai-dx-platform.com/ （Basic 認証プロンプト）
+# 公開後: https://riskchecker.mirai-dx-platform.com/ （Cloudflare Access ログイン）
 ```
 
 切り戻し（非公開化）は DNS レコード削除、または `sudo systemctl stop ocsrc-tunnel` でトンネルを止めます。
