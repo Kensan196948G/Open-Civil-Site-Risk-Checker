@@ -12,6 +12,7 @@
 
 import http from 'node:http';
 import net from 'node:net';
+import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
@@ -20,6 +21,35 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const serverPath = resolve(__dirname, '..', 'server.mjs');
+
+// ---- Cloudflare Access JWT テスト用のヘルパ（RSA 鍵 + JWKS + JWT 署名） ----
+const b64url = (buf) => Buffer.from(buf).toString('base64url');
+const ACCESS_TEAM = 'testteam.cloudflareaccess.com';
+const ACCESS_ISS = `https://${ACCESS_TEAM}`;
+const ACCESS_AUD = 'test-aud-0123456789abcdef';
+const ACCESS_KID = 'test-key-1';
+const accessKeypair = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+// JWKS（公開鍵）を JWK 形式で組み立てる。
+function jwksJson() {
+  const jwk = accessKeypair.publicKey.export({ format: 'jwk' });
+  return JSON.stringify({ keys: [{ ...jwk, kid: ACCESS_KID, alg: 'RS256', use: 'sig' }] });
+}
+// Access JWT を署名生成する（overrides で aud/iss/exp/kid/alg を差し替え可能）。
+function signAccessJwt(overrides = {}) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: overrides.alg || 'RS256', kid: overrides.kid || ACCESS_KID, typ: 'JWT' };
+  const payload = {
+    aud: overrides.aud !== undefined ? overrides.aud : ACCESS_AUD,
+    iss: overrides.iss !== undefined ? overrides.iss : ACCESS_ISS,
+    iat: overrides.iat !== undefined ? overrides.iat : now,
+    exp: overrides.exp !== undefined ? overrides.exp : now + 3600,
+    email: 'tester@example.com',
+  };
+  const signingInput = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(payload))}`;
+  if (overrides.badSig) return `${signingInput}.${b64url('not-a-real-signature')}`;
+  const sig = crypto.sign('RSA-SHA256', Buffer.from(signingInput), accessKeypair.privateKey);
+  return `${signingInput}.${b64url(sig)}`;
+}
 
 let pass = 0;
 const failures = [];
@@ -64,10 +94,17 @@ function getPort() {
 /** server.mjs を起動し、listen ログを待って child を返す。 */
 function startWeb(env) {
   return new Promise((res, rej) => {
-    // 親シェルに OCSRC_TUNNEL_BASIC_* が export されていると子へ継承され、
-    // 「未設定インスタンス」の 503 テストが 401 になる（Codex review）。
-    // 認証系変数は既定でクリアし、テストが明示的に渡した場合のみ有効化する。
-    const childEnv = { ...process.env, HOST: '127.0.0.1', OCSRC_TUNNEL_BASIC_USER: '', OCSRC_TUNNEL_BASIC_PASS: '', ...env };
+    // 親シェルに OCSRC_ACCESS_* が export されていると子へ継承され、
+    // 「未設定インスタンス」の 503 テストが 403 になる。認証系変数は既定でクリアし、
+    // テストが明示的に渡した場合のみ有効化する。
+    const childEnv = {
+      ...process.env,
+      HOST: '127.0.0.1',
+      OCSRC_ACCESS_TEAM_DOMAIN: '',
+      OCSRC_ACCESS_AUD: '',
+      OCSRC_ACCESS_CERTS_URL: '',
+      ...env,
+    };
     const child = spawn(process.execPath, [serverPath], {
       env: childEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -127,14 +164,20 @@ await new Promise((res) => backend.listen(backendPort, '127.0.0.1', res));
 const webUpPort = await getPort();
 const webDownPort = await getPort();
 const webAuthPort = await getPort();
+const webJwksDownPort = await getPort();
 const deadPort = await getPort(); // 取得後 listen しない = backend 停止相当
+const jwksDeadPort = await getPort(); // 取得後 listen しない = JWKS 到達不可相当
 
-// Tunnel Basic 認証テスト用の資格情報（webAuth インスタンスのみに設定）。
-const AUTH_USER = 'ocsrc-e2e';
-const AUTH_PASS = 'server-test-pass';
-const basic = (user, pass) => `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}`;
+// JWKS モックサーバ（Access の署名公開鍵を配信）。webAuth の検証先に指定する。
+const jwksServer = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(jwksJson());
+});
+const jwksPort = await getPort();
+await new Promise((res) => jwksServer.listen(jwksPort, '127.0.0.1', res));
+const jwksUrl = `http://127.0.0.1:${jwksPort}/certs`;
 
-let webUp, webDown, webAuth;
+let webUp, webDown, webAuth, webJwksDown;
 try {
   webUp = await startWeb({
     PORT: String(webUpPort),
@@ -151,8 +194,9 @@ try {
     PORT: String(webAuthPort),
     DIST: distTmp,
     OCSRC_BACKEND_ORIGIN: `http://127.0.0.1:${backendPort}`,
-    OCSRC_TUNNEL_BASIC_USER: AUTH_USER,
-    OCSRC_TUNNEL_BASIC_PASS: AUTH_PASS,
+    OCSRC_ACCESS_TEAM_DOMAIN: ACCESS_TEAM,
+    OCSRC_ACCESS_AUD: ACCESS_AUD,
+    OCSRC_ACCESS_CERTS_URL: jwksUrl,
   });
 
   // ---- 1. セキュリティヘッダ（静的・healthz・405・SPA fallback） ----
@@ -243,67 +287,103 @@ try {
   const downStatic = await request(webDownPort, '/');
   check('static serving unaffected by backend down', downStatic.status === 200 && downStatic.body.includes('ocsrc-test'));
 
-  // ---- 5. Tunnel Basic 認証（Issue #66） ----
-  console.log('▶ tunnel basic auth');
+  // ---- 5. Cloudflare Access JWT 認証（Issue #70） ----
+  console.log('▶ cloudflare access auth');
   const CF_IP = { 'CF-Connecting-IP': '203.0.113.10' };
+  const jwtHeader = (token) => ({ ...CF_IP, 'Cf-Access-Jwt-Assertion': token });
 
-  // LAN 直アクセス（cf-connecting-ip なし）は認証設定があっても従来どおり素通し。
+  // LAN 直アクセス（cf-connecting-ip なし）は Access 設定があっても従来どおり素通し。
   const lanDirect = await request(webAuthPort, '/');
-  check('auth: LAN direct access stays 200 without credentials', lanDirect.status === 200 && lanDirect.body.includes('ocsrc-test'));
+  check('access: LAN direct access stays 200 without token', lanDirect.status === 200 && lanDirect.body.includes('ocsrc-test'));
 
-  const noCred = await request(webAuthPort, '/', { headers: CF_IP });
-  check('auth: tunnel request without credentials is 401', noCred.status === 401, `status=${noCred.status}`);
-  check('auth: 401 carries WWW-Authenticate Basic', (noCred.headers['www-authenticate'] || '').startsWith('Basic'), `got=${noCred.headers['www-authenticate']}`);
-  assertSecurityHeaders('tunnel 401', noCred.headers);
+  const noToken = await request(webAuthPort, '/', { headers: CF_IP });
+  check('access: tunnel request without JWT is 403', noToken.status === 403, `status=${noToken.status}`);
+  assertSecurityHeaders('access 403', noToken.headers);
 
-  const badCred = await request(webAuthPort, '/', { headers: { ...CF_IP, Authorization: basic(AUTH_USER, 'wrong-pass') } });
-  check('auth: tunnel request with wrong password is 401', badCred.status === 401, `status=${badCred.status}`);
+  const validJwt = signAccessJwt();
+  const okTok = await request(webAuthPort, '/', { headers: jwtHeader(validJwt) });
+  check('access: valid JWT is 200', okTok.status === 200 && okTok.body.includes('ocsrc-test'), `status=${okTok.status}`);
 
-  const okCred = await request(webAuthPort, '/', { headers: { ...CF_IP, Authorization: basic(AUTH_USER, AUTH_PASS) } });
-  check('auth: tunnel request with valid credentials is 200', okCred.status === 200 && okCred.body.includes('ocsrc-test'), `status=${okCred.status}`);
-
-  // スキーム名は case-insensitive（RFC 7617）: "basic" でも認証成功すること。
-  const lowerScheme = await request(webAuthPort, '/', {
-    headers: { ...CF_IP, Authorization: basic(AUTH_USER, AUTH_PASS).replace(/^Basic/, 'basic') },
-  });
-  check('auth: lowercase "basic" scheme is accepted (RFC 7617)', lowerScheme.status === 200, `status=${lowerScheme.status}`);
+  // 署名不正・aud 不一致・iss 不一致・期限切れ・kid 不明はいずれも 403。
+  const badSig = await request(webAuthPort, '/', { headers: jwtHeader(signAccessJwt({ badSig: true })) });
+  check('access: bad signature is 403', badSig.status === 403, `status=${badSig.status}`);
+  const wrongAud = await request(webAuthPort, '/', { headers: jwtHeader(signAccessJwt({ aud: 'someone-elses-aud' })) });
+  check('access: wrong aud is 403', wrongAud.status === 403, `status=${wrongAud.status}`);
+  const wrongIss = await request(webAuthPort, '/', { headers: jwtHeader(signAccessJwt({ iss: 'https://evil.cloudflareaccess.com' })) });
+  check('access: wrong iss is 403', wrongIss.status === 403, `status=${wrongIss.status}`);
+  const expired = await request(webAuthPort, '/', { headers: jwtHeader(signAccessJwt({ exp: Math.floor(Date.now() / 1000) - 10 })) });
+  check('access: expired JWT is 403', expired.status === 403, `status=${expired.status}`);
+  const unknownKid = await request(webAuthPort, '/', { headers: jwtHeader(signAccessJwt({ kid: 'no-such-kid' })) });
+  check('access: unknown kid is 403', unknownKid.status === 403, `status=${unknownKid.status}`);
+  const garbage = await request(webAuthPort, '/', { headers: jwtHeader('not.a.jwt') });
+  check('access: malformed token is 403', garbage.status === 403, `status=${garbage.status}`);
 
   const hzTunnel = await request(webAuthPort, '/healthz', { headers: CF_IP });
-  check('auth: /healthz stays open for tunnel monitoring', hzTunnel.status === 200 && hzTunnel.body === 'ok', `status=${hzTunnel.status}`);
+  check('access: /healthz stays open for tunnel monitoring', hzTunnel.status === 200 && hzTunnel.body === 'ok', `status=${hzTunnel.status}`);
 
   // 回帰（Codex review）: /healthz?x は healthz ハンドラに一致せず SPA fallback へ流れるため、
   // 認証除外の対象にしてはならない（未認証で index.html が漏れるのを防ぐ）。
   const hzQuery = await request(webAuthPort, '/healthz?probe=1', { headers: CF_IP });
-  check('auth: /healthz with query still requires auth (no SPA leak)', hzQuery.status === 401, `status=${hzQuery.status}`);
+  check('access: /healthz with query still requires auth (no SPA leak)', hzQuery.status === 403, `status=${hzQuery.status}`);
 
-  // 認証未設定インスタンスへ Tunnel 経由で到達した場合は fail-safe で 503。
-  const unconfigured = await request(webUpPort, '/', { headers: CF_IP });
-  check('auth: unconfigured instance rejects tunnel access with 503', unconfigured.status === 503, `status=${unconfigured.status}`);
+  // Access 未設定インスタンスへ Tunnel 経由で到達した場合は fail-safe で 503。
+  const unconfigured = await request(webUpPort, '/', { headers: jwtHeader(validJwt) });
+  check('access: unconfigured instance rejects tunnel access with 503', unconfigured.status === 503, `status=${unconfigured.status}`);
 
-  // Authorization は web 層で消費し、バックエンドへは転送しない。
-  const authApi = await request(webAuthPort, '/api/v1/ping', { headers: { ...CF_IP, Authorization: basic(AUTH_USER, AUTH_PASS) } });
-  check('auth: authenticated /api relays 200', authApi.status === 200, `status=${authApi.status}`);
+  // JWT・cookie は web 層で消費し、バックエンドへは転送しない（Access セッションの
+  // CF_Authorization cookie が backend やそのログへ漏れないこと）。
+  const authApi = await request(webAuthPort, '/api/v1/ping', {
+    headers: { ...jwtHeader(validJwt), Cookie: 'CF_Authorization=secret-access-session; other=1' },
+  });
+  check('access: authenticated /api relays 200', authApi.status === 200, `status=${authApi.status}`);
   const authSeen = JSON.parse(authApi.body).echo?.headers || {};
-  check('auth: authorization header not forwarded to backend', authSeen.authorization === undefined, `got=${authSeen.authorization}`);
+  check('access: jwt header not forwarded to backend', authSeen['cf-access-jwt-assertion'] === undefined, `got=${authSeen['cf-access-jwt-assertion']}`);
+  check('access: cookie (CF_Authorization) not forwarded to backend', authSeen['cookie'] === undefined, `got=${authSeen['cookie']}`);
 
-  // 失敗レート制限: 同一 IP で 10 回失敗すると、以後は正しい資格情報でも窓内は 429。
+  // 失敗レート制限: 同一 IP で 10 回失敗すると、以後は有効 JWT でも窓内は 429。
   const RL_IP = { 'CF-Connecting-IP': '203.0.113.99' };
-  let last401 = 0;
+  let last403 = 0;
   for (let i = 0; i < 10; i++) {
-    const r = await request(webAuthPort, '/', { headers: { ...RL_IP, Authorization: basic(AUTH_USER, `bad-${i}`) } });
-    last401 = r.status;
+    const r = await request(webAuthPort, '/', { headers: { ...RL_IP, 'Cf-Access-Jwt-Assertion': signAccessJwt({ badSig: true }) } });
+    last403 = r.status;
   }
-  check('auth: repeated failures stay 401 until limit', last401 === 401, `status=${last401}`);
-  const limited = await request(webAuthPort, '/', { headers: { ...RL_IP, Authorization: basic(AUTH_USER, AUTH_PASS) } });
-  check('auth: 11th attempt from same IP is 429 even with valid credentials', limited.status === 429, `status=${limited.status}`);
-  check('auth: 429 carries Retry-After', limited.headers['retry-after'] === '60', `got=${limited.headers['retry-after']}`);
+  check('access: repeated failures stay 403 until limit', last403 === 403, `status=${last403}`);
+  const limited = await request(webAuthPort, '/', { headers: { ...RL_IP, 'Cf-Access-Jwt-Assertion': validJwt } });
+  check('access: 11th attempt from same IP is 429 even with valid JWT', limited.status === 429, `status=${limited.status}`);
+  check('access: 429 carries Retry-After', limited.headers['retry-after'] === '60', `got=${limited.headers['retry-after']}`);
   // 別 IP は影響を受けない（IP 単位の窓であることの確認）。
-  const otherIp = await request(webAuthPort, '/', { headers: { 'CF-Connecting-IP': '203.0.113.100', Authorization: basic(AUTH_USER, AUTH_PASS) } });
-  check('auth: other IP unaffected by rate limit', otherIp.status === 200, `status=${otherIp.status}`);
+  const otherIp = await request(webAuthPort, '/', { headers: { 'CF-Connecting-IP': '203.0.113.100', 'Cf-Access-Jwt-Assertion': validJwt } });
+  check('access: other IP unaffected by rate limit', otherIp.status === 200, `status=${otherIp.status}`);
+
+  // ---- 6. JWKS 取得失敗時は 503（一時障害・失敗記録しない） ----
+  console.log('▶ access jwks-unavailable');
+  // JWKS URL を未 listen ポートに向けた別インスタンス。有効 JWT でも署名検証不能。
+  webJwksDown = await startWeb({
+    PORT: String(webJwksDownPort),
+    DIST: distTmp,
+    OCSRC_BACKEND_ORIGIN: `http://127.0.0.1:${backendPort}`,
+    OCSRC_ACCESS_TEAM_DOMAIN: ACCESS_TEAM,
+    OCSRC_ACCESS_AUD: ACCESS_AUD,
+    OCSRC_ACCESS_CERTS_URL: `http://127.0.0.1:${jwksDeadPort}/certs`, // listen していない
+  });
+  const jd = { 'CF-Connecting-IP': '203.0.113.200' };
+  const unavailable = await request(webJwksDownPort, '/', { headers: { ...jd, 'Cf-Access-Jwt-Assertion': validJwt } });
+  check('access: JWKS unreachable yields 503 (not 403)', unavailable.status === 503, `status=${unavailable.status}`);
+  check('access: 503 carries Retry-After', unavailable.headers['retry-after'] === '30', `got=${unavailable.headers['retry-after']}`);
+  // 503（一時障害）は失敗記録しないため、同一 IP を繰り返しても 429 にならない。
+  let stayed503 = true;
+  for (let i = 0; i < 12; i++) {
+    const r = await request(webJwksDownPort, '/', { headers: { ...jd, 'Cf-Access-Jwt-Assertion': validJwt } });
+    if (r.status !== 503) stayed503 = false;
+  }
+  check('access: repeated JWKS-unavailable never rate-limits (stays 503)', stayed503, 'expected all 503');
 } finally {
   webUp?.kill('SIGTERM');
   webDown?.kill('SIGTERM');
   webAuth?.kill('SIGTERM');
+  webJwksDown?.kill('SIGTERM');
+  jwksServer.closeAllConnections?.();
+  await new Promise((res) => jwksServer.close(res));
   backend.closeAllConnections?.();
   await new Promise((res) => backend.close(res));
   await fs.rm(distTmp, { recursive: true, force: true });

@@ -7,9 +7,13 @@
 //   DIST                   配信ディレクトリ（既定 ./dist）
 //   OCSRC_BACKEND_ORIGIN   /api/* の中継先バックエンド（既定 http://127.0.0.1:8000）
 //   OCSRC_PROXY_TIMEOUT_MS 中継のアイドルタイムアウト ms（既定 10000）
-//   OCSRC_TUNNEL_BASIC_USER / OCSRC_TUNNEL_BASIC_PASS
-//                          Cloudflare Tunnel 経由アクセスの Basic 認証資格情報。
-//                          両方設定で有効。未設定のまま Tunnel 経由で到達すると 503（Issue #66）。
+//   OCSRC_ACCESS_TEAM_DOMAIN / OCSRC_ACCESS_AUD
+//                          Cloudflare Access（Zero Trust）による認証。前者はチーム
+//                          ドメイン（例 yourteam.cloudflareaccess.com）、後者は Access
+//                          アプリの AUD タグ。両方設定で有効。未設定のまま Tunnel 経由で
+//                          到達すると 503（Issue #70）。共有パスワードは持たない。
+//   OCSRC_ACCESS_CERTS_URL （任意）JWKS 取得先の上書き。既定はチームドメインの標準
+//                          エンドポイント。テスト用のローカルモック差し替えに使う。
 
 import http from 'node:http';
 import https from 'node:https';
@@ -82,17 +86,26 @@ const SECURITY_HEADERS = {
   'Referrer-Policy': 'strict-origin-when-cross-origin',
 };
 
-// ---- Cloudflare Tunnel 経由アクセスの Basic 認証（Issue #66・要件 §11.3.1） ----
+// ---- Cloudflare Access（Zero Trust）による認証（Issue #70・要件 §11.3.1） ----
 // Tunnel 判定は cf-connecting-ip ヘッダの有無。cloudflared は必ず付与する一方、
 // LAN 内クライアントが偽装付与しても「認証が余計に要求される」方向にしか働かず、
 // 認証バイパスには使えない（fail-secure）。LAN 直アクセスの挙動は従来どおり。
-const TUNNEL_USER = process.env.OCSRC_TUNNEL_BASIC_USER || '';
-const TUNNEL_PASS = process.env.OCSRC_TUNNEL_BASIC_PASS || '';
-const TUNNEL_AUTH_ENABLED = TUNNEL_USER !== '' && TUNNEL_PASS !== '';
-const sha256 = (s) => crypto.createHash('sha256').update(s, 'utf8').digest();
-// 比較は SHA-256 ダイジェスト同士の timingSafeEqual（入力長に依らず長さ一定・時間一定）。
-const TUNNEL_USER_DIGEST = sha256(TUNNEL_USER);
-const TUNNEL_PASS_DIGEST = sha256(TUNNEL_PASS);
+//
+// 認証は共有パスワードを持たず、Cloudflare Access がエッジで発行する JWT
+// （Cf-Access-Jwt-Assertion）を検証する。誰を許可するかは Access アプリのポリシー
+// （メール / OTP / IdP）で管理する。エッジで未認証は弾かれるため通常 origin には
+// 有効 JWT 付きリクエストしか届かないが、多層防御として origin でも JWT を検証する。
+const ACCESS_TEAM_DOMAIN = (process.env.OCSRC_ACCESS_TEAM_DOMAIN || '')
+  .replace(/^https?:\/\//, '')
+  .replace(/\/+$/, '');
+const ACCESS_AUD = process.env.OCSRC_ACCESS_AUD || '';
+const ACCESS_ENABLED = ACCESS_TEAM_DOMAIN !== '' && ACCESS_AUD !== '';
+const ACCESS_ISSUER = ACCESS_TEAM_DOMAIN ? `https://${ACCESS_TEAM_DOMAIN}` : '';
+// JWKS（署名検証用の公開鍵集合）取得先。既定はチームドメインの標準エンドポイント。
+// テスト用にローカルモックへ差し替えられるよう env で上書き可能（値は運用者が設定）。
+const ACCESS_CERTS_URL =
+  process.env.OCSRC_ACCESS_CERTS_URL ||
+  (ACCESS_TEAM_DOMAIN ? `https://${ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs` : '');
 
 // 認証失敗レート制限: IP 別の固定窓カウンタ。窓内で上限回失敗すると 429 を返す。
 // Map は上限件数で頭打ちにし、溢れたら最古の窓を追い出す（メモリ無限成長の防止）。
@@ -132,29 +145,121 @@ function recordAuthFailure(ip) {
   authFailures.set(ip, { count: 1, windowStart: now });
 }
 
-/** Basic 資格情報を検証する（ヘッダ不正・不一致は false）。 */
-function verifyBasicAuth(header) {
-  if (typeof header !== 'string') return false;
-  // スキーム名は case-insensitive（RFC 7617/9110）。スキーム部だけ無視し、
-  // Base64 エンコード済みの資格情報部（case-sensitive）はそのまま取り出す。
-  const match = /^Basic +(.*)$/i.exec(header);
-  if (!match) return false;
-  let decoded;
-  try {
-    decoded = Buffer.from(match[1].trim(), 'base64').toString('utf8');
-  } catch {
-    return false;
+// JWKS（Access の署名公開鍵）キャッシュ。TTL 内は再取得しない。kid 不明時は
+// 鍵ローテーション対応で再取得するが、不正 kid の連打による再取得洪水を防ぐため
+// 最小再取得間隔を設ける。
+let jwks = { keys: new Map(), fetchedAt: 0 };
+let jwksRefetchAt = 0;
+const JWKS_TTL_MS = 3_600_000; // 1h
+const JWKS_MIN_REFETCH_MS = 60_000;
+
+/** URL から JSON を GET する（JWKS 取得用・タイムアウト付き）。 */
+function fetchJson(url, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    let u;
+    try {
+      u = new URL(url);
+    } catch (e) {
+      reject(e);
+      return;
+    }
+    const mod = u.protocol === 'https:' ? https : http;
+    const rq = mod.get(u, { timeout: timeoutMs }, (rs) => {
+      if (rs.statusCode !== 200) {
+        rs.resume();
+        reject(new Error(`certs endpoint returned ${rs.statusCode}`));
+        return;
+      }
+      const chunks = [];
+      rs.on('data', (c) => chunks.push(c));
+      rs.on('end', () => {
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+    rq.on('timeout', () => rq.destroy(new Error('certs fetch timeout')));
+    rq.on('error', reject);
+  });
+}
+
+/** kid に対応する署名検証用の公開鍵を返す（無ければ null）。 */
+async function getSigningKey(kid) {
+  const now = Date.now();
+  const fresh = now - jwks.fetchedAt < JWKS_TTL_MS;
+  if (jwks.keys.has(kid) && fresh) return jwks.keys.get(kid);
+  // 再取得が必要。ただし直近に取得済みなら最小間隔まで待つ（連打対策）。
+  if (jwks.fetchedAt !== 0 && now - jwksRefetchAt < JWKS_MIN_REFETCH_MS) {
+    return jwks.keys.get(kid) || null;
   }
-  const sep = decoded.indexOf(':');
-  if (sep < 0) return false;
-  const okUser = crypto.timingSafeEqual(sha256(decoded.slice(0, sep)), TUNNEL_USER_DIGEST);
-  const okPass = crypto.timingSafeEqual(sha256(decoded.slice(sep + 1)), TUNNEL_PASS_DIGEST);
-  return okUser && okPass;
+  jwksRefetchAt = now;
+  const body = await fetchJson(ACCESS_CERTS_URL);
+  const keys = new Map();
+  for (const jwk of body.keys || []) {
+    try {
+      keys.set(jwk.kid, crypto.createPublicKey({ key: jwk, format: 'jwk' }));
+    } catch {
+      /* 不正な JWK はスキップ */
+    }
+  }
+  jwks = { keys, fetchedAt: now };
+  return keys.get(kid) || null;
+}
+
+/** Cloudflare Access JWT を検証する（署名・aud・iss・exp）。
+ *  戻り値は 'valid'（有効）/ 'invalid'（確定的に無効）/ 'unavailable'（JWKS 取得失敗で
+ *  検証不能・一時的）の 3 値。いずれも「拒否」は同じだが、呼び出し側で 403（無効・失敗記録）
+ *  と 503（一時障害・Retry-After・失敗記録なし）を区別するために分ける。 */
+async function verifyAccessJwt(token) {
+  if (typeof token !== 'string' || token === '') return 'invalid';
+  const parts = token.split('.');
+  if (parts.length !== 3) return 'invalid';
+  let header, payload;
+  try {
+    header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
+    payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+  } catch {
+    return 'invalid';
+  }
+  if (header.alg !== 'RS256' || typeof header.kid !== 'string') return 'invalid';
+  // aud はアプリ固有の AUD タグ（文字列 or 配列）。当該アプリ向けのみ受理する。
+  const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+  if (!auds.includes(ACCESS_AUD)) return 'invalid';
+  // iss はチームドメイン。別テナントのトークンを弾く。
+  if (payload.iss !== ACCESS_ISSUER) return 'invalid';
+  const now = Math.floor(Date.now() / 1000);
+  if (typeof payload.exp !== 'number' || payload.exp <= now) return 'invalid';
+  // iat/nbf は軽微なクロックスキュー（60s）を許容する。
+  if (typeof payload.nbf === 'number' && payload.nbf > now + 60) return 'invalid';
+  if (typeof payload.iat === 'number' && payload.iat > now + 60) return 'invalid';
+  let key;
+  try {
+    key = await getSigningKey(header.kid);
+  } catch {
+    // JWKS 取得失敗は「検証不能（一時的）」。有効トークンのユーザを 403 で締め出さない。
+    return 'unavailable';
+  }
+  // kid が取得済み JWKS に無い場合は確定的に無効（攻撃者 kid・非対応鍵）。
+  if (!key) return 'invalid';
+  const signed = Buffer.from(`${parts[0]}.${parts[1]}`);
+  let sig;
+  try {
+    sig = Buffer.from(parts[2], 'base64url');
+  } catch {
+    return 'invalid';
+  }
+  try {
+    return crypto.verify('RSA-SHA256', signed, key, sig) ? 'valid' : 'invalid';
+  } catch {
+    return 'invalid';
+  }
 }
 
 /** Tunnel 経由リクエストの認証ゲート。true = 続行可、false = 応答送出済み。
  *  /healthz のみ除外（秘匿情報を含まず、公開経路の死活監視に使うため）。 */
-function checkTunnelAuth(req, res) {
+async function checkTunnelAuth(req, res) {
   const connectingIp = req.headers['cf-connecting-ip'];
   if (connectingIp === undefined) return true; // LAN 直アクセス
   // healthz 除外は実ハンドラ（req.url === '/healthz' の完全一致）と条件を揃える。
@@ -167,20 +272,32 @@ function checkTunnelAuth(req, res) {
     res.end(message);
     return false;
   };
-  if (!TUNNEL_AUTH_ENABLED) {
-    // 認証情報が未設定のまま公開経路から到達した場合は塞ぐ（設定漏れ事故の防止）。
-    return deny(503, { 'Content-Type': 'text/plain; charset=utf-8' }, 'tunnel access is not configured');
+  if (!ACCESS_ENABLED) {
+    // Access 未設定のまま公開経路から到達した場合は塞ぐ（設定漏れ事故の防止）。
+    return deny(503, { 'Content-Type': 'text/plain; charset=utf-8' }, 'access control is not configured');
   }
   const ip = String(connectingIp);
   if (authRateLimited(ip)) {
-    return deny(429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '60' }, 'too many failed authentication attempts');
+    return deny(429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '60' }, 'too many failed authorization attempts');
   }
-  if (verifyBasicAuth(req.headers.authorization)) return true;
+  // Cloudflare Access がエッジで付与する JWT を検証する。通常は未認証がエッジで
+  // 弾かれるため有効 JWT が届くが、多層防御として origin でも必須にする。
+  const result = await verifyAccessJwt(req.headers['cf-access-jwt-assertion']);
+  if (result === 'valid') return true;
+  if (result === 'unavailable') {
+    // JWKS 取得失敗（一時障害）。有効トークンかもしれないので失敗記録せず 503 で再試行を促す。
+    return deny(
+      503,
+      { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '30' },
+      'access verification temporarily unavailable',
+    );
+  }
+  // 確定的に無効なトークン（署名・claim 不正・欠如）は失敗記録のうえ 403。
   recordAuthFailure(ip);
   return deny(
-    401,
-    { 'Content-Type': 'text/plain; charset=utf-8', 'WWW-Authenticate': 'Basic realm="OCSRC RiskChecker", charset="UTF-8"' },
-    'authentication required',
+    403,
+    { 'Content-Type': 'text/plain; charset=utf-8' },
+    'forbidden: a valid Cloudflare Access session is required',
   );
 }
 
@@ -205,8 +322,17 @@ const DROP_HEADERS = new Set([
 // リクエスト方向の追加除去: GET/HEAD のみ中継し body を転送しないため、エンティティ
 // ヘッダを落とす。クライアントが送った過大な Content-Length を残すとバックエンドが
 // 到着しない body を待ってソケットを PROXY_TIMEOUT_MS まで保持し得る（軽微な slowloris 増幅）。
-// authorization は web 層（Tunnel Basic 認証）で消費する資格情報のためバックエンドへ渡さない。
-const DROP_REQUEST_HEADERS = new Set([...DROP_HEADERS, 'content-length', 'content-type', 'authorization']);
+// authorization / cf-access-jwt-assertion / cookie は web 層（Access 認証）で消費する
+// 資格情報のためバックエンドへ渡さない（backend は検証も cookie 利用もしない・秘匿情報の
+// 最小伝播）。cookie には Access セッション（CF_Authorization）が載るため必ず落とす。
+const DROP_REQUEST_HEADERS = new Set([
+  ...DROP_HEADERS,
+  'content-length',
+  'content-type',
+  'authorization',
+  'cf-access-jwt-assertion',
+  'cookie',
+]);
 // レスポンス方向の追加除去: web 層が全応答へ付与するセキュリティヘッダは上流の値で
 // 上書きさせない（writeHead はマージ時に自身の引数を優先するため、上流が同名ヘッダを
 // 返すと setHeader 済みの値が負ける）。将来 backend が独自ヘッダを返しても web 層が優先。
@@ -316,7 +442,7 @@ const server = http.createServer(async (req, res) => {
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
     // 公開経路（Cloudflare Tunnel）の認証ゲート。メソッド判定より先に評価し、
     // 未認証クライアントには許可メソッド等の情報も返さない。
-    if (!checkTunnelAuth(req, res)) return;
+    if (!(await checkTunnelAuth(req, res))) return;
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.writeHead(405, { Allow: 'GET, HEAD' });
       res.end('Method Not Allowed');

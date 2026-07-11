@@ -43,12 +43,12 @@ npm run test:smoke   # スモークテスト（esbuild ランナー / 制約環�
 
 | 種別                       | URL                                    | 認証 |
 | -------------------------- | -------------------------------------- | ---- |
-| 🌐 インターネット公開       | `https://riskchecker.mirai-dx-platform.com/` | Basic 認証（Cloudflare Tunnel 経由） |
+| 🌐 インターネット公開       | `https://riskchecker.mirai-dx-platform.com/` | Cloudflare Access（ID ベース・OTP/メール） |
 | LAN（自動割当 IP・現在値） | `http://192.168.0.185:8700/`           | なし（信頼 LAN） |
 | ローカル                   | `http://127.0.0.1:8700/`               | なし |
 | ヘルスチェック             | `http://127.0.0.1:8700/healthz` → `ok` | なし（監視用に開放） |
 
-> **インターネット公開**（`riskchecker.mirai-dx-platform.com`）は Cloudflare Tunnel（TLS 終端）+ `server.mjs` の Basic 認証（Issue #66）で保護しています。LAN 内は認証なしで直接利用できます（信頼 LAN モデル）。公開の詳細手順・セキュリティ境界は [`docs/deploy-backend.md`](docs/deploy-backend.md) を参照。
+> **インターネット公開**（`riskchecker.mirai-dx-platform.com`）は Cloudflare Tunnel（TLS 終端）+ Cloudflare Access（ID ベース認証・Issue #70）で保護しています。LAN 内は認証なしで直接利用できます（信頼 LAN モデル）。公開の詳細手順・セキュリティ境界は [`docs/deploy-backend.md`](docs/deploy-backend.md) を参照。
 >
 > LAN の IP は DHCP 割当のため環境や再起動のタイミングで変わり得ます。固定 IP をコードや設定に書き込む必要はありません（`server.mjs` は `HOST=0.0.0.0` で全インタフェース待受のため、どの IP が割り当たっても自動的に到達可能）。現在値を確認したい場合は `scripts/install-systemd.sh` の実行結果（`LAN: http://<IP>:<PORT>/` 行）、または `hostname -I` / `ip route get 1.1.1.1` を使用してください。
 
@@ -72,7 +72,7 @@ journalctl -u ocsrc-web -f      # ログ追従
 
 > 🚀 **バックエンド API（KSJ 空間検索）も常駐させる場合**は `scripts/install-systemd-api.sh` を実行します（`ocsrc-api.service`・127.0.0.1 バインド・web へのプロキシ先自動注入）。DB（PostGIS）起動・パスワード設定を含む全体手順の正本は [`docs/deploy-backend.md`](docs/deploy-backend.md) を参照してください。
 
-> 🌐 **インターネット公開する場合**は `scripts/install-tunnel.sh` を実行します（`ocsrc-tunnel.service` / Cloudflare Tunnel）。**公開前に `/etc/ocsrc/web.env` へ Basic 認証を設定**すること（未設定だと Tunnel 経由は 503。スクリプトが実挙動プローブで検証します）。DNS ルート作成（一般公開スイッチ）は `CREATE_DNS_ROUTE=1` を付けたときだけ実行されます。本番の 3 サービス構成:
+> 🌐 **インターネット公開する場合**は `scripts/install-tunnel.sh` を実行します（`ocsrc-tunnel.service` / Cloudflare Tunnel）。**公開前に Cloudflare Access アプリを作成し `/etc/ocsrc/web.env` へ設定**すること（未設定だと Tunnel 経由は 503。スクリプトが実挙動プローブで検証します）。DNS ルート作成（一般公開スイッチ）は `CREATE_DNS_ROUTE=1` を付けたときだけ実行されます。本番の 3 サービス構成:
 
 ```bash
 systemctl status ocsrc-web ocsrc-api ocsrc-tunnel   # web(:8700) / api(127.0.0.1:8000) / tunnel
@@ -80,7 +80,7 @@ systemctl status ocsrc-web ocsrc-api ocsrc-tunnel   # web(:8700) / api(127.0.0.1
 
 | サービス | 役割 | バインド/経路 |
 | --- | --- | --- |
-| `ocsrc-web` | SPA 配信 + セキュリティヘッダ + `/api` プロキシ + Basic 認証（server.mjs・Tunnel 経由リクエストのみ） | `0.0.0.0:8700` |
+| `ocsrc-web` | SPA 配信 + セキュリティヘッダ + `/api` プロキシ + Cloudflare Access JWT 検証（server.mjs・Tunnel 経由のみ） | `0.0.0.0:8700` |
 | `ocsrc-api` | KSJ 空間検索 API（FastAPI） | `127.0.0.1:8000`（LAN 非公開） |
 | `ocsrc-tunnel` | Cloudflare Tunnel（TLS 終端は Cloudflare） | アウトバウンドのみ |
 
@@ -232,7 +232,7 @@ DOM 非依存の純粋関数を中心に検証します。とくに**「断定�
 
 本アプリは**フロントエンド中心の SPA** です。リスク判定・AI 調査メモ・レポート生成はすべてブラウザ内の TypeScript で実行し、外部公開 API はブラウザが直接 fetch します。バックエンド（FastAPI + PostGIS）は国土数値情報（KSJ）の空間検索補助に限定され、`server.mjs` の **`/api/*` same-origin プロキシ**経由で到達します（API 自体は 127.0.0.1 バインドで LAN へ直接露出しません）。
 
-アクセス経路は 2 つあります。**① LAN 内**は認証なしで直接（従来どおり）、**② インターネット公開**は Cloudflare Tunnel（TLS 終端）→ `server.mjs` の Basic 認証（Issue #66）を通ります。DB は**ローカル PostGIS** と **Neon（マネージド PostGIS）**のどちらかを `OCSRC_DATABASE_URL` で選択します。
+アクセス経路は 2 つあります。**① LAN 内**は認証なしで直接（従来どおり）、**② インターネット公開**は Cloudflare Tunnel（TLS 終端）→ Cloudflare Access（エッジ認証 + origin JWT 検証・Issue #70）を通ります。DB は**ローカル PostGIS** と **Neon（マネージド PostGIS）**のどちらかを `OCSRC_DATABASE_URL` で選択します。
 
 ```mermaid
 flowchart LR
@@ -246,7 +246,7 @@ flowchart LR
     end
 
     subgraph HOST["🖥️ Linux ホスト（systemd 常駐 / IP は DHCP 自動割当）"]
-        W["ocsrc-web（server.mjs）<br/>0.0.0.0:8700<br/>静的配信 + セキュリティヘッダ + <br/>Tunnel 経由 Basic 認証・失敗レート制限"]
+        W["ocsrc-web（server.mjs）<br/>0.0.0.0:8700<br/>静的配信 + セキュリティヘッダ + <br/>Tunnel 経由 Access JWT 検証・失敗レート制限"]
         A["ocsrc-api（FastAPI）<br/>127.0.0.1:8000（LAN 非公開）<br/>/healthz・/api/v1/ping・/api/v1/nearby"]
     end
 
@@ -280,7 +280,7 @@ flowchart LR
 | コンポーネント | 役割 | 備考 |
 | -------------- | ---- | ---- |
 | SPA（ブラウザ） | 取得・判定・メモ・出力のすべて | 利用者データは `localStorage` のみ（サーバ側に保存しない） |
-| `frontend/server.mjs`（ocsrc-web） | 静的配信 / セキュリティヘッダ / `/api/*` プロキシ / Tunnel 認証 | 依存ゼロ Node。転送先は環境変数固定（SSRF 防止）。公開時は Basic 認証（Issue #66） |
+| `frontend/server.mjs`（ocsrc-web） | 静的配信 / セキュリティヘッダ / `/api/*` プロキシ / Access JWT 検証 | 依存ゼロ Node。転送先は環境変数固定（SSRF 防止）。公開時は Cloudflare Access（Issue #70） |
 | `backend/`（ocsrc-api） | KSJ 空間検索 API（読み取り専用 3 エンドポイント） | 127.0.0.1 バインド。SPA は**既定で same-origin `/api` プロキシ経由**で接続（Issue #57） |
 | PostGIS / Neon | KSJ 取込データの近傍検索（`ST_DWithin`） | `python -m app.ingest` で取込（冪等）。本番は Neon（マネージド）を推奨 |
 | `ocsrc-tunnel`（cloudflared） | インターネット公開（TLS 終端は Cloudflare） | DNS ルート作成が公開スイッチ。作成前は Tunnel 経由到達なし |
