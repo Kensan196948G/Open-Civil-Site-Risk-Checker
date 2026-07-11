@@ -43,6 +43,18 @@ if [[ ! -f "${CONFIG}" ]]; then
   exit 1
 fi
 
+# --- ingress 転送先ポートと ocsrc-web の実ポートの整合チェック ---
+# ocsrc-web は PORT=... で 8700 以外にも導入できる（install-systemd.sh）。config の
+# ingress が実ポートと食い違うと、Tunnel は起動するが閉じた origin へ転送し公開が壊れる。
+WEB_UNIT="/etc/systemd/system/ocsrc-web.service"
+WEB_PORT="$(grep -oP '^Environment=PORT=\K[0-9]+' "${WEB_UNIT}" 2>/dev/null || true)"
+CONFIG_PORT="$(grep -oP 'service:\s*https?://[^:/]+:\K[0-9]+' "${CONFIG}" 2>/dev/null | head -1 || true)"
+if [[ -n "${WEB_PORT}" && -n "${CONFIG_PORT}" && "${WEB_PORT}" != "${CONFIG_PORT}" ]]; then
+  echo "ERROR: ${CONFIG} の転送先ポート(${CONFIG_PORT})が ocsrc-web の実ポート(${WEB_PORT})と不一致です。" >&2
+  echo "       ${CONFIG} の ingress を http://localhost:${WEB_PORT} に修正してから再実行してください。" >&2
+  exit 1
+fi
+
 # --- 公開前の認証設定チェック（fail-safe: 未設定なら公開を止める） ---
 # server.mjs は未設定でも Tunnel 経由を 503 にするが、運用ミスを二重で防ぐ。
 # USER / PASS の両方が非空であることを要求する（PASS 欠落だと TUNNEL_AUTH_ENABLED=false）。
