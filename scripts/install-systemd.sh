@@ -91,6 +91,9 @@ WorkingDirectory=${FRONTEND_DIR}
 Environment=NODE_ENV=production
 Environment=HOST=0.0.0.0
 Environment=PORT=${SEL_PORT}
+# Cloudflare Tunnel 公開時の Basic 認証資格情報など（無ければ無視・chmod 600 で管理）。
+# 例: OCSRC_TUNNEL_BASIC_USER / OCSRC_TUNNEL_BASIC_PASS（server.mjs / Issue #66）
+EnvironmentFile=-/etc/ocsrc/web.env
 ExecStart=${NODE_BIN} server.mjs
 Restart=always
 RestartSec=3
@@ -115,6 +118,10 @@ fi
 echo "==> 有効化 & 起動"
 sudo systemctl daemon-reload
 sudo systemctl enable --now "${SERVICE}.service"
+# enable --now は「未起動なら起動」だけで、稼働中ユニットは再起動しない。
+# 再実行で unit（EnvironmentFile 追加等）が変わっても反映されるよう try-restart する
+# （web.env の Basic 認証が未反映のまま Tunnel 経由 503 になる事故を防ぐ）。
+sudo systemctl try-restart "${SERVICE}.service"
 sleep 1
 sudo systemctl --no-pager --full status "${SERVICE}.service" | head -8 || true
 

@@ -217,48 +217,61 @@ DOM 非依存の純粋関数を中心に検証します。とくに**「断定�
 
 本アプリは**フロントエンド中心の SPA** です。リスク判定・AI 調査メモ・レポート生成はすべてブラウザ内の TypeScript で実行し、外部公開 API はブラウザが直接 fetch します。バックエンド（FastAPI + PostGIS）は国土数値情報（KSJ）の空間検索補助に限定され、`server.mjs` の **`/api/*` same-origin プロキシ**経由で到達します（API 自体は 127.0.0.1 バインドで LAN へ直接露出しません）。
 
+アクセス経路は 2 つあります。**① LAN 内**は認証なしで直接（従来どおり）、**② インターネット公開**は Cloudflare Tunnel（TLS 終端）→ `server.mjs` の Basic 認証（Issue #66）を通ります。DB は**ローカル PostGIS** と **Neon（マネージド PostGIS）**のどちらかを `OCSRC_DATABASE_URL` で選択します。
+
 ```mermaid
 flowchart LR
-    subgraph LAN["🏠 信頼 LAN 内"]
+    subgraph USERS["👥 利用者"]
         B["🌐 ブラウザ（SPA / React + TS）<br/>入力検証・確認優先度判定・AIメモ・<br/>レポート生成・localStorage 保存"]
     end
 
+    subgraph EDGE["☁️ Cloudflare（インターネット公開経路）"]
+        CF["Cloudflare Edge<br/>TLS 終端 + DDoS 緩和<br/>riskchecker.mirai-dx-platform.com"]
+        TN["ocsrc-tunnel（cloudflared）<br/>アウトバウンド接続のみ"]
+    end
+
     subgraph HOST["🖥️ Linux ホスト（systemd 常駐 / IP は DHCP 自動割当）"]
-        W["ocsrc-web（server.mjs）<br/>0.0.0.0:8700<br/>静的配信 + セキュリティヘッダ（CSP 等）"]
+        W["ocsrc-web（server.mjs）<br/>0.0.0.0:8700<br/>静的配信 + セキュリティヘッダ + <br/>Tunnel 経由 Basic 認証・失敗レート制限"]
         A["ocsrc-api（FastAPI）<br/>127.0.0.1:8000（LAN 非公開）<br/>/healthz・/api/v1/ping・/api/v1/nearby"]
-        D[("ocsrc-db（PostGIS）<br/>127.0.0.1:5432<br/>KSJ ローカル DB")]
+    end
+
+    subgraph DB["🗄️ 空間 DB（OCSRC_DATABASE_URL でどちらか一方を選択）"]
+        DS{"DB を 1 つ選択"}
+        D1[("ローカル PostGIS<br/>127.0.0.1:5432<br/>開発既定")]
+        D2[("Neon PostGIS 3.5<br/>マネージド・TLS 必須<br/>本番既定")]
     end
 
     subgraph EXT["☁️ 外部公開 API 群（ブラウザが直接 HTTPS fetch）"]
-        E1["Nominatim<br/>住所ジオコーディング"]
-        E2["Overpass<br/>道路・水域・施設"]
-        E3["Open-Meteo<br/>気象予報・標高"]
-        E4["地理院タイル / 標高 API"]
-        E5["ハザードマップポータル<br/>重ね合わせタイル"]
-        E6["気象庁<br/>警報・注意報"]
+        E1["Nominatim / Overpass<br/>ジオコーディング・地物"]
+        E3["Open-Meteo / 地理院<br/>気象・タイル・標高"]
+        E5["ハザードマップ / 気象庁<br/>浸水想定・警報"]
         E7["Anthropic API<br/>AI 調査メモ（任意）"]
     end
 
-    B -->|"HTTP :8700<br/>静的資材 + /api/*"| W
-    W -->|"/api/* same-origin プロキシ<br/>OCSRC_BACKEND_ORIGIN（GET/HEAD のみ）"| A
-    A --> D
+    B -->|"② HTTPS（公開・要認証）"| CF
+    CF <-->|"Tunnel"| TN
+    TN --> W
+    B -->|"① HTTP :8700（LAN・認証なし）"| W
+    W -->|"/api/* same-origin プロキシ<br/>（GET/HEAD のみ・Authorization 非転送）"| A
+    A -->|"OCSRC_DATABASE_URL"| DS
+    DS -.->|ローカル| D1
+    DS -.->|本番| D2
     B -.-> E1
-    B -.-> E2
     B -.-> E3
-    B -.-> E4
     B -.-> E5
-    B -.-> E6
     B -.-> E7
 ```
 
 | コンポーネント | 役割 | 備考 |
 | -------------- | ---- | ---- |
 | SPA（ブラウザ） | 取得・判定・メモ・出力のすべて | 利用者データは `localStorage` のみ（サーバ側に保存しない） |
-| `frontend/server.mjs`（ocsrc-web） | 静的配信 / セキュリティヘッダ / `/api/*` プロキシ | 依存ゼロ Node。転送先は環境変数固定（SSRF 防止） |
-| `backend/`（ocsrc-api） | KSJ 空間検索 API（読み取り専用 3 エンドポイント） | 127.0.0.1 バインド。SPA は**既定で same-origin `/api` プロキシ経由**で接続（Issue #57・カスタム URL で直結も可） |
-| PostGIS（ocsrc-db） | KSJ 取込データの近傍検索（`ST_DWithin`） | `python -m app.ingest` で取込（冪等） |
+| `frontend/server.mjs`（ocsrc-web） | 静的配信 / セキュリティヘッダ / `/api/*` プロキシ / Tunnel 認証 | 依存ゼロ Node。転送先は環境変数固定（SSRF 防止）。公開時は Basic 認証（Issue #66） |
+| `backend/`（ocsrc-api） | KSJ 空間検索 API（読み取り専用 3 エンドポイント） | 127.0.0.1 バインド。SPA は**既定で same-origin `/api` プロキシ経由**で接続（Issue #57） |
+| PostGIS / Neon | KSJ 取込データの近傍検索（`ST_DWithin`） | `python -m app.ingest` で取込（冪等）。本番は Neon（マネージド）を推奨 |
+| `ocsrc-tunnel`（cloudflared） | インターネット公開（TLS 終端は Cloudflare） | DNS ルート作成が公開スイッチ。作成前は Tunnel 経由到達なし |
 
 > 📖 仕様の正本: 実装アーキテクチャの詳細は [`docs/detailed-specification.md`](docs/detailed-specification.md) §3、バックエンド中心構成（認証・案件管理）は同 §3.4 の**将来計画（Phase 4+）**として整理しています。
+> 🔐 公開時のセキュリティ境界（TLS・認証・レート制限）は [`docs/deploy-backend.md`](docs/deploy-backend.md) の公開手順を正本とします。
 
 ### 📁 フロントエンド構成
 

@@ -64,8 +64,12 @@ function getPort() {
 /** server.mjs を起動し、listen ログを待って child を返す。 */
 function startWeb(env) {
   return new Promise((res, rej) => {
+    // 親シェルに OCSRC_TUNNEL_BASIC_* が export されていると子へ継承され、
+    // 「未設定インスタンス」の 503 テストが 401 になる（Codex review）。
+    // 認証系変数は既定でクリアし、テストが明示的に渡した場合のみ有効化する。
+    const childEnv = { ...process.env, HOST: '127.0.0.1', OCSRC_TUNNEL_BASIC_USER: '', OCSRC_TUNNEL_BASIC_PASS: '', ...env };
     const child = spawn(process.execPath, [serverPath], {
-      env: { ...process.env, HOST: '127.0.0.1', ...env },
+      env: childEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const timer = setTimeout(() => rej(new Error('server start timeout')), 8000);
@@ -122,9 +126,15 @@ await new Promise((res) => backend.listen(backendPort, '127.0.0.1', res));
 
 const webUpPort = await getPort();
 const webDownPort = await getPort();
+const webAuthPort = await getPort();
 const deadPort = await getPort(); // 取得後 listen しない = backend 停止相当
 
-let webUp, webDown;
+// Tunnel Basic 認証テスト用の資格情報（webAuth インスタンスのみに設定）。
+const AUTH_USER = 'ocsrc-e2e';
+const AUTH_PASS = 'server-test-pass';
+const basic = (user, pass) => `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}`;
+
+let webUp, webDown, webAuth;
 try {
   webUp = await startWeb({
     PORT: String(webUpPort),
@@ -136,6 +146,13 @@ try {
     PORT: String(webDownPort),
     DIST: distTmp,
     OCSRC_BACKEND_ORIGIN: `http://127.0.0.1:${deadPort}`,
+  });
+  webAuth = await startWeb({
+    PORT: String(webAuthPort),
+    DIST: distTmp,
+    OCSRC_BACKEND_ORIGIN: `http://127.0.0.1:${backendPort}`,
+    OCSRC_TUNNEL_BASIC_USER: AUTH_USER,
+    OCSRC_TUNNEL_BASIC_PASS: AUTH_PASS,
   });
 
   // ---- 1. セキュリティヘッダ（静的・healthz・405・SPA fallback） ----
@@ -225,9 +242,68 @@ try {
 
   const downStatic = await request(webDownPort, '/');
   check('static serving unaffected by backend down', downStatic.status === 200 && downStatic.body.includes('ocsrc-test'));
+
+  // ---- 5. Tunnel Basic 認証（Issue #66） ----
+  console.log('▶ tunnel basic auth');
+  const CF_IP = { 'CF-Connecting-IP': '203.0.113.10' };
+
+  // LAN 直アクセス（cf-connecting-ip なし）は認証設定があっても従来どおり素通し。
+  const lanDirect = await request(webAuthPort, '/');
+  check('auth: LAN direct access stays 200 without credentials', lanDirect.status === 200 && lanDirect.body.includes('ocsrc-test'));
+
+  const noCred = await request(webAuthPort, '/', { headers: CF_IP });
+  check('auth: tunnel request without credentials is 401', noCred.status === 401, `status=${noCred.status}`);
+  check('auth: 401 carries WWW-Authenticate Basic', (noCred.headers['www-authenticate'] || '').startsWith('Basic'), `got=${noCred.headers['www-authenticate']}`);
+  assertSecurityHeaders('tunnel 401', noCred.headers);
+
+  const badCred = await request(webAuthPort, '/', { headers: { ...CF_IP, Authorization: basic(AUTH_USER, 'wrong-pass') } });
+  check('auth: tunnel request with wrong password is 401', badCred.status === 401, `status=${badCred.status}`);
+
+  const okCred = await request(webAuthPort, '/', { headers: { ...CF_IP, Authorization: basic(AUTH_USER, AUTH_PASS) } });
+  check('auth: tunnel request with valid credentials is 200', okCred.status === 200 && okCred.body.includes('ocsrc-test'), `status=${okCred.status}`);
+
+  // スキーム名は case-insensitive（RFC 7617）: "basic" でも認証成功すること。
+  const lowerScheme = await request(webAuthPort, '/', {
+    headers: { ...CF_IP, Authorization: basic(AUTH_USER, AUTH_PASS).replace(/^Basic/, 'basic') },
+  });
+  check('auth: lowercase "basic" scheme is accepted (RFC 7617)', lowerScheme.status === 200, `status=${lowerScheme.status}`);
+
+  const hzTunnel = await request(webAuthPort, '/healthz', { headers: CF_IP });
+  check('auth: /healthz stays open for tunnel monitoring', hzTunnel.status === 200 && hzTunnel.body === 'ok', `status=${hzTunnel.status}`);
+
+  // 回帰（Codex review）: /healthz?x は healthz ハンドラに一致せず SPA fallback へ流れるため、
+  // 認証除外の対象にしてはならない（未認証で index.html が漏れるのを防ぐ）。
+  const hzQuery = await request(webAuthPort, '/healthz?probe=1', { headers: CF_IP });
+  check('auth: /healthz with query still requires auth (no SPA leak)', hzQuery.status === 401, `status=${hzQuery.status}`);
+
+  // 認証未設定インスタンスへ Tunnel 経由で到達した場合は fail-safe で 503。
+  const unconfigured = await request(webUpPort, '/', { headers: CF_IP });
+  check('auth: unconfigured instance rejects tunnel access with 503', unconfigured.status === 503, `status=${unconfigured.status}`);
+
+  // Authorization は web 層で消費し、バックエンドへは転送しない。
+  const authApi = await request(webAuthPort, '/api/v1/ping', { headers: { ...CF_IP, Authorization: basic(AUTH_USER, AUTH_PASS) } });
+  check('auth: authenticated /api relays 200', authApi.status === 200, `status=${authApi.status}`);
+  const authSeen = JSON.parse(authApi.body).echo?.headers || {};
+  check('auth: authorization header not forwarded to backend', authSeen.authorization === undefined, `got=${authSeen.authorization}`);
+
+  // 失敗レート制限: 同一 IP で 10 回失敗すると、以後は正しい資格情報でも窓内は 429。
+  const RL_IP = { 'CF-Connecting-IP': '203.0.113.99' };
+  let last401 = 0;
+  for (let i = 0; i < 10; i++) {
+    const r = await request(webAuthPort, '/', { headers: { ...RL_IP, Authorization: basic(AUTH_USER, `bad-${i}`) } });
+    last401 = r.status;
+  }
+  check('auth: repeated failures stay 401 until limit', last401 === 401, `status=${last401}`);
+  const limited = await request(webAuthPort, '/', { headers: { ...RL_IP, Authorization: basic(AUTH_USER, AUTH_PASS) } });
+  check('auth: 11th attempt from same IP is 429 even with valid credentials', limited.status === 429, `status=${limited.status}`);
+  check('auth: 429 carries Retry-After', limited.headers['retry-after'] === '60', `got=${limited.headers['retry-after']}`);
+  // 別 IP は影響を受けない（IP 単位の窓であることの確認）。
+  const otherIp = await request(webAuthPort, '/', { headers: { 'CF-Connecting-IP': '203.0.113.100', Authorization: basic(AUTH_USER, AUTH_PASS) } });
+  check('auth: other IP unaffected by rate limit', otherIp.status === 200, `status=${otherIp.status}`);
 } finally {
   webUp?.kill('SIGTERM');
   webDown?.kill('SIGTERM');
+  webAuth?.kill('SIGTERM');
   backend.closeAllConnections?.();
   await new Promise((res) => backend.close(res));
   await fs.rm(distTmp, { recursive: true, force: true });

@@ -151,3 +151,110 @@ docker exec -it ocsrc-db psql -U app -d site_risk_checker \
 | SPA で API 呼び出しが 502 | `ocsrc-api` 停止中（プロキシは 502 を返す設計） | `systemctl status ocsrc-api` |
 | ユニット起動失敗（203/EXEC） | `backend/.venv` 欠損・root 所有 | `ls -l backend/.venv/bin/uvicorn`。インストーラを一般ユーザで再実行 |
 | ポート衝突 | docker の `ocsrc-backend` コンテナと二重起動 | `docker ps`、`ss -ltn 'sport = :8000'` |
+
+---
+
+## 🐘 マネージド DB（Neon）を使う
+
+ローカル PostGIS の代わりに **Neon（マネージド PostgreSQL + PostGIS）** を本番 DB にできます。docker の DB コンテナが不要になり、可用性・バックアップは Neon 側に委譲されます。
+
+| 項目 | 値 |
+|---|---|
+| PostgreSQL | 17 系 |
+| PostGIS | 3.5（`CREATE EXTENSION postgis` を 1 回実行） |
+| 接続 | TLS 必須（DSN に `?sslmode=require`） |
+| 選択方法 | `/etc/ocsrc/api.env` の `OCSRC_DATABASE_URL` を Neon の接続文字列にするだけ |
+
+手順:
+
+接続文字列は秘密情報です。**コマンド引数やシェル履歴に平文で残さない**よう、`read -s` で環境変数に読み込んでから使います。
+
+```bash
+# 1. Neon コンソールでプロジェクト作成 → 接続文字列を取得（sslmode=require を付与）
+# 2. DSN を対話入力（-s で非エコー・履歴に残らない。sslmode=require を含めること）
+read -rs -p "Neon DSN: " OCSRC_DATABASE_URL; export OCSRC_DATABASE_URL; echo
+
+# 3. PostGIS 拡張を有効化（export 済み変数を直接使い、引数に資格情報リテラルを置かない）
+psql "$OCSRC_DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+
+# 4. KSJ データを投入（ローカルと同じ ingest CLI。接続先は環境変数から取得）
+cd backend
+.venv/bin/python -m app.ingest data/raw/arakawa-stream.json \
+  --dataset river \
+  --source "国土数値情報河川データセット（NII作成）「国土数値情報（河川データ）」（国土交通省）を加工、CC BY 4.0" \
+  --source-updated "国土数値情報 W05（NII Geoshape 経由取得）" --name-key W05_004
+
+# 5. API を Neon 向きに切替（api.env を直接編集して DSN を貼り付け。sed に資格情報を渡さない）
+sudo install -m 600 -o root -g root /dev/stdin /etc/ocsrc/api.env <<EOF
+OCSRC_APP_ENV=production
+OCSRC_DATABASE_URL=${OCSRC_DATABASE_URL}
+EOF
+sudo systemctl restart ocsrc-api
+curl -s http://127.0.0.1:8000/healthz   # → {"status":"ok","db":"ok",...}
+
+# 6. 環境変数から DSN を消す（任意）
+unset OCSRC_DATABASE_URL
+```
+
+> 接続文字列は秘密情報です。`/etc/ocsrc/api.env`（600・リポジトリ外）だけに置き、コミット・ログ出力しないこと。`read -s` で入力すれば `~/.bash_history` にも残りません。
+
+---
+
+## 🌐 インターネット公開（Cloudflare Tunnel + Basic 認証）
+
+LAN 内利用は認証不要のままで、**インターネット公開時のみ** Cloudflare Tunnel（TLS 終端）＋ `server.mjs` の Basic 認証（Issue #66）を通します。要件 §11.3.1（TLS + 認証 + レート制限）を満たすための構成です。
+
+```mermaid
+flowchart LR
+  U["利用者ブラウザ"] -->|HTTPS 要認証| CF["Cloudflare Edge<br/>TLS 終端"]
+  CF <-->|Tunnel| T["cloudflared<br/>(ocsrc-tunnel)"]
+  T --> W["ocsrc-web :8700<br/>Basic 認証 + レート制限"]
+  W -->|/api same-origin| A["ocsrc-api 127.0.0.1:8000"]
+  A -->|"OCSRC_DATABASE_URL<br/>で択一"| D{"DB を 1 つ選択"}
+  D -.->|ローカル| D1[("PostGIS<br/>127.0.0.1:5432")]
+  D -.->|本番| D2[("Neon<br/>マネージド PostGIS")]
+```
+
+### 1. Basic 認証の設定（公開前に必須）
+
+未設定のまま Tunnel 経由アクセスが来ると `server.mjs` は **503** を返します（設定漏れのまま公開されない fail-safe）。
+
+```bash
+sudo install -m 600 /dev/null /etc/ocsrc/web.env
+printf 'OCSRC_TUNNEL_BASIC_USER=%s\nOCSRC_TUNNEL_BASIC_PASS=%s\n' \
+  'riskchecker' "$(openssl rand -base64 18 | tr -d '/+=' | head -c 24)" | sudo tee /etc/ocsrc/web.env >/dev/null
+sudo chmod 600 /etc/ocsrc/web.env
+# unit に EnvironmentFile を反映して再起動
+bash scripts/install-systemd.sh
+```
+
+| 挙動 | 条件 |
+|---|---|
+| 認証なしで通す | LAN 直アクセス（`cf-connecting-ip` ヘッダなし） |
+| Basic 認証を要求 | Tunnel 経由（Cloudflare が `cf-connecting-ip` を付与） |
+| 503 で拒否 | Tunnel 経由かつ資格情報が未設定（fail-safe） |
+| 429 で拒否 | 同一 IP から 60 秒に 10 回認証失敗（レート制限） |
+| 認証なしで通す（例外） | `/healthz` の完全一致のみ（死活監視用） |
+
+> **🔒 ネットワーク境界（重要・多層防御）**: この認証は「Tunnel 経由（Cloudflare が付与する `cf-connecting-ip` あり）」のリクエストにのみ効きます。`server.mjs` は `0.0.0.0:8700` で待ち受けるため、**信頼できないネットワークから 8700 に直接到達できると `cf-connecting-ip` なし＝認証なしで通ってしまいます**。Cloudflare Tunnel はアウトバウンド専用でインバウンドのポート開放を必要としないので、**8700 を WAN へ port-forward しないこと**。インターネットからの到達は必ず Tunnel だけに限定し、8700 は LAN 内のみ到達可能に保ってください（本番ホストが NAT 配下のプライベート IP であることが前提）。
+
+### 2. Tunnel の作成と常駐化
+
+```bash
+cloudflared tunnel login                         # 初回のみ（cert.pem 取得）
+cloudflared tunnel create ocsrc-riskchecker      # トンネル作成
+# ~/.cloudflared/ocsrc-config.yml に tunnel id + ingress(:8700) + credentials-file を記述
+bash scripts/install-tunnel.sh                   # systemd 常駐（認証未設定なら中断）
+```
+
+### 3. 一般公開（DNS ルート = 公開スイッチ）
+
+DNS ルートを作成した瞬間に外部から到達可能になります。**この操作が公開の意思決定点**です。
+
+```bash
+cloudflared tunnel route dns ocsrc-riskchecker riskchecker.mirai-dx-platform.com
+# または: CREATE_DNS_ROUTE=1 bash scripts/install-tunnel.sh
+# 公開後: https://riskchecker.mirai-dx-platform.com/ （Basic 認証プロンプト）
+```
+
+切り戻し（非公開化）は DNS レコード削除、または `sudo systemctl stop ocsrc-tunnel` でトンネルを止めます。
