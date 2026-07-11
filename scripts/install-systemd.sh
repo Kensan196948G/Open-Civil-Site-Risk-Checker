@@ -21,6 +21,8 @@ if [[ -z "${NODE_BIN}" || ! -x "${NODE_BIN}" ]]; then
   echo "ERROR: node が見つかりません。" >&2
   exit 1
 fi
+# ExecStartPre ガード（Issue #79）と unit の PATH に使う node の所在ディレクトリ。
+NODE_DIR="$(dirname "${NODE_BIN}")"
 
 # --- ポート決定: 明示 PORT > 既存ユニットの PORT > 8700 から空きを探索 ---
 port_in_use() { ss -ltnH "sport = :$1" 2>/dev/null | grep -q . ; }
@@ -94,6 +96,12 @@ Environment=PORT=${SEL_PORT}
 # Cloudflare Access（公開時の認証）設定など（無ければ無視・chmod 600 で管理）。
 # 例: OCSRC_ACCESS_TEAM_DOMAIN / OCSRC_ACCESS_AUD（server.mjs / Issue #70）
 EnvironmentFile=-/etc/ocsrc/web.env
+# 起動前ガード（Issue #79）: node_modules / dist 欠落時のみ自動再生成し、
+# プロビジョニングでビルド成果物が消えても「静かに 500 を返し続ける」事故を防ぐ。
+# systemd 最小環境で npm を解決できるよう PATH に node の所在を含める。
+Environment=PATH=${NODE_DIR}:/usr/local/bin:/usr/bin:/bin
+Environment=OCSRC_NODE_DIR=${NODE_DIR}
+ExecStartPre=/bin/bash ${PROJECT_DIR}/scripts/ensure-web-build.sh
 ExecStart=${NODE_BIN} server.mjs
 Restart=always
 RestartSec=3
