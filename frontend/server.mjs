@@ -455,8 +455,17 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.url === '/healthz') {
-      res.writeHead(200, { 'Content-Type': 'text/plain' });
-      res.end('ok');
+      // 死活監視の盲点対策: プロセス生存だけでなく「SPA を配信できる状態か」を反映する。
+      // dist/index.html が欠落（プロビジョニングでビルド成果物が消える等）していると
+      // 全ページが 500 になるが、固定 200 だと監視が正常と誤認する。欠落時は 503 を返す。
+      try {
+        await fs.stat(INDEX);
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('ok');
+      } catch {
+        res.writeHead(503, { 'Content-Type': 'text/plain' });
+        res.end('unavailable: build missing');
+      }
       return;
     }
     const { file, stat } = await resolveFile(req.url || '/');
