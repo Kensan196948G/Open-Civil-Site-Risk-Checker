@@ -235,7 +235,8 @@ flowchart LR
         A["ocsrc-api（FastAPI）<br/>127.0.0.1:8000（LAN 非公開）<br/>/healthz・/api/v1/ping・/api/v1/nearby"]
     end
 
-    subgraph DB["🗄️ 空間 DB（OCSRC_DATABASE_URL で選択）"]
+    subgraph DB["🗄️ 空間 DB（OCSRC_DATABASE_URL でどちらか一方を選択）"]
+        DS{"DB を 1 つ選択"}
         D1[("ローカル PostGIS<br/>127.0.0.1:5432<br/>開発既定")]
         D2[("Neon PostGIS 3.5<br/>マネージド・TLS 必須<br/>本番既定")]
     end
@@ -252,8 +253,9 @@ flowchart LR
     TN --> W
     B -->|"① HTTP :8700（LAN・認証なし）"| W
     W -->|"/api/* same-origin プロキシ<br/>（GET/HEAD のみ・Authorization 非転送）"| A
-    A --> D1
-    A --> D2
+    A -->|"OCSRC_DATABASE_URL"| DS
+    DS -.->|ローカル| D1
+    DS -.->|本番| D2
     B -.-> E1
     B -.-> E3
     B -.-> E5

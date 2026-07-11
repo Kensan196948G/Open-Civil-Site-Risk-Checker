@@ -167,26 +167,36 @@ docker exec -it ocsrc-db psql -U app -d site_risk_checker \
 
 手順:
 
+接続文字列は秘密情報です。**コマンド引数やシェル履歴に平文で残さない**よう、`read -s` で環境変数に読み込んでから使います。
+
 ```bash
 # 1. Neon コンソールでプロジェクト作成 → 接続文字列を取得（sslmode=require を付与）
-# 2. PostGIS 拡張を有効化（psql または Neon SQL エディタで 1 回）
-psql "postgresql://<user>:<pass>@<host>/<db>?sslmode=require" -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+# 2. DSN を対話入力（-s で非エコー・履歴に残らない。sslmode=require を含めること）
+read -rs -p "Neon DSN: " OCSRC_DATABASE_URL; export OCSRC_DATABASE_URL; echo
 
-# 3. KSJ データを投入（ローカルと同じ ingest CLI。接続先だけ Neon に向ける）
+# 3. PostGIS 拡張を有効化（psql は環境変数 PGURL を使い引数に資格情報を置かない）
+PGURL="$OCSRC_DATABASE_URL" psql "$PGURL" -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+
+# 4. KSJ データを投入（ローカルと同じ ingest CLI。接続先は環境変数から取得）
 cd backend
-OCSRC_DATABASE_URL="postgresql://<user>:<pass>@<host>/<db>?sslmode=require" \
-  .venv/bin/python -m app.ingest data/raw/arakawa-stream.json \
+.venv/bin/python -m app.ingest data/raw/arakawa-stream.json \
   --dataset river \
   --source "国土数値情報河川データセット（NII作成）「国土数値情報（河川データ）」（国土交通省）を加工、CC BY 4.0" \
   --source-updated "国土数値情報 W05（NII Geoshape 経由取得）" --name-key W05_004
 
-# 4. API を Neon 向きに切替
-sudo sed -i 's#^OCSRC_DATABASE_URL=.*#OCSRC_DATABASE_URL=postgresql://<user>:<pass>@<host>/<db>?sslmode=require#' /etc/ocsrc/api.env
+# 5. API を Neon 向きに切替（api.env を直接編集して DSN を貼り付け。sed に資格情報を渡さない）
+sudo install -m 600 -o root -g root /dev/stdin /etc/ocsrc/api.env <<EOF
+OCSRC_APP_ENV=production
+OCSRC_DATABASE_URL=${OCSRC_DATABASE_URL}
+EOF
 sudo systemctl restart ocsrc-api
 curl -s http://127.0.0.1:8000/healthz   # → {"status":"ok","db":"ok",...}
+
+# 6. 履歴から DSN を消す（任意）
+unset OCSRC_DATABASE_URL PGURL
 ```
 
-> 接続文字列は秘密情報です。`/etc/ocsrc/api.env`（600・リポジトリ外）だけに置き、コミット・ログ出力しないこと。
+> 接続文字列は秘密情報です。`/etc/ocsrc/api.env`（600・リポジトリ外）だけに置き、コミット・ログ出力しないこと。`read -s` で入力すれば `~/.bash_history` にも残りません。
 
 ---
 
@@ -200,7 +210,9 @@ flowchart LR
   CF <-->|Tunnel| T["cloudflared<br/>(ocsrc-tunnel)"]
   T --> W["ocsrc-web :8700<br/>Basic 認証 + レート制限"]
   W -->|/api same-origin| A["ocsrc-api 127.0.0.1:8000"]
-  A --> D[("Neon / PostGIS")]
+  A -->|"OCSRC_DATABASE_URL<br/>で択一"| D{"DB を 1 つ選択"}
+  D -.->|ローカル| D1[("PostGIS<br/>127.0.0.1:5432")]
+  D -.->|本番| D2[("Neon<br/>マネージド PostGIS")]
 ```
 
 ### 1. Basic 認証の設定（公開前に必須）

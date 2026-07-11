@@ -22,6 +22,14 @@ TUNNEL_NAME=ocsrc-riskchecker
 HOSTNAME_FQDN=riskchecker.mirai-dx-platform.com
 WEB_ENV=/etc/ocsrc/web.env
 RUN_USER="${SUDO_USER:-$(id -un)}"
+# cloudflared を root で常駐させない。root 直実行（sudo なし）だと RUN_USER=root に
+# 解決され、systemd ユニットの User と DNS route 実行が root になってしまう。
+# 一般ユーザで実行すること（sudo は内部の必要箇所のみ）。
+if [[ "${RUN_USER}" == "root" ]]; then
+  echo "ERROR: root で実行しないでください。cloudflared を所有する一般ユーザで実行してください" >&2
+  echo "       （tunnel の cert.pem / config を持つユーザ。sudo はスクリプト内部でのみ使用）。" >&2
+  exit 1
+fi
 USER_HOME="$(getent passwd "${RUN_USER}" | cut -d: -f6)"
 CONFIG="${USER_HOME}/.cloudflared/ocsrc-config.yml"
 
@@ -38,9 +46,11 @@ fi
 # --- 公開前の認証設定チェック（fail-safe: 未設定なら公開を止める） ---
 # server.mjs は未設定でも Tunnel 経由を 503 にするが、運用ミスを二重で防ぐ。
 # USER / PASS の両方が非空であることを要求する（PASS 欠落だと TUNNEL_AUTH_ENABLED=false）。
-if [[ ! -f "${WEB_ENV}" ]] \
-  || ! grep -q '^OCSRC_TUNNEL_BASIC_USER=..*' "${WEB_ENV}" 2>/dev/null \
-  || ! grep -q '^OCSRC_TUNNEL_BASIC_PASS=..*' "${WEB_ENV}" 2>/dev/null; then
+# web.env は root:root 600 のため一般ユーザでは読めない。存在確認・内容検証とも
+# sudo 経由で行う（このスクリプトは一般ユーザ実行・sudo は内部利用という前提）。
+if ! sudo test -f "${WEB_ENV}" \
+  || ! sudo grep -q '^OCSRC_TUNNEL_BASIC_USER=..*' "${WEB_ENV}" \
+  || ! sudo grep -q '^OCSRC_TUNNEL_BASIC_PASS=..*' "${WEB_ENV}"; then
   echo "ERROR: ${WEB_ENV} に OCSRC_TUNNEL_BASIC_USER / OCSRC_TUNNEL_BASIC_PASS（両方）が未設定です。" >&2
   echo "       インターネット公開前に Basic 認証を設定してください（Issue #66）:" >&2
   echo "         sudo install -m 600 /dev/null ${WEB_ENV}" >&2
@@ -87,14 +97,16 @@ sudo systemctl --no-pager --full status "${SERVICE}.service" | head -8 || true
 
 # --- DNS ルート（一般公開スイッチ） ---
 # 既定では作成しない。CREATE_DNS_ROUTE=1 のときだけ CNAME を張る。
+CERT_PEM="${USER_HOME}/.cloudflared/cert.pem"
 if [[ "${CREATE_DNS_ROUTE:-0}" == "1" ]]; then
   echo "==> DNS ルート作成: ${HOSTNAME_FQDN} -> ${TUNNEL_NAME}"
   # cloudflared は HOME/.cloudflared/cert.pem でアカウント認証する。sudo 実行時は
-  # HOME=/root になり cert.pem を見失うため、tunnel 所有ユーザの HOME を明示する。
-  sudo -u "${RUN_USER}" env HOME="${USER_HOME}" "${CLOUDFLARED_BIN}" tunnel route dns "${TUNNEL_NAME}" "${HOSTNAME_FQDN}"
+  # HOME=/root になり cert.pem を見失うため、tunnel 所有ユーザで実行し cert を明示する。
+  sudo -u "${RUN_USER}" env HOME="${USER_HOME}" \
+    "${CLOUDFLARED_BIN}" --origincert "${CERT_PEM}" tunnel route dns "${TUNNEL_NAME}" "${HOSTNAME_FQDN}"
   echo "    公開しました: https://${HOSTNAME_FQDN}/"
 else
   echo "==> DNS ルート未作成（公開保留）。公開する場合は次を実行:"
-  echo "      cloudflared tunnel route dns ${TUNNEL_NAME} ${HOSTNAME_FQDN}"
+  echo "      cloudflared --origincert ${CERT_PEM} tunnel route dns ${TUNNEL_NAME} ${HOSTNAME_FQDN}"
   echo "    または CREATE_DNS_ROUTE=1 scripts/install-tunnel.sh"
 fi
