@@ -40,6 +40,13 @@ choose_port() {
 }
 SEL_PORT="$(choose_port)"
 
+# 既存ユニットに scripts/install-systemd-api.sh が注入した OCSRC_BACKEND_ORIGIN が
+# あれば引き継ぐ（再インストールで消さない）。
+BACKEND_ORIGIN=""
+if [[ -f "${UNIT_PATH}" ]]; then
+  BACKEND_ORIGIN="$(grep -oP '^Environment=OCSRC_BACKEND_ORIGIN=\K\S+' "${UNIT_PATH}" 2>/dev/null || true)"
+fi
+
 echo "==> ビルド (${FRONTEND_DIR})"
 cd "${FRONTEND_DIR}"
 [[ -d node_modules ]] || npm install --no-audit --no-fund
@@ -70,6 +77,11 @@ NoNewPrivileges=true
 [Install]
 WantedBy=multi-user.target
 EOF
+
+if [[ -n "${BACKEND_ORIGIN}" ]]; then
+  echo "==> OCSRC_BACKEND_ORIGIN=${BACKEND_ORIGIN} を引き継ぎ"
+  sudo sed -i "/^ExecStart=/i Environment=OCSRC_BACKEND_ORIGIN=${BACKEND_ORIGIN}" "${UNIT_PATH}"
+fi
 
 echo "==> 有効化 & 起動"
 sudo systemctl daemon-reload
