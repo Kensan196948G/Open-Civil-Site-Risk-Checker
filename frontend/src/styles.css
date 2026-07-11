@@ -207,6 +207,10 @@ textarea {
 .ocsrc-drawer {
   width: min(440px, 100%);
 }
+/* 取得中カードも同様に狭幅端末で自動縮小する（左右 16px の余白を確保）。 */
+.ocsrc-loading-card {
+  width: min(420px, calc(100% - 32px));
+}
 .ocsrc-analysis-columns {
   height: 524px;
 }
@@ -267,6 +271,7 @@ textarea {
   .ocsrc-nav-code,
   .ocsrc-nav-heading,
   .ocsrc-sidebar-note,
+  .ocsrc-nav-spacer,
   .ocsrc-header-site,
   .ocsrc-header-time,
   .ocsrc-header-subtitle,

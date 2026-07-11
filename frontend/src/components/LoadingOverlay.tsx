@@ -21,7 +21,7 @@ export function LoadingOverlay() {
       aria-labelledby="ocsrc-loading-title"
       style={{ position: 'absolute', inset: 0, background: 'rgba(22,32,46,.55)', zIndex: 950, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)', animation: 'ocsrc-fade .2s ease' }}
     >
-      <div style={{ width: 420, background: 'var(--surface)', borderRadius: 14, padding: '26px 28px', boxShadow: '0 16px 48px rgba(15,23,34,.35)' }}>
+      <div className="ocsrc-loading-card" style={{ background: 'var(--surface)', borderRadius: 14, padding: '26px 28px', boxShadow: '0 16px 48px rgba(15,23,34,.35)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 6 }}>
           <div aria-hidden="true" style={{ width: 18, height: 18, border: '2.5px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'ocsrc-spin .8s linear infinite' }} />
           <h2 id="ocsrc-loading-title" style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>地点確認を実行中</h2>

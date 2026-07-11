@@ -90,7 +90,7 @@ export function Sidebar() {
         ワークフロー
       </div>
       {NAV.map((n) => renderNavButton(n))}
-      <div style={{ flex: 1 }} />
+      <div className="ocsrc-nav-spacer" style={{ flex: 1 }} />
       <div className="ocsrc-nav-heading" style={{ padding: '10px 16px 6px', fontSize: 10, letterSpacing: '1.5px', color: 'var(--chrome-text-4)', fontWeight: 700 }}>
         システム
       </div>
