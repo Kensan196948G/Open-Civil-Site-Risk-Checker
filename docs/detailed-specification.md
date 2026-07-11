@@ -11,7 +11,7 @@
 | 文書種別 | 詳細仕様設計書 |
 | 版数 | v1.0 |
 | 作成日 | 2026-06-18 |
-| 前提文書 | `Open-Civil-Site-Risk-Checker_Requirements.md` |
+| 前提文書 | `docs/requirements.md` |
 
 ---
 

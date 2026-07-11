@@ -7,6 +7,8 @@
 
 このリポジトリは Claude Design のデザインプロトタイプ（`docs/site-risk-checker.design.dc.html`）を、実 API 連携つきの動く Web アプリとして実装した **MVP（Phase 1）** です。
 
+📁 ドキュメントの正本は `docs/` 配下です（要件定義 `docs/requirements.md` / 詳細仕様 `docs/detailed-specification.md` / 概要 `docs/overview.md`）。
+
 ---
 
 ## クイックスタート
