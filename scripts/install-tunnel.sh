@@ -37,8 +37,11 @@ fi
 
 # --- 公開前の認証設定チェック（fail-safe: 未設定なら公開を止める） ---
 # server.mjs は未設定でも Tunnel 経由を 503 にするが、運用ミスを二重で防ぐ。
-if [[ ! -f "${WEB_ENV}" ]] || ! grep -q '^OCSRC_TUNNEL_BASIC_USER=..*' "${WEB_ENV}" 2>/dev/null; then
-  echo "ERROR: ${WEB_ENV} に OCSRC_TUNNEL_BASIC_USER / OCSRC_TUNNEL_BASIC_PASS が未設定です。" >&2
+# USER / PASS の両方が非空であることを要求する（PASS 欠落だと TUNNEL_AUTH_ENABLED=false）。
+if [[ ! -f "${WEB_ENV}" ]] \
+  || ! grep -q '^OCSRC_TUNNEL_BASIC_USER=..*' "${WEB_ENV}" 2>/dev/null \
+  || ! grep -q '^OCSRC_TUNNEL_BASIC_PASS=..*' "${WEB_ENV}" 2>/dev/null; then
+  echo "ERROR: ${WEB_ENV} に OCSRC_TUNNEL_BASIC_USER / OCSRC_TUNNEL_BASIC_PASS（両方）が未設定です。" >&2
   echo "       インターネット公開前に Basic 認証を設定してください（Issue #66）:" >&2
   echo "         sudo install -m 600 /dev/null ${WEB_ENV}" >&2
   echo "         echo 'OCSRC_TUNNEL_BASIC_USER=<user>' | sudo tee -a ${WEB_ENV}" >&2
@@ -46,6 +49,14 @@ if [[ ! -f "${WEB_ENV}" ]] || ! grep -q '^OCSRC_TUNNEL_BASIC_USER=..*' "${WEB_EN
   echo "         sudo systemctl restart ocsrc-web" >&2
   exit 1
 fi
+
+# --- ネットワーク境界の注意喚起（対抗レビュー指摘・多層防御） ---
+# 認証は「Tunnel 経由（cf-connecting-ip 付き）」にのみ効く。origin(:8700) を
+# 信頼できないネットワークから直接到達可能にすると、cf-connecting-ip なしで
+# 認証を回避できてしまう。Tunnel はアウトバウンド専用でインバウンド開放不要のため、
+# 8700 は WAN へ絶対に port-forward しないこと（LAN 内のみ到達可の想定）。
+echo "==> 注意: origin :8700 は信頼 LAN 内のみ到達可能に保つこと（WAN へ port-forward 禁止）。"
+echo "         インターネット到達はこの Cloudflare Tunnel（アウトバウンド専用）だけに限定される。"
 
 echo "==> ユニット生成: ${UNIT_PATH}（user=${RUN_USER}）"
 sudo tee "${UNIT_PATH}" >/dev/null <<EOF
