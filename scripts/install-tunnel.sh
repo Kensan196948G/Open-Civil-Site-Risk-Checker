@@ -95,6 +95,23 @@ if [[ "${PROBE_CODE}" != "403" ]]; then
 fi
 echo "==> 公開前プローブ OK: Tunnel 経由リクエストは 403（Access 認証・トークン必須）を返しています。"
 
+# --- JWKS 到達性チェック（Codex review） ---
+# 403 プローブは JWT なしのため JWKS 検証まで到達しない。TEAM_DOMAIN 誤記や JWKS
+# エンドポイント到達不可でも 403 は返るので、本物の認証済みリクエストが検証できず
+# 全て 403 になる「誰も入れない」公開を招きうる。JWKS が実際に取得でき署名鍵を
+# 含むことを確認して、本物の JWT を検証できる状態であることを担保する。
+ACCESS_TEAM="$(sudo grep -oP '^OCSRC_ACCESS_TEAM_DOMAIN=\K.*' "${WEB_ENV}" 2>/dev/null | tail -1 | tr -d '"' | sed -E 's#^https?://##; s#/+$##')"
+CERTS_OVERRIDE="$(sudo grep -oP '^OCSRC_ACCESS_CERTS_URL=\K.*' "${WEB_ENV}" 2>/dev/null | tail -1 | tr -d '"')"
+CERTS_URL="${CERTS_OVERRIDE:-https://${ACCESS_TEAM}/cdn-cgi/access/certs}"
+JWKS_BODY="$(curl -s -m 10 "${CERTS_URL}" 2>/dev/null || true)"
+if ! printf '%s' "${JWKS_BODY}" | grep -q '"keys"'; then
+  echo "ERROR: Access の JWKS を取得できません（${CERTS_URL}）。" >&2
+  echo "       OCSRC_ACCESS_TEAM_DOMAIN が正しいか、ネットワーク到達性を確認してください。" >&2
+  echo "       （JWKS が取れないと本物の Access トークンも検証できず、全リクエストが 403 になります）" >&2
+  exit 1
+fi
+echo "==> JWKS 到達性 OK: ${CERTS_URL} から署名鍵を取得できました（AUD の正否は初回ログインで確定）。"
+
 # --- ネットワーク境界の注意喚起（対抗レビュー指摘・多層防御） ---
 # 認証は「Tunnel 経由（cf-connecting-ip 付き）」にのみ効く。origin(:8700) を
 # 信頼できないネットワークから直接到達可能にすると、cf-connecting-ip なしで
