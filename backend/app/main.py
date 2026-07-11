@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 
 from .db import check_database, close_pools, get_pool
 from .ksj import query_nearby
@@ -18,13 +19,38 @@ from .settings import Settings, get_settings
 API_VERSION = "0.2.0"
 
 
-def create_app() -> FastAPI:
+def create_app(settings: Settings | None = None) -> FastAPI:
+    """Build the FastAPI app.
+
+    settings lets tests inject a fully controlled configuration; by default
+    the environment-driven singleton is used. CORS is an explicit opt-in via
+    OCSRC_CORS_ORIGINS (dev-only convenience, e.g. vite on localhost:5173);
+    production stays same-origin behind the reverse proxy, so no origins are
+    allowed unless configured. Wildcards are rejected at startup.
+    """
+    cfg = settings if settings is not None else get_settings()
+
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         yield
         await close_pools()
 
     app = FastAPI(title="Open Civil Site Risk Checker API", version=API_VERSION, lifespan=lifespan)
+
+    cors_origins = cfg.cors_origin_list
+    if cors_origins:
+        if any("*" in origin for origin in cors_origins):
+            raise ValueError(
+                "OCSRC_CORS_ORIGINS must be a comma-separated list of explicit "
+                f"origins; wildcard '*' is not allowed: {cfg.cors_origins!r}"
+            )
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            # The public API is read-only today; widen deliberately if that changes.
+            allow_methods=["GET"],
+            allow_credentials=False,
+        )
 
     @app.get("/healthz")
     async def healthz(settings: Annotated[Settings, Depends(get_settings)]) -> dict:
