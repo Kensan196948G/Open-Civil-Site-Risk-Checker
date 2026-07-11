@@ -19,7 +19,7 @@
 | 版数 | 日付 | 変更概要 |
 |---|---|---|
 | v1.0 | 2026-06-18 | 初版（バックエンド中心の構想設計） |
-| v1.1 | 2026-07-11 | 実装実態（フロントエンド中心 SPA + KSJ 空間検索補助バックエンド）へ同期。バックエンド中心構想は将来計画（§3.4 等）として分離。運用境界（無認証・HTTP 平文の設計判断）を明文化（Issue #37） |
+| v1.1 | 2026-07-11 | 実装実態（フロントエンド中心 SPA + KSJ 空間検索補助バックエンド）へ同期。バックエンド中心構想は将来計画（§3.4 等）として分離。運用境界（無認証・HTTP 平文の設計判断）を明文化（Issue #37）。KSJ バックエンド接続の same-origin 既定化（Issue #57）を反映 |
 
 ---
 
@@ -120,7 +120,7 @@ MVP（Phase 1〜3）は**フロントエンド中心（クライアント完結�
 | ocsrc-web → ocsrc-api | HTTP（ループバック） | 同一ホスト内のみ | `/api/*` same-origin プロキシ。転送先は環境変数固定（SSRF 防止） |
 | ocsrc-api → PostGIS | TCP（ループバック） | 同一ホスト内のみ | DB 資格情報は `/etc/ocsrc/api.env`（root:root, 600）で管理 |
 
-KSJ 連携（経路 B）は**オプトイン**である。SCR-008 のランタイム設定（`localStorage`）またはビルド時 `VITE_OCSRC_BACKEND_URL` でバックエンド URL を設定した場合のみ有効になり、未設定時は「未連携」として動作する（動作自体は経路 A のみで完結する）。
+KSJ 連携（経路 B）は**既定で有効**である（Issue #57）。バックエンド base の解決順位は「① SCR-008 のカスタム URL（`localStorage`） > ② ビルド時 `VITE_OCSRC_BACKEND_URL` > ③ `''`（same-origin 既定）」で、③のときは相対パス（`/api/v1/...`）として配信オリジンの `/api` プロキシ経由で到達する（LAN 上の別端末のブラウザでも追加設定不要）。バックエンド停止・DB 未整備時は「取得失敗（failed）」として誠実に表示し、「該当なし」と区別する（NFR-504）。なお経路 A（外部公開 API）のみでもアプリの他機能は完結する。
 
 ### 3.4 将来構想: バックエンド中心構成（Phase 4+ 計画）
 
@@ -248,7 +248,7 @@ Open-Civil-Site-Risk-Checker/
 | レポート出力（SCR-005） | `src/report/markdown.ts` `csv.ts` | Markdown / CSV（公開区分・UTF-8 BOM） |
 | データソース管理（SCR-006） | `src/data/` `src/api/ping.ts` | 台帳表示・接続テスト（実疎通） |
 | 取得ログ（SCR-007） | `src/store.tsx` | セッション内の実行履歴（成功/失敗/タイムアウト/スキップ） |
-| システム設定（SCR-008） | `src/settings/appSettings.ts` | AI キー・バックエンド URL・既定値・データ全削除（すべて localStorage） |
+| システム設定（SCR-008） | `src/settings/appSettings.ts` | AI キー・バックエンド接続（既定「このサイト経由（/api プロキシ）」・カスタム URL 保存/解除・接続テスト）・既定値・データ全削除（すべて localStorage） |
 | ダッシュボード（SCR-000） | `src/data/caseStore.ts` | 調査案件一覧・KPI・実データ/ダミー区別・JSON 取込/出力 |
 
 ### 5.2 バックエンドモジュール（現行: KSJ 空間検索補助）
@@ -303,7 +303,7 @@ Open-Civil-Site-Risk-Checker/
    - Open-Meteo（7日予報）                 … ブラウザ直 fetch
    - 標高（地理院 → Open-Meteo フォールバック） … ブラウザ直 fetch
    - 気象庁 警報・注意報（都道府県単位）    … ブラウザ直 fetch
-   - KSJ 近傍検索（設定時のみ）            … バックエンド /api/v1/nearby
+   - KSJ 近傍検索（既定: same-origin /api プロキシ経由） … バックエンド /api/v1/nearby
    - ハザードマップ（タイル重ね合わせ・視覚確認） … 地図レイヤ
    - PLATEAU / xROAD                       … 取得失敗・未連携として誠実に表示
 
@@ -360,7 +360,7 @@ interface AdapterResult {
 |---|---|
 | success | 取得成功（0 件の「該当なし」を含む） |
 | failed | API 失敗・タイムアウト・DB 未整備（503） |
-| skipped | 未連携（規約同意前・URL 未設定等）によるスキップ |
+| skipped | 未連携（xROAD の規約同意前等）・対象カテゴリ未選択によるスキップ |
 
 ---
 
@@ -599,7 +599,8 @@ api_request_logs
 ```
 
 - DB 未設定・未到達時は **503** を返す（空配列を返さない）。フロントは「該当なし」と「取得失敗」を区別表示できる（FR-304 / NFR-504）
-- SPA からの呼び出しは、SCR-008 またはビルド時 `VITE_OCSRC_BACKEND_URL` に設定した URL に対して行う。本番構成では SPA 配信オリジン（`ocsrc-web`）の `/api/*` same-origin プロキシを経由して 127.0.0.1 バインドの API へ到達する
+- SPA からの呼び出しは**既定で相対パス（same-origin）**であり、SPA 配信オリジン（`ocsrc-web`）の `/api/*` プロキシを経由して 127.0.0.1 バインドの API へ到達する（Issue #57）。SCR-008 のカスタム URL またはビルド時 `VITE_OCSRC_BACKEND_URL` を設定した場合のみ、その URL へ直結する
+- SCR-008 の接続テストは、既定（same-origin）ではプロキシ特例の `/api/healthz`、カスタム URL 設定時は `{URL}/healthz` を呼び、DB 到達性（`db: ok`）まで確認する
 
 #### CORS（`OCSRC_CORS_ORIGINS`）
 
@@ -1198,7 +1199,7 @@ OCSRC_PROXY_TIMEOUT_MS=10000                # 中継アイドルタイムアウ�
 ### 21.3 フロントエンド（ビルド時・Vite）
 
 ```env
-VITE_OCSRC_BACKEND_URL=   # KSJ バックエンド URL（未設定なら未連携。SCR-008 のランタイム設定が優先）
+VITE_OCSRC_BACKEND_URL=   # KSJ バックエンド直結 URL（任意）。優先順位: SCR-008 カスタム URL > 本値 > 未設定 = same-origin 既定（/api プロキシ経由・Issue #57）
 VITE_SHOW_DUMMY=          # ダミー案件表示（未指定: dev=表示 / 本番=非表示）
 ```
 
