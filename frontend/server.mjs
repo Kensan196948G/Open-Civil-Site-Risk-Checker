@@ -96,12 +96,21 @@ const DROP_HEADERS = new Set([
   'upgrade',
   'host',
 ]);
+// リクエスト方向の追加除去: GET/HEAD のみ中継し body を転送しないため、エンティティ
+// ヘッダを落とす。クライアントが送った過大な Content-Length を残すとバックエンドが
+// 到着しない body を待ってソケットを PROXY_TIMEOUT_MS まで保持し得る（軽微な slowloris 増幅）。
+const DROP_REQUEST_HEADERS = new Set([...DROP_HEADERS, 'content-length', 'content-type']);
+// レスポンス方向の追加除去: web 層が全応答へ付与するセキュリティヘッダは上流の値で
+// 上書きさせない（writeHead はマージ時に自身の引数を優先するため、上流が同名ヘッダを
+// 返すと setHeader 済みの値が負ける）。将来 backend が独自ヘッダを返しても web 層が優先。
+const SECURITY_HEADER_NAMES = new Set(Object.keys(SECURITY_HEADERS).map((h) => h.toLowerCase()));
+const DROP_RESPONSE_HEADERS = new Set([...DROP_HEADERS, ...SECURITY_HEADER_NAMES]);
 
-/** hop-by-hop ヘッダを除いたコピーを返す（リクエスト・レスポンス両方向で使用）。 */
-function filteredHeaders(raw) {
+/** drop 集合に含まれないヘッダだけをコピーして返す（リクエスト・レスポンス両方向で使用）。 */
+function pickHeaders(raw, drop) {
   const out = {};
   for (const [k, v] of Object.entries(raw)) {
-    if (v !== undefined && !DROP_HEADERS.has(k.toLowerCase())) out[k] = v;
+    if (v !== undefined && !drop.has(k.toLowerCase())) out[k] = v;
   }
   return out;
 }
@@ -147,9 +156,9 @@ function proxyApi(req, res) {
   const mod = target.protocol === 'https:' ? https : http;
   const upstream = mod.request(
     target,
-    { method: req.method, headers: filteredHeaders(req.headers), timeout: PROXY_TIMEOUT_MS },
+    { method: req.method, headers: pickHeaders(req.headers, DROP_REQUEST_HEADERS), timeout: PROXY_TIMEOUT_MS },
     (up) => {
-      res.writeHead(up.statusCode || 502, filteredHeaders(up.headers));
+      res.writeHead(up.statusCode || 502, pickHeaders(up.headers, DROP_RESPONSE_HEADERS));
       up.pipe(res);
     },
   );
