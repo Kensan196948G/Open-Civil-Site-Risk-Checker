@@ -35,6 +35,7 @@ export function Sidebar() {
       <button
         key={n.key}
         onClick={() => go(n.key)}
+        aria-current={active ? 'page' : undefined}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -78,6 +79,7 @@ export function Sidebar() {
 
   return (
     <nav
+      aria-label="メインナビゲーション"
       style={{
         width: 222,
         flex: 'none',

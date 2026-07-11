@@ -14,11 +14,17 @@ export function LoadingOverlay() {
   const { fetchSteps } = state;
 
   return (
-    <div style={{ position: 'absolute', inset: 0, background: 'rgba(22,32,46,.55)', zIndex: 950, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)', animation: 'ocsrc-fade .2s ease' }}>
+    <div
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      aria-labelledby="ocsrc-loading-title"
+      style={{ position: 'absolute', inset: 0, background: 'rgba(22,32,46,.55)', zIndex: 950, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)', animation: 'ocsrc-fade .2s ease' }}
+    >
       <div style={{ width: 420, background: 'var(--surface)', borderRadius: 14, padding: '26px 28px', boxShadow: '0 16px 48px rgba(15,23,34,.35)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 6 }}>
-          <div style={{ width: 18, height: 18, border: '2.5px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'ocsrc-spin .8s linear infinite' }} />
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>地点確認を実行中</h2>
+          <div aria-hidden="true" style={{ width: 18, height: 18, border: '2.5px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'ocsrc-spin .8s linear infinite' }} />
+          <h2 id="ocsrc-loading-title" style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>地点確認を実行中</h2>
         </div>
         <p style={{ margin: '0 0 16px', fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.6 }}>外部APIの取得状況により、部分結果から表示します。</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
@@ -26,7 +32,7 @@ export function LoadingOverlay() {
             const m = META[st.status];
             return (
               <div key={st.key} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
-                <span style={{ width: 18, height: 18, borderRadius: '50%', background: m.bg, color: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flex: 'none' }}>
+                <span aria-hidden="true" style={{ width: 18, height: 18, borderRadius: '50%', background: m.bg, color: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flex: 'none' }}>
                   {m.icon}
                 </span>
                 <span style={{ flex: 1, color: 'var(--text-2)' }}>{st.name}</span>
