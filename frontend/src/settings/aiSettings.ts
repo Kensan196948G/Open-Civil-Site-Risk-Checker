@@ -39,6 +39,19 @@ export function parseAiSettings(json: string | null): AiSettings | null {
   }
 }
 
+// コピペ時に混入しやすい不可視文字のコード一覧（ゼロ幅スペース×3種 U+200B-200D・BOM U+FEFF・全角スペース U+3000）。
+// ソース中に生の不可視文字を書くと編集時に消失/破損しうるため、コードポイントから都度組み立てる。
+const INVISIBLE_CHAR_CODES = [0x200b, 0x200c, 0x200d, 0xfeff, 0x3000];
+const INVISIBLE_CHARS_RE = new RegExp(`[${INVISIBLE_CHAR_CODES.map((c) => String.fromCharCode(c)).join('')}]`, 'g');
+
+/** コピペ時に混入しやすい不可視文字（ゼロ幅スペース・BOM）と全角スペースを除去する。 */
+export function sanitizeApiKeyInput(raw: string): string {
+  return raw.replace(INVISIBLE_CHARS_RE, '');
+}
+
+/** Anthropic キーの一般的なプレフィックス。一致しない場合は誤ったキー種別の可能性を示すヒントに使う。 */
+export const API_KEY_PREFIX = 'sk-ant-';
+
 /** 表示用マスク（先頭4+末尾4のみ、8文字以下は全マスク）。生キーを画面に出さない。 */
 export function maskApiKey(key: string): string {
   if (!key) return '';
