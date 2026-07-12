@@ -90,6 +90,9 @@ export async function runAnalysis(form: AnalysisInputForm, opts: RunOpts = {}): 
     lat = geo.lat;
     lon = geo.lon;
     address = geo.displayName || form.address;
+    if (geo.approximated) {
+      address += '（入力住所の号・番地までは特定できず、より広い範囲の代表地点です）';
+    }
     onStep('nominatim', 'success');
   } else {
     address = `緯度経度入力 ${lat.toFixed(5)}, ${lon.toFixed(5)}`;

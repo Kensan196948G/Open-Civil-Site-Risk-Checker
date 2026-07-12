@@ -3,12 +3,14 @@ import { useApp } from '../store';
 import { buildTimeBackendUrl } from '../api/ksj';
 import { CATEGORY_OPTIONS, RADIUS_OPTIONS, radiusLabel } from '../data/constants';
 import {
+  API_KEY_PREFIX,
   clearAiSettings,
   DEFAULT_MODEL,
   PROVIDER_NAME,
   canSave,
   loadAiSettings,
   maskApiKey,
+  sanitizeApiKeyInput,
   saveAiSettings,
   testAiConnection,
   type AiSettings,
@@ -271,7 +273,7 @@ export function SettingsScreen() {
               type={showKey ? 'text' : 'password'}
               value={apiKey}
               onChange={(e) => {
-                setApiKey(e.target.value);
+                setApiKey(sanitizeApiKeyInput(e.target.value));
                 setAiVerdict(null);
               }}
               placeholder="sk-ant-…"
@@ -282,6 +284,11 @@ export function SettingsScreen() {
               {showKey ? '隠す' : '表示'}
             </button>
           </div>
+          {apiKey.length > 0 && !apiKey.startsWith(API_KEY_PREFIX) && (
+            <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 4 }}>
+              Anthropic の API キーは通常 "{API_KEY_PREFIX}" から始まります。認証失敗（HTTP 401）が出る場合は、キーの種類や貼り付け内容をご確認ください。
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

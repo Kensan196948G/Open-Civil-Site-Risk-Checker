@@ -306,7 +306,7 @@ export function AnalysisScreen() {
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border-3)', borderRadius: 10, padding: '18px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>AI調査メモ</h2>
-              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 9px', borderRadius: 11, background: 'var(--ok-bg)', color: 'var(--ok-text)' }}>✓ 断定表現チェック済</span>
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 9px', borderRadius: 11, background: 'var(--surface-3)', color: 'var(--text-3)' }}>テンプレート表示（AI未生成）</span>
               <div style={{ flex: 1 }} />
               <button onClick={() => go('aimemo')} style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer' }}>
                 全文を開く →
