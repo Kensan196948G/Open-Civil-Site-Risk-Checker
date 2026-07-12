@@ -1,12 +1,18 @@
 import { fetchJson, nowHMS } from './http';
+import { ksjBaseUrl } from './ksj';
 import type { LogEntry } from '../types';
 
 // OpenStreetMap / Nominatim ジオコーディングアダプタ。
-// 利用ポリシー（https://operations.osmfoundation.org/policies/nominatim/）に従い、
-// 1リクエスト/秒の節度・キャッシュ・適切な Referer を前提とする。ブラウザからの
-// 直接呼び出しは User-Agent をブラウザが付与し、Referer も自動付与される。
+// 自社バックエンド（/api/v1/geocode）経由でサーバーサイドから Nominatim を呼ぶ
+// （Issue #84）。ブラウザから直接呼び出すと、Nominatim 側 CDN（Varnish）の
+// Vary ヘッダーが Origin を含まないため、Origin なしリクエスト（curl 等）で
+// キャッシュされた「CORS ヘッダーなし」のレスポンスが後続のブラウザ fetch にも
+// 返ってしまい、CORS エラーで fetch 自体が失敗する事故が実際に発生した。
+// バックエンド経由ならブラウザの CORS 制約自体が関係なくなり、利用ポリシー
+// （1 req/秒・https://operations.osmfoundation.org/policies/nominatim/）も
+// プロセス全体で一元的に守れる（バックエンド側が実施）。
+// このファイル内の待機は「1回の地点確認で複数候補を順に試す」際の間隔維持用。
 
-const ENDPOINT = 'https://nominatim.openstreetmap.org/search';
 const RATE_LIMIT_INTERVAL_MS = 1100;
 
 export interface GeocodeResult {
@@ -48,20 +54,14 @@ export function shrinkAddressCandidates(address: string): string[] {
 }
 
 async function searchOnce(query: string): Promise<{ item: NominatimItem | null; log: LogEntry; networkError: boolean }> {
-  const params = new URLSearchParams({
-    q: query,
-    format: 'jsonv2',
-    limit: '1',
-    'accept-language': 'ja',
-    countrycodes: 'jp',
-  });
-  const url = `${ENDPOINT}?${params.toString()}`;
+  const params = new URLSearchParams({ q: query });
+  const url = `${ksjBaseUrl()}/api/v1/geocode?${params.toString()}`;
   const out = await fetchJson<NominatimItem[]>(url, { timeout: 8000 });
   const found = out.ok && !!out.data && out.data.length > 0;
   const log: LogEntry = {
     time: nowHMS(),
     source: 'nominatim',
-    endpoint: `GET /search?q=${query.slice(0, 16)}`,
+    endpoint: 'GET /api/v1/geocode',
     code: out.code,
     status: found ? 'success' : 'failed',
     ms: String(out.ms),

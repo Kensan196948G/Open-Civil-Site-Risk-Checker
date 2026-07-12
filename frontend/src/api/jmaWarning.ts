@@ -1,15 +1,18 @@
 import { fetchJson, nowHMS, nowStamp } from './http';
+import { ksjBaseUrl } from './ksj';
 import type { AdapterResult, AnalysisInput } from './types';
 import type { Evidence, Finding } from '../types';
 
 // 気象庁 警報・注意報 連携アダプタ（Phase 3, Issue #22）。
 // 認証不要・CORS開放（Access-Control-Allow-Origin: * を実機で確認済み）のため、
-// バックエンドを介さずブラウザから直接取得する。
+// 気象庁 API 自体はバックエンドを介さずブラウザから直接取得する。
 //
 // 地点の都道府県は Nominatim の逆ジオコーディングで特定し、都道府県名を気象庁の
 // 発表官署コードへ変換して警報・注意報 JSON を取得する。表示文はコードから自前で
 // 組み立てず、気象庁自身が作成した headlineText をそのまま採用する（誤訳・断定表現の
 // 混入を避けるため）。コードは「発表の有無」の判定と補足情報にのみ用いる。
+// Nominatim 逆ジオコーディングは自社バックエンド（/api/v1/reverse-geocode）経由
+// （Issue #84・ブラウザ直接呼び出しの CORS 事故については nominatim.ts 参照）。
 
 /** 都道府県名 → 気象庁 発表官署コード（area.json で実在確認済み）。
  *  北海道・鹿児島県・沖縄県は地域ごとに官署が分かれ単一コードを持たないため、
@@ -222,16 +225,9 @@ interface ResolvePrefectureResult {
 
 /** 地点の都道府県を Nominatim reverse geocode で特定する（要 addressdetails=1、zoom=5で都道府県単位）。 */
 async function resolvePrefecture(lat: number, lon: number): Promise<ResolvePrefectureResult> {
-  const params = new URLSearchParams({
-    lat: String(lat),
-    lon: String(lon),
-    format: 'jsonv2',
-    addressdetails: '1',
-    'accept-language': 'ja',
-    zoom: '5',
-  });
+  const params = new URLSearchParams({ lat: String(lat), lon: String(lon) });
   const out = await fetchJson<NominatimReverseResponse>(
-    `https://nominatim.openstreetmap.org/reverse?${params.toString()}`,
+    `${ksjBaseUrl()}/api/v1/reverse-geocode?${params.toString()}`,
     { timeout: 8000 },
   );
   const prefecture = out.data?.address?.province ?? out.data?.address?.state;
@@ -249,7 +245,7 @@ export async function fetchJmaWarning(input: AnalysisInput): Promise<AdapterResu
       log: {
         time: nowHMS(),
         source: 'jma_warning',
-        endpoint: 'GET /reverse（都道府県特定）',
+        endpoint: 'GET /api/v1/reverse-geocode（都道府県特定）',
         code: '—',
         status: 'failed',
         ms: '—',

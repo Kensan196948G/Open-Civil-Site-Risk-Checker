@@ -26,6 +26,19 @@ class Settings(BaseSettings):
     # production stays same-origin behind the reverse proxy (Issue #35).
     cors_origins: str = ""
 
+    # Nominatim geocoding proxy (Issue #84): the backend calls Nominatim
+    # server-to-server so the browser never needs CORS from
+    # nominatim.openstreetmap.org, and the 1 req/sec usage policy
+    # (https://operations.osmfoundation.org/policies/nominatim/) is enforced
+    # once per process instead of per browser tab.
+    nominatim_base_url: str = "https://nominatim.openstreetmap.org"
+    nominatim_user_agent: str = (
+        "OpenCivilSiteRiskChecker/0.2 "
+        "(+https://github.com/Kensan196948G/Open-Civil-Site-Risk-Checker)"
+    )
+    nominatim_min_interval_seconds: float = 1.0
+    nominatim_timeout_seconds: float = 8.0
+
     @property
     def cors_origin_list(self) -> list[str]:
         """cors_origins parsed into origins.
