@@ -38,7 +38,10 @@ export async function pingSource(key: SourceKey): Promise<PingResult> {
 
   switch (key) {
     case 'nominatim': {
-      const r = await fetchJson('https://nominatim.openstreetmap.org/search?q=tokyo&format=jsonv2&limit=1', { timeout: 8000 });
+      // 実機能と同じ経路（自社バックエンド /api/v1/geocode 経由）で疎通確認する
+      // （Issue #84）。ブラウザから Nominatim を直接叩かないため、この診断が
+      // 成功しても実際の地点確認が失敗する、という経路の不一致が起きない。
+      const r = await fetchJson(`${ksjBaseUrl()}/api/v1/geocode?q=tokyo`, { timeout: 8000 });
       return r.ok ? ok() : fail();
     }
     case 'open_meteo': {

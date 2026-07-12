@@ -1,9 +1,11 @@
 """FastAPI application factory for the OCSRC backend (Phase 2).
 
 Endpoints:
-  GET /healthz        — liveness + database reachability
-  GET /api/v1/ping    — API smoke endpoint
-  GET /api/v1/nearby  — spatial search over the local KSJ store (PostGIS)
+  GET /healthz               — liveness + database reachability
+  GET /api/v1/ping           — API smoke endpoint
+  GET /api/v1/nearby         — spatial search over the local KSJ store (PostGIS)
+  GET /api/v1/geocode        — Nominatim /search proxy (Issue #84)
+  GET /api/v1/reverse-geocode — Nominatim /reverse proxy (Issue #84)
 """
 
 from contextlib import asynccontextmanager
@@ -13,6 +15,9 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import check_database, close_pools, get_pool
+from .geocode import GeocodeUnavailableError
+from .geocode import reverse as geocode_reverse
+from .geocode import search as geocode_search
 from .ksj import query_nearby
 from .settings import Settings, get_settings
 
@@ -95,6 +100,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "items": items,
             "meta": {"lat": lat, "lon": lon, "radius_m": radius_m},
         }
+
+    @app.get("/api/v1/geocode")
+    async def geocode(
+        settings: Annotated[Settings, Depends(get_settings)],
+        q: Annotated[str, Query(min_length=1, max_length=200)],
+    ) -> list[dict]:
+        """Nominatim /search proxy, same-origin from the browser's view.
+
+        Keeps the browser from calling nominatim.openstreetmap.org directly
+        (see app/geocode.py for why that is unreliable). Returns the raw
+        item list untouched — an empty list is a legitimate "no candidates"
+        result, distinct from the 503 raised on upstream failure.
+        """
+        try:
+            return await geocode_search(q, settings)
+        except GeocodeUnavailableError as exc:
+            raise HTTPException(status_code=503, detail="geocoding upstream unavailable") from exc
+
+    @app.get("/api/v1/reverse-geocode")
+    async def reverse_geocode(
+        settings: Annotated[Settings, Depends(get_settings)],
+        lat: Annotated[float, Query(ge=-90.0, le=90.0)],
+        lon: Annotated[float, Query(ge=-180.0, le=180.0)],
+    ) -> dict:
+        """Nominatim /reverse proxy, same-origin from the browser's view."""
+        try:
+            return await geocode_reverse(lat, lon, settings)
+        except GeocodeUnavailableError as exc:
+            raise HTTPException(status_code=503, detail="geocoding upstream unavailable") from exc
 
     return app
 
