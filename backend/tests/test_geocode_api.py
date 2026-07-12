@@ -152,11 +152,11 @@ def test_throttle_enforces_minimum_interval(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_throttle_does_not_wait_after_interval_elapses(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(geocode_module, "_last_request_monotonic", time.monotonic() - 10)
+    sleep_calls: list[float] = []
 
-    async def run() -> float:
-        start = time.monotonic()
-        await geocode_module._throttle(0.1)
-        return time.monotonic() - start
+    async def fake_sleep(seconds: float) -> None:
+        sleep_calls.append(seconds)
 
-    elapsed = asyncio.run(run())
-    assert elapsed < 0.05
+    monkeypatch.setattr(geocode_module.asyncio, "sleep", fake_sleep)
+    asyncio.run(geocode_module._throttle(0.1))
+    assert sleep_calls == []

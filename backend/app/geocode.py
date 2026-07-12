@@ -51,7 +51,10 @@ async def _get(path: str, params: dict[str, str], settings: Settings):
         raise GeocodeUnavailableError(str(exc)) from exc
     if res.status_code != 200:
         raise GeocodeUnavailableError(f"HTTP {res.status_code}")
-    return res.json()
+    try:
+        return res.json()
+    except ValueError as exc:
+        raise GeocodeUnavailableError(f"invalid JSON response: {exc}") from exc
 
 
 async def search(query: str, settings: Settings) -> list[dict]:

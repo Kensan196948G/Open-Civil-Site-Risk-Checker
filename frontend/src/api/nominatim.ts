@@ -61,7 +61,7 @@ async function searchOnce(query: string): Promise<{ item: NominatimItem | null; 
   const log: LogEntry = {
     time: nowHMS(),
     source: 'nominatim',
-    endpoint: `GET /api/v1/geocode?q=${query.slice(0, 16)}`,
+    endpoint: 'GET /api/v1/geocode',
     code: out.code,
     status: found ? 'success' : 'failed',
     ms: String(out.ms),
