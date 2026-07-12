@@ -26,12 +26,6 @@ BACKEND_DIR="${PROJECT_DIR}/backend"
 RUN_USER="${SUDO_USER:-$(id -un)}"
 RUN_GROUP="$(id -gn "${RUN_USER}")"
 
-PYTHON_BIN="$(command -v python3 || true)"
-if [[ -z "${PYTHON_BIN}" ]]; then
-  echo "ERROR: python3 が見つかりません。" >&2
-  exit 1
-fi
-
 # --- ポート決定: 明示 PORT > 既存ユニットの --port > 8000 から空きを探索 ---
 port_in_use() { ss -ltnH "sport = :$1" 2>/dev/null | grep -q . ; }
 # PORT はユニット生成時に sed/ExecStart へ直接埋め込まれるため、非数値や範囲外を弾く。
@@ -61,9 +55,7 @@ choose_port() {
 SEL_PORT="$(choose_port)"
 
 echo "==> venv 構築 (${BACKEND_DIR})"
-cd "${BACKEND_DIR}"
-[[ -d .venv ]] || "${PYTHON_BIN}" -m venv .venv
-.venv/bin/pip install --quiet --disable-pip-version-check -r requirements.txt
+bash "${PROJECT_DIR}/scripts/ensure-api-venv.sh"
 UVICORN_BIN="${BACKEND_DIR}/.venv/bin/uvicorn"
 if [[ ! -x "${UVICORN_BIN}" ]]; then
   echo "ERROR: ${UVICORN_BIN} がありません（venv 構築に失敗）。" >&2
@@ -116,6 +108,9 @@ User=${RUN_USER}
 Group=${RUN_GROUP}
 WorkingDirectory=${BACKEND_DIR}
 EnvironmentFile=${ENV_FILE}
+# 起動前ガード（Issue #86）: .venv 欠落時のみ自動再構築し、
+# プロビジョニングで venv が消えても execve 失敗のクラッシュループに陥る事故を防ぐ。
+ExecStartPre=/bin/bash ${PROJECT_DIR}/scripts/ensure-api-venv.sh
 ExecStart=${UVICORN_BIN} app.main:app --host 127.0.0.1 --port ${SEL_PORT}
 Restart=always
 RestartSec=3
