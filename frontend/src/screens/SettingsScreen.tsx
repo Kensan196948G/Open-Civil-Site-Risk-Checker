@@ -43,7 +43,7 @@ const inputStyle: React.CSSProperties = {
   borderRadius: 6,
   fontSize: 12.5,
   color: 'var(--text)',
-  fontFamily: "'JetBrains Mono', monospace",
+  fontFamily: "'IBM Plex Mono', monospace",
   boxSizing: 'border-box',
 };
 
@@ -73,10 +73,10 @@ function btnStyle(kind: 'primary' | 'ghost' | 'danger', disabled = false): React
     fontWeight: 700,
     cursor: disabled ? 'default' : 'pointer',
     opacity: disabled ? 0.5 : 1,
-    fontFamily: "'Noto Sans JP', sans-serif",
+    fontFamily: "'IBM Plex Sans JP', sans-serif",
   };
   if (kind === 'primary') return { ...base, background: 'var(--accent)', color: '#fff', border: '1px solid var(--accent)' };
-  if (kind === 'danger') return { ...base, background: 'transparent', color: '#c0392b', border: '1px solid #c0392b55' };
+  if (kind === 'danger') return { ...base, background: 'transparent', color: 'var(--err-text)', border: '1px solid var(--err-border)' };
   return { ...base, background: 'var(--surface)', color: 'var(--text-2)', border: '1px solid var(--border)' };
 }
 
@@ -90,9 +90,9 @@ function VerdictBanner({ verdict }: { verdict: TestVerdict | BackendTestVerdict 
         borderRadius: 6,
         fontSize: 12,
         fontWeight: 600,
-        background: verdict.ok ? '#3fb27f18' : '#c0392b14',
-        color: verdict.ok ? '#2e8f66' : '#c0392b',
-        border: `1px solid ${verdict.ok ? '#3fb27f44' : '#c0392b44'}`,
+        background: verdict.ok ? 'var(--ok-bg)' : 'var(--err-bg)',
+        color: verdict.ok ? 'var(--ok-text)' : 'var(--err-text)',
+        border: `1px solid ${verdict.ok ? 'var(--ok-border)' : 'var(--err-border)'}`,
       }}
     >
       {verdict.ok ? '✓ ' : '✗ '}
@@ -239,7 +239,7 @@ export function SettingsScreen() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'auto', padding: '26px 28px 50px' }}>
-      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-008</div>
+      <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-008</div>
       <h1 style={{ margin: '3px 0 4px', fontSize: 21, fontWeight: 700 }}>システム設定</h1>
       <p style={{ margin: '0 0 18px', fontSize: 12.5, color: 'var(--text-2)' }}>
         AI 接続・バックエンド連携・地点確認の既定値・ローカルデータを管理します。
@@ -255,7 +255,7 @@ export function SettingsScreen() {
         <div className="ocsrc-grid-2col" style={{ display: 'grid', gap: 14, marginBottom: 14 }}>
           <div>
             <label style={labelStyle}>AI プロバイダ</label>
-            <div style={{ ...inputStyle, fontFamily: "'Noto Sans JP', sans-serif", background: 'var(--surface-3)', color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ ...inputStyle, fontFamily: "'IBM Plex Sans JP', sans-serif", background: 'var(--surface-3)', color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 8 }}>
               {PROVIDER_NAME}
               <span style={{ fontSize: 10, color: 'var(--text-4)' }}>（本アプリは Anthropic のみ対応）</span>
             </div>
@@ -310,7 +310,7 @@ export function SettingsScreen() {
           {savedAi.savedAt ? (
             <>
               <span style={{ color: 'var(--text-2)' }}>
-                保存済み: {PROVIDER_NAME} / <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{maskApiKey(savedAi.apiKey)}</span> / {savedAi.model}
+                保存済み: {PROVIDER_NAME} / <span style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{maskApiKey(savedAi.apiKey)}</span> / {savedAi.model}
                 <span style={{ color: 'var(--text-4)' }}>（{savedAi.savedAt}）</span>
               </span>
               <button onClick={onDeleteSavedAi} style={btnStyle('danger')}>
@@ -347,12 +347,12 @@ export function SettingsScreen() {
             style={{
               ...inputStyle,
               flex: 1,
-              borderColor: backendUrlKind === 'invalid' ? '#c0392b88' : 'var(--border)',
+              borderColor: backendUrlKind === 'invalid' ? 'var(--err-text)' : 'var(--border)',
             }}
           />
         </div>
         {backendUrlKind === 'invalid' && (
-          <div style={{ marginBottom: 10, fontSize: 11, color: '#c0392b' }}>http:// または https:// で始まる URL を入力してください。</div>
+          <div style={{ marginBottom: 10, fontSize: 11, color: 'var(--err-text)' }}>http:// または https:// で始まる URL を入力してください。</div>
         )}
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -396,7 +396,7 @@ export function SettingsScreen() {
                   borderRadius: 6,
                   fontSize: 12,
                   fontWeight: 600,
-                  fontFamily: "'JetBrains Mono', monospace",
+                  fontFamily: "'IBM Plex Mono', monospace",
                   cursor: 'pointer',
                   border: `1.5px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
                   background: on ? 'var(--accent-soft)' : 'var(--surface)',
@@ -463,7 +463,7 @@ export function SettingsScreen() {
             ローカルデータを全て削除…
           </button>
         ) : (
-          <div style={{ padding: '12px 14px', borderRadius: 8, background: '#c0392b0f', border: '1px solid #c0392b44' }}>
+          <div style={{ padding: '12px 14px', borderRadius: 8, background: 'var(--err-bg)', border: '1px solid var(--err-border)' }}>
             <p style={{ margin: '0 0 10px', fontSize: 12, lineHeight: 1.7, color: 'var(--text)' }}>
               <strong>本当にすべてのローカルデータを削除しますか？</strong> 調査案件（実データ）・AI設定・バックエンド設定・既定値がすべて削除され、元に戻せません。ダッシュボードの「↓ エクスポート」で事前にバックアップを取ることを推奨します。
             </p>
@@ -471,7 +471,7 @@ export function SettingsScreen() {
               <button onClick={() => setConfirmingReset(false)} style={btnStyle('ghost')}>
                 キャンセル
               </button>
-              <button onClick={onExecuteReset} style={{ ...btnStyle('danger'), background: '#c0392b', color: '#fff' }}>
+              <button onClick={onExecuteReset} style={{ ...btnStyle('danger'), background: 'var(--err-text)', color: '#fff' }}>
                 完全に削除する
               </button>
             </div>

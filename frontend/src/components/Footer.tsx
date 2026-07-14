@@ -13,7 +13,7 @@ export function Footer() {
         borderTop: '1px solid var(--chrome-border)',
       }}
     >
-      <span style={{ fontSize: 10, color: 'var(--chrome-text-4)', fontFamily: "'JetBrains Mono', monospace" }}>OCSRC v1.0</span>
+      <span style={{ fontSize: 10, color: 'var(--chrome-text-4)', fontFamily: "'IBM Plex Mono', monospace" }}>OCSRC v1.0</span>
       <span style={{ fontSize: 10, color: 'var(--chrome-text-4)' }}>公開データに基づく初期調査支援 — 施工可否・安全性を断定しません</span>
       <div style={{ flex: 1 }} />
       <span className="ocsrc-footer-attr" style={{ fontSize: 10, color: 'var(--chrome-text-4)' }}>

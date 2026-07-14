@@ -76,7 +76,7 @@ export function DashboardScreen() {
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '28px 30px 56px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, marginBottom: 18 }}>
           <div>
-            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-000</div>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-000</div>
             <h1 style={{ margin: '3px 0 4px', fontSize: 23, fontWeight: 700 }}>ダッシュボード</h1>
             <p style={{ margin: 0, fontSize: 12.5, color: 'var(--text-2)' }}>調査案件の一覧と確認優先度の集計。各案件は公開データに基づく初期確認結果です。</p>
           </div>
@@ -101,7 +101,7 @@ export function DashboardScreen() {
               fontSize: 12,
               background: msg.kind === 'ok' ? 'var(--ok-bg)' : 'var(--err-bg)',
               color: msg.kind === 'ok' ? 'var(--ok-text)' : 'var(--err-text)',
-              border: `1px solid ${msg.kind === 'ok' ? 'var(--ok-text)' : 'var(--err-border)'}`,
+              border: `1px solid ${msg.kind === 'ok' ? 'var(--ok-border)' : 'var(--err-border)'}`,
               display: 'flex',
               alignItems: 'center',
               gap: 8,
@@ -118,7 +118,7 @@ export function DashboardScreen() {
             <div key={k.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 11, padding: '16px 17px', boxShadow: '0 1px 3px var(--shadow)' }}>
               <div style={{ fontSize: 11.5, color: 'var(--text-3)', fontWeight: 500, marginBottom: 9 }}>{k.label}</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
-                <span style={{ fontSize: 30, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: k.color, lineHeight: 1 }}>{k.value}</span>
+                <span style={{ fontSize: 30, fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace", color: k.color, lineHeight: 1 }}>{k.value}</span>
                 <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{k.unit}</span>
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 7 }}>{k.sub}</div>
@@ -130,7 +130,7 @@ export function DashboardScreen() {
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 11, padding: '18px 20px', marginBottom: 16, boxShadow: '0 1px 3px var(--shadow)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
             <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>全案件の確認優先度分布</h2>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--text-3)' }}>合計 {aggTotal} 件の確認項目</span>
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--text-3)' }}>合計 {aggTotal} 件の確認項目</span>
           </div>
           <div style={{ display: 'flex', height: 30, borderRadius: 7, overflow: 'hidden', marginBottom: 14, background: 'var(--surface-4)' }}>
             {GRADES.map((g) => {
@@ -150,7 +150,7 @@ export function DashboardScreen() {
                 <span style={{ fontSize: 12, color: 'var(--text-2)' }}>
                   <b style={{ color: 'var(--text)', fontWeight: 700 }}>{g}</b> {AGG_NAMES[g]}
                 </span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, fontWeight: 700, color: PRIO[g].color }}>{agg[g]}</span>
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 700, color: PRIO[g].color }}>{agg[g]}</span>
               </div>
             ))}
           </div>
@@ -160,7 +160,7 @@ export function DashboardScreen() {
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 11, overflow: 'hidden', boxShadow: '0 1px 3px var(--shadow)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '15px 20px', borderBottom: '1px solid var(--border-2)' }}>
             <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>調査案件一覧</h2>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--text-3)' }}>
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--text-3)' }}>
               {cases.length} 件（実データ {liveCount}{dummyCount ? ` / ダミー ${dummyCount}` : ''}）
             </span>
           </div>
@@ -186,14 +186,14 @@ export function DashboardScreen() {
                       <span style={liveTag}>実データ</span>
                     )}
                   </div>
-                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9.5, color: 'var(--text-4)' }}>{c.code}</div>
+                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5, color: 'var(--text-4)' }}>{c.code}</div>
                 </div>
                 <span style={{ fontSize: 11.5, color: 'var(--text-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.address}</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5, color: 'var(--text-3)' }}>{c.date}</span>
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, color: 'var(--text-3)' }}>{c.date}</span>
                 <div style={{ display: 'flex', gap: 5 }}>
                   {GRADES.map((g) => (
                     <span key={g} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 5, background: PRIO[g].bg, fontSize: 10.5, fontWeight: 700, opacity: c.counts[g] > 0 ? 1 : 0.4 }}>
-                      <span style={{ color: PRIO[g].color, fontFamily: "'JetBrains Mono', monospace" }}>{g}</span>
+                      <span style={{ color: PRIO[g].color, fontFamily: "'IBM Plex Mono', monospace" }}>{g}</span>
                       <span style={{ color: PRIO[g].color }}>{c.counts[g]}</span>
                     </span>
                   ))}
