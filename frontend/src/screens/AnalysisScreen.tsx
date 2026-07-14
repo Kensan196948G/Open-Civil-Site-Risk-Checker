@@ -37,7 +37,7 @@ const CHIP_DEFS: [string, string][] = [
 const GRADES: Priority[] = ['A', 'B', 'C', 'D'];
 
 export function AnalysisScreen() {
-  const { state, go, setBase, toggleOverlay, setCategoryFilter, openFinding, saveCurrentAsCase } = useApp();
+  const { state, go, setBase, toggleOverlay, setCategoryFilter, openFinding, saveCurrentAsCase, clearResult } = useApp();
   const { ranOnce, location, baseLayer, overlays, categoryFilter, findings, sources, theme, currentSaved } = state;
 
   const allDec = useMemo(() => findings.map((f) => decorate(f, theme)), [findings, theme]);
@@ -221,6 +221,13 @@ export function AnalysisScreen() {
               </button>
               <button onClick={() => go('aimemo')} style={{ width: '100%', padding: 10, background: 'var(--surface)', color: 'var(--accent)', border: '1.5px solid var(--border)', borderRadius: 7, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
                 AI調査メモを見る
+              </button>
+              <button
+                onClick={clearResult}
+                title="この確認結果をクリアして地点入力に戻ります"
+                style={{ width: '100%', marginTop: 10, padding: 10, background: 'transparent', color: 'var(--text-3)', border: '1px dashed var(--border-3)', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+              >
+                結果をクリアして地点入力へ
               </button>
             </div>
             <div style={{ margin: '0 16px 18px', padding: '10px 12px', background: 'var(--surface-3)', borderRadius: 7 }}>

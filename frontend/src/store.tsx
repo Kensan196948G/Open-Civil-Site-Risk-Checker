@@ -148,6 +148,7 @@ export interface AppController {
   toggleCat: (k: keyof FormCategories) => void;
   runAnalysisAction: () => void;
   runSample: () => void;
+  clearResult: () => void;
   // analysis
   setBase: (b: BaseLayer) => void;
   toggleOverlay: (k: OverlayKey) => void;
@@ -343,6 +344,12 @@ export function useAppController(): AppController {
     void doRun(sampleForm);
   }, [doRun]);
 
+  // 現在の確認結果（地図・カテゴリ別一覧・AI調査メモ）を破棄し、地点入力からやり直す。
+  // liveCases・theme は initialState() 内で localStorage から再読込されるため保持される。
+  const clearResult = useCallback(() => {
+    setState(() => ({ ...initialState(), screen: 'input' }));
+  }, []);
+
   const setBase = useCallback((b: BaseLayer) => patch({ baseLayer: b }), [patch]);
   const toggleOverlay = useCallback(
     (k: OverlayKey) => setState((s) => ({ ...s, overlays: { ...s.overlays, [k]: !s.overlays[k] } })),
@@ -405,6 +412,7 @@ export function useAppController(): AppController {
       toggleCat,
       runAnalysisAction,
       runSample,
+      clearResult,
       setBase,
       toggleOverlay,
       setCategoryFilter,
@@ -435,6 +443,7 @@ export function useAppController(): AppController {
       toggleCat,
       runAnalysisAction,
       runSample,
+      clearResult,
       setBase,
       toggleOverlay,
       setCategoryFilter,
