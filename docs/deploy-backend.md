@@ -158,6 +158,8 @@ docker exec -it ocsrc-db psql -U app -d site_risk_checker \
 
 ローカル PostGIS の代わりに **Neon（マネージド PostgreSQL + PostGIS）** を本番 DB にできます。docker の DB コンテナが不要になり、可用性・バックアップは Neon 側に委譲されます。
 
+> 📖 稼働中の Neon プロジェクトの構成・スキーマ・監視・バックアップ方針は [`neon-database.md`](./neon-database.md) を参照。本節は初回セットアップ手順のみを扱う。
+
 | 項目 | 値 |
 |---|---|
 | PostgreSQL | 17 系 |
@@ -243,7 +245,9 @@ bash scripts/install-systemd.sh
 | 有効 JWT を要求（多層防御） | origin で `Cf-Access-Jwt-Assertion` を署名・aud・iss・exp 検証。無効/欠如は **403** |
 | 503 で拒否 | Tunnel 経由かつ Access 未設定（fail-safe） |
 | 429 で拒否 | 同一 IP から 60 秒に 10 回検証失敗（レート制限） |
-| 認証なしで通す（例外） | `/healthz` の完全一致のみ（死活監視用） |
+| 認証なしで通す（origin側の意図） | `/healthz` の完全一致のみ（死活監視用）。`server.mjs` の `checkTunnelAuth` は `/healthz` を除外済み |
+
+> ⚠️ **既知のギャップ（Issue #94・本書更新時点で未解決）**: 上表の `/healthz` 例外は **origin（`server.mjs`）側のロジックのみ**。Cloudflare Access の **エッジ層**では `riskchecker.mirai-dx-platform.com` 全体を保護する Access アプリが `/healthz` にも適用されるため、実際には未認証アクセスがエッジで 302（Access ログインへのリダイレクト）される（2026-07-14 に `curl` で確認）。外形監視（UptimeRobot 等）で `/healthz` を使う場合は、`riskchecker.mirai-dx-platform.com/healthz` 専用の Access アプリケーションを作成し `bypass` ポリシーを設定する必要がある。手順は Issue #94 のコメントを参照。
 
 > アクセス許可の追加・削除（誰を入れるか）は **Access アプリのポリシー**をダッシュボードで編集するだけで即反映されます。パスワードの再配布は不要です。
 >
@@ -269,3 +273,24 @@ cloudflared tunnel route dns ocsrc-riskchecker riskchecker.mirai-dx-platform.com
 ```
 
 切り戻し（非公開化）は DNS レコード削除、または `sudo systemctl stop ocsrc-tunnel` でトンネルを止めます。
+
+### 4. 現状の稼働状況（Cloudflare API MCP で確認・2026-07-14 時点のスナップショット）
+
+Monitor フェーズで CTO が Cloudflare API（読み取り専用）から確認した実態。数値は変動するため、次回 Monitor 時に再確認すること。
+
+| 項目 | 状態 |
+|---|---|
+| Tunnel 名 / status | `ocsrc-riskchecker` / `healthy` |
+| 接続数 | 4 本（東京近郊 colo: `nrt05` / `nrt12` / `nrt14` / `nrt15` に分散。Tunnel 1本が複数エッジに冗長接続する標準構成） |
+| Access アプリ（既存） | `riskchecker`（`riskchecker.mirai-dx-platform.com` 全体を保護）。2026-07-11 作成後は更新なし＝ Issue #94 の `/healthz` bypass 専用アプリは未作成 |
+| Alerting policy | **0 件**。Tunnel down・Access 異常等の通知は現状未設定（改善余地。§ 運用チェックリスト参照） |
+| Workers / Pages | 未使用（0 件）。本プロジェクトは Tunnel + Access 構成のみで、Workers/Pages には依存しない |
+
+> 🔧 Cloudflare API（MCP経由）は読み取り専用スコープのみ付与されている（Access アプリ作成等の書き込みは `10000: Authentication error` で失敗）。ダッシュボードでの作成・変更はユーザーが行う。
+
+#### 🧭 運用チェックリスト（Monitor フェーズで確認する項目）
+
+- [ ] `cloudflared tunnel info ocsrc-riskchecker` または Cloudflare API で Tunnel が `healthy` か確認
+- [ ] Access アプリのポリシー変更がないか（許可メール一覧など）確認
+- [ ] `curl -I https://riskchecker.mirai-dx-platform.com/` が Access ログインへリダイレクトすること（保護が外れていないこと）を確認
+- [ ] **改善提案**: Alerting policy が 0 件のため、Tunnel down 検知等の通知先（メール等）を Zero Trust ダッシュボードで設定することを推奨（未実施・要ユーザー判断）
