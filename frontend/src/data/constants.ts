@@ -11,16 +11,16 @@ export interface PrioMeta {
 }
 
 const PRIO_LIGHT: Record<Priority, PrioMeta> = {
-  A: { name: '専門確認優先', color: '#c0392b', bg: '#f7e7e4' },
-  B: { name: '追加確認推奨', color: '#bf7d1c', bg: '#f8efdc' },
-  C: { name: '参考情報あり', color: '#2563a8', bg: '#e6eef9' },
-  D: { name: 'データ不足', color: '#7b8494', bg: '#eef0f3' },
+  A: { name: '専門確認優先', color: '#c5392f', bg: '#fce9e7' },
+  B: { name: '追加確認推奨', color: '#b5701a', bg: '#fdefe0' },
+  C: { name: '参考情報あり', color: '#2e5aac', bg: '#e9f0fb' },
+  D: { name: 'データ不足', color: '#5a6678', bg: '#f2f4f8' },
 };
 const PRIO_DARK: Record<Priority, PrioMeta> = {
-  A: { name: '専門確認優先', color: '#ef8c7d', bg: '#3a201c' },
-  B: { name: '追加確認推奨', color: '#e0ab55', bg: '#372c14' },
-  C: { name: '参考情報あり', color: '#6fa8e0', bg: '#1a2a3f' },
-  D: { name: 'データ不足', color: '#9aa6b5', bg: '#222e3c' },
+  A: { name: '専門確認優先', color: '#e6786a', bg: '#33201d' },
+  B: { name: '追加確認推奨', color: '#e0a955', bg: '#332711' },
+  C: { name: '参考情報あり', color: '#6f9de0', bg: '#1a2a3f' },
+  D: { name: 'データ不足', color: '#a4b0bf', bg: '#1f2c3b' },
 };
 
 /** 確認優先度パレット（要件 §9.2）。テーマで色が変わる。 */
@@ -38,16 +38,16 @@ export interface StatusMeta {
 }
 
 const STATUS_LIGHT: Record<FindingStatus, StatusMeta> = {
-  found: { label: '該当あり', color: '#2f6f4f', bg: '#e3f0e8' },
-  not_found: { label: '該当なし', color: '#5a6472', bg: '#eef0f3' },
-  no_data: { label: 'データ未取得', color: '#8a6d1f', bg: '#f6efd9' },
-  failed: { label: '取得失敗', color: '#b23b3b', bg: '#f7e6e6' },
+  found: { label: '該当あり', color: '#1f8255', bg: '#e4f3ec' },
+  not_found: { label: '該当なし', color: '#5a6678', bg: '#f2f4f8' },
+  no_data: { label: 'データ未取得', color: '#b5701a', bg: '#fdefe0' },
+  failed: { label: '取得失敗', color: '#c5392f', bg: '#fce9e7' },
 };
 const STATUS_DARK: Record<FindingStatus, StatusMeta> = {
-  found: { label: '該当あり', color: '#5fc08c', bg: '#16301f' },
-  not_found: { label: '該当なし', color: '#9aa6b5', bg: '#222e3c' },
-  no_data: { label: 'データ未取得', color: '#d6b15a', bg: '#2e2613' },
-  failed: { label: '取得失敗', color: '#e8897e', bg: '#331a1a' },
+  found: { label: '該当あり', color: '#4bbd82', bg: '#16301f' },
+  not_found: { label: '該当なし', color: '#a4b0bf', bg: '#1f2c3b' },
+  no_data: { label: 'データ未取得', color: '#e0a955', bg: '#332711' },
+  failed: { label: '取得失敗', color: '#e6786a', bg: '#33201d' },
 };
 
 /** 確認項目の状態パレット。「該当なし」と「データ未取得」を別ラベルで明示（要件 FR-304）。 */
@@ -57,16 +57,16 @@ export function getStatus(theme: Theme): Record<FindingStatus, StatusMeta> {
 export const STATUS = STATUS_LIGHT;
 
 const CASE_STATUS_LIGHT: Record<CaseStatus, StatusMeta> = {
-  done: { label: '完了', color: '#2f6f4f', bg: '#e3f0e8' },
-  progress: { label: '確認中', color: '#15616d', bg: '#e6f0f1' },
-  review: { label: '要確認', color: '#bf7d1c', bg: '#f8efdc' },
-  draft: { label: '下書き', color: '#7b8494', bg: '#eef0f3' },
+  done: { label: '完了', color: '#1f8255', bg: '#e4f3ec' },
+  progress: { label: '確認中', color: '#2e5aac', bg: '#e9f0fb' },
+  review: { label: '要確認', color: '#b5701a', bg: '#fdefe0' },
+  draft: { label: '下書き', color: '#5a6678', bg: '#f2f4f8' },
 };
 const CASE_STATUS_DARK: Record<CaseStatus, StatusMeta> = {
-  done: { label: '完了', color: '#5fc08c', bg: '#16301f' },
-  progress: { label: '確認中', color: '#4fc3d4', bg: '#12303a' },
-  review: { label: '要確認', color: '#e0ab55', bg: '#372c14' },
-  draft: { label: '下書き', color: '#9aa6b5', bg: '#222e3c' },
+  done: { label: '完了', color: '#4bbd82', bg: '#16301f' },
+  progress: { label: '確認中', color: '#6f9de0', bg: '#1a2a3f' },
+  review: { label: '要確認', color: '#e0a955', bg: '#332711' },
+  draft: { label: '下書き', color: '#a4b0bf', bg: '#1f2c3b' },
 };
 
 /** 案件状態パレット（ダッシュボード SCR-000）。 */

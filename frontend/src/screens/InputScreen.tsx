@@ -14,7 +14,7 @@ export function InputScreen() {
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'auto' }}>
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '34px 28px 60px' }}>
-        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>
+        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>
           SCR-001
         </div>
         <h1 style={{ margin: '4px 0 6px', fontSize: 24, fontWeight: 700, letterSpacing: '.3px' }}>地点を入力して初期確認を開始</h1>
@@ -36,7 +36,7 @@ export function InputScreen() {
           {form.type === 'address' ? (
             <div style={{ marginBottom: 18 }}>
               <label style={labelStyle}>
-                住所 <span style={{ color: '#c0392b' }}>*</span>
+                住所 <span style={{ color: 'var(--err-text)' }}>*</span>
               </label>
               <input
                 value={form.address}
@@ -73,7 +73,7 @@ export function InputScreen() {
                     key={r}
                     onClick={() => setRadius(r)}
                     style={cssToStyle(
-                      'padding:8px 16px;border-radius:7px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:\'JetBrains Mono\',monospace;border:1.5px solid ' +
+                      'padding:8px 16px;border-radius:7px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:\'IBM Plex Mono\',monospace;border:1.5px solid ' +
                         (on ? 'var(--accent);background:var(--accent-soft);color:var(--accent)' : 'var(--border);background:var(--surface);color:var(--text-2)'),
                     )}
                   >
@@ -179,9 +179,9 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid var(--border)',
   borderRadius: 7,
   fontSize: 14,
-  fontFamily: "'Noto Sans JP', sans-serif",
+  fontFamily: "'IBM Plex Sans JP', sans-serif",
   outline: 'none',
   background: 'var(--surface-2)',
   color: 'var(--text)',
 };
-const monoInputStyle: React.CSSProperties = { ...inputStyle, fontFamily: "'JetBrains Mono', monospace" };
+const monoInputStyle: React.CSSProperties = { ...inputStyle, fontFamily: "'IBM Plex Mono', monospace" };

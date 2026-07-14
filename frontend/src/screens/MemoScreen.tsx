@@ -51,14 +51,14 @@ export function MemoScreen() {
       <div style={{ maxWidth: 840, margin: '0 auto', padding: '26px 28px 70px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
           <div>
-            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-004</div>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-004</div>
             <h1 style={{ margin: '2px 0 0', fontSize: 21, fontWeight: 700 }}>AI調査メモ</h1>
           </div>
           <div style={{ flex: 1 }} />
           {aiWarnings === null ? (
             <span style={{ fontSize: 10.5, fontWeight: 600, padding: '4px 10px', borderRadius: 13, background: 'var(--surface-3)', color: 'var(--text-3)' }}>未チェック（AI生成前）</span>
           ) : aiWarnings.length ? (
-            <span style={{ fontSize: 10.5, fontWeight: 600, padding: '4px 10px', borderRadius: 13, background: '#d9832422', color: '#b06a1a' }}>
+            <span style={{ fontSize: 10.5, fontWeight: 600, padding: '4px 10px', borderRadius: 13, background: 'var(--warn-bg)', color: 'var(--warn-text-2)' }}>
               ⚠ 断定表現の可能性 {aiWarnings.length} 件
             </span>
           ) : (
@@ -91,9 +91,9 @@ export function MemoScreen() {
               borderRadius: 6,
               fontSize: 12,
               fontWeight: 600,
-              background: aiNotice.ok ? '#3fb27f18' : '#c0392b14',
-              color: aiNotice.ok ? '#2e8f66' : '#c0392b',
-              border: `1px solid ${aiNotice.ok ? '#3fb27f44' : '#c0392b44'}`,
+              background: aiNotice.ok ? 'var(--ok-bg)' : 'var(--err-bg)',
+              color: aiNotice.ok ? 'var(--ok-text)' : 'var(--err-text)',
+              border: `1px solid ${aiNotice.ok ? 'var(--ok-border)' : 'var(--err-border)'}`,
             }}
           >
             {aiNotice.ok ? '✓ ' : '✗ '}
@@ -101,7 +101,7 @@ export function MemoScreen() {
           </div>
         )}
         {aiWarnings && aiWarnings.length > 0 && (
-          <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 6, fontSize: 11.5, background: '#d9832414', color: '#b06a1a', border: '1px solid #d9832444', lineHeight: 1.7 }}>
+          <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 6, fontSize: 11.5, background: 'var(--warn-bg)', color: 'var(--warn-text-2)', border: '1px solid var(--warn-border)', lineHeight: 1.7 }}>
             ⚠ 生成文に断定の可能性がある表現が含まれます：{aiWarnings.map((w) => `「${w}」`).join('、')}。
             「編集」から表現を「要確認」「追加確認推奨」等へ修正してください（本ツールは断定表現を出力しない方針です）。
           </div>
@@ -111,7 +111,7 @@ export function MemoScreen() {
           <textarea
             value={memoText}
             onChange={(e) => onMemoInput(e.target.value)}
-            style={{ width: '100%', height: 560, padding: 20, border: '1px solid var(--border)', borderRadius: 10, fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, lineHeight: 1.7, resize: 'vertical', outline: 'none', background: 'var(--surface)', color: 'var(--text)' }}
+            style={{ width: '100%', height: 560, padding: 20, border: '1px solid var(--border)', borderRadius: 10, fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5, lineHeight: 1.7, resize: 'vertical', outline: 'none', background: 'var(--surface)', color: 'var(--text)' }}
           />
         ) : (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border-3)', borderRadius: 12, padding: '34px 40px', boxShadow: '0 1px 4px rgba(20,40,70,.06)' }}>

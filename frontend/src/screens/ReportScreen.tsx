@@ -56,7 +56,7 @@ export function ReportScreen() {
     <div style={{ position: 'absolute', inset: 0, overflow: 'auto' }}>
       <div className="ocsrc-report-columns" style={{ display: 'flex', minHeight: 0 }}>
         <div className="ocsrc-report-left" style={{ flex: 'none', background: 'var(--surface)', overflow: 'auto', padding: '22px 20px' }}>
-          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-005</div>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-005</div>
           <h1 style={{ margin: '3px 0 18px', fontSize: 20, fontWeight: 700 }}>レポート出力</h1>
 
           <div style={fieldLabel}>出力形式</div>
@@ -89,7 +89,7 @@ export function ReportScreen() {
 
           <div style={{ padding: '11px 12px', background: 'var(--surface-3)', borderRadius: 7, marginBottom: 16 }}>
             <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 3 }}>ファイル名</div>
-            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5, color: 'var(--text-2)', wordBreak: 'break-all' }}>{filename}</div>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, color: 'var(--text-2)', wordBreak: 'break-all' }}>{filename}</div>
           </div>
           <button onClick={download} style={{ width: '100%', padding: 12, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 6px rgba(21,97,109,.3)' }}>
             ↓ {reportFormat === 'md' ? 'Markdown' : 'CSV'} をダウンロード
@@ -98,7 +98,7 @@ export function ReportScreen() {
 
         <div style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: '24px 26px', background: 'var(--surface-4)' }}>
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, fontWeight: 600 }}>プレビュー</div>
-          <pre style={{ margin: 0, background: 'var(--surface)', border: '1px solid var(--border-3)', borderRadius: 10, padding: '24px 26px', fontFamily: "'JetBrains Mono', monospace", fontSize: 11.5, lineHeight: 1.75, color: 'var(--text-2)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', boxShadow: '0 1px 4px rgba(20,40,70,.05)' }}>
+          <pre style={{ margin: 0, background: 'var(--surface)', border: '1px solid var(--border-3)', borderRadius: 10, padding: '24px 26px', fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, lineHeight: 1.75, color: 'var(--text-2)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', boxShadow: '0 1px 4px rgba(20,40,70,.05)' }}>
             {preview}
           </pre>
         </div>

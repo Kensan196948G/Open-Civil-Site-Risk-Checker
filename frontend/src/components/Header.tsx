@@ -1,10 +1,25 @@
 import { useApp } from '../store';
+import type { Screen } from '../types';
 
-// 上部ヘッダー。地点確認後は調査地点・取得日時を表示し、テーマ切替ボタンを備える。
+// 画面タイトル/サブタイトルのマッピング（Redesign版 screenMeta を移植）。
+// アプリ名・ロゴは Sidebar 側に集約したため、ヘッダーは「今どの画面か」を示す役割に専念する。
+const SCREEN_META: Record<Screen, [string, string]> = {
+  dashboard: ['ダッシュボード', '調査案件の一覧と確認優先度の集計'],
+  input: ['地点入力', '住所または緯度経度から初期確認を開始'],
+  analysis: ['リスク判定', '地図と確認優先度サマリー'],
+  aimemo: ['AI調査メモ', '断定表現を避けた初期調査メモ'],
+  report: ['レポート出力', 'Markdown / CSV 出力'],
+  sources: ['データソース管理', '接続状態・利用条件の台帳'],
+  logs: ['取得ログ', 'API実行履歴'],
+  settings: ['システム設定', 'AI・バックエンド・既定値・ローカルデータ'],
+};
+
+// 上部ヘッダー。画面タイトルと、地点確認後の調査地点・取得日時を表示し、テーマ切替ボタンを備える。
 export function Header() {
   const { state, toggleTheme } = useApp();
-  const { ranOnce, location, fetchedAt, theme } = state;
+  const { screen, ranOnce, location, fetchedAt, theme } = state;
   const dark = theme === 'dark';
+  const [title, sub] = SCREEN_META[screen];
 
   return (
     <header
@@ -12,34 +27,19 @@ export function Header() {
       style={{
         display: 'flex',
         alignItems: 'center',
-        height: 56,
+        height: 62,
         background: 'var(--chrome)',
         color: 'var(--chrome-text)',
         flex: 'none',
         borderBottom: '1px solid var(--chrome-border)',
+        padding: '0 22px',
+        gap: 16,
         zIndex: 50,
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 30,
-          height: 30,
-          background: 'var(--accent)',
-          borderRadius: 5,
-          fontWeight: 700,
-          fontSize: 15,
-          letterSpacing: '-.5px',
-          color: '#fff',
-        }}
-      >
-        ○
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
-        <span style={{ fontSize: 14.5, fontWeight: 700, letterSpacing: '.2px' }}>Open Civil Site Risk Checker</span>
-        <span className="ocsrc-header-subtitle" style={{ fontSize: 11, color: 'var(--chrome-text-3)', fontWeight: 400 }}>工事候補地リスクチェッカー</span>
+      <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+        <span style={{ fontSize: 16, fontWeight: 600 }}>{title}</span>
+        <span className="ocsrc-header-subtitle" style={{ fontSize: 11, color: 'var(--chrome-text-3)', fontWeight: 400 }}>{sub}</span>
       </div>
       <div style={{ flex: 1 }} />
       {ranOnce && location && (
@@ -55,16 +55,16 @@ export function Header() {
             borderRadius: 6,
           }}
         >
-          <span style={{ fontSize: 11, color: '#15a3b8', fontWeight: 700 }}>地点</span>
+          <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>地点</span>
           <span style={{ fontSize: 12, color: 'var(--chrome-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {location.address}
           </span>
-          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5, color: 'var(--chrome-text-3)' }}>{location.coordLabel}</span>
+          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, color: 'var(--chrome-text-3)' }}>{location.coordLabel}</span>
         </div>
       )}
       <div className="ocsrc-header-time" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.3 }}>
         <span style={{ fontSize: 9.5, color: 'var(--chrome-text-4)', letterSpacing: '.3px' }}>取得日時</span>
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--chrome-text-2)' }}>{fetchedAt}</span>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--chrome-text-2)' }}>{fetchedAt}</span>
       </div>
       <button
         onClick={toggleTheme}
@@ -79,7 +79,7 @@ export function Header() {
           borderRadius: 7,
           color: 'var(--chrome-text-2)',
           cursor: 'pointer',
-          fontFamily: "'Noto Sans JP', sans-serif",
+          fontFamily: "'IBM Plex Sans JP', sans-serif",
           fontSize: 11.5,
           fontWeight: 500,
         }}
@@ -87,21 +87,6 @@ export function Header() {
         <span style={{ fontSize: 13, lineHeight: 1 }}>{dark ? '☾' : '☀'}</span>
         <span className="ocsrc-header-theme-label">{dark ? 'ダーク' : 'ライト'}</span>
       </button>
-      <div
-        className="ocsrc-header-editor"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '5px 10px',
-          background: 'var(--chrome-3)',
-          borderRadius: 20,
-          border: '1px solid var(--chrome-border)',
-        }}
-      >
-        <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#3fb27f' }} />
-        <span style={{ fontSize: 11, color: 'var(--chrome-text)' }}>editor</span>
-      </div>
     </header>
   );
 }
