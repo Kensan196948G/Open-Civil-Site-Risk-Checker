@@ -30,10 +30,14 @@ export function SiteMap() {
   const overlayObjsRef = useRef<Partial<Record<OverlayKey, L.Layer>>>({});
 
   // 最新の baseLayer / overlays を init 内から参照するための ref。
+  // 描画中の ref 書き込みは react-hooks/refs で禁止されるため、コミット後の
+  // effect 内で同期する（地図生成 effect より前に宣言し、実行順を保証）。
   const baseRef = useRef(baseLayer);
-  baseRef.current = baseLayer;
   const overlaysRef = useRef(overlays);
-  overlaysRef.current = overlays;
+  useEffect(() => {
+    baseRef.current = baseLayer;
+    overlaysRef.current = overlays;
+  }, [baseLayer, overlays]);
 
   // ---- 地図の生成（location が変わるたびに作り直す） ----
   useEffect(() => {

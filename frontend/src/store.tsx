@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -183,8 +184,12 @@ function validate(form: FormState): string {
 export function useAppController(): AppController {
   const [state, setState] = useState<AppState>(initialState);
   // setState の関数形を多用するため、最新フォームを参照する ref を保持。
+  // 描画中の ref 書き込みは react-hooks/refs で禁止されるため、コミット後の effect 内で同期する
+  // （読み出しは全てユーザー操作起点の useCallback 内のみで、同一描画中の同期読みは無い）。
   const stateRef = useRef(state);
-  stateRef.current = state;
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const patch = useCallback((p: Partial<AppState>) => setState((s) => ({ ...s, ...p })), []);
 
@@ -348,12 +353,14 @@ export function useAppController(): AppController {
   const openFinding = useCallback((id: string) => patch({ selectedFinding: id }), [patch]);
   const closeFinding = useCallback(() => patch({ selectedFinding: null }), [patch]);
 
+  // MemoScreen から描画中に同期呼び出しされるため（イベントハンドラ経由ではない）、
+  // stateRef ではなく state を直接参照する（ref はコミット後の effect でしか
+  // 更新されず、描画中に読むと 1 render 分古い値になるため使用不可）。
   const memoTextOrDefault = useCallback(() => {
-    const s = stateRef.current;
-    if (s.memoText) return s.memoText;
-    if (!s.location) return '';
-    return buildMemoText(s.location, s.findings);
-  }, []);
+    if (state.memoText) return state.memoText;
+    if (!state.location) return '';
+    return buildMemoText(state.location, state.findings);
+  }, [state]);
 
   const toggleMemoEdit = useCallback(() => {
     setState((s) => ({

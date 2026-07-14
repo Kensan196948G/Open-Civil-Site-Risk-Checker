@@ -78,7 +78,8 @@ export async function runAnalysis(form: AnalysisInputForm, opts: RunOpts = {}): 
   // ---- 1) 地点確定（ジオコーディング） ----
   let lat = form.lat;
   let lon = form.lon;
-  let address = form.address;
+  // 初期値を代入しても両分岐で必ず上書きされるため、宣言のみ（ESLint no-useless-assignment 対応）。
+  let address: string;
 
   if (form.type === 'address') {
     const geo = await geocode(form.address);
