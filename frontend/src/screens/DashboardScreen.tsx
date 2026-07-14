@@ -164,7 +164,7 @@ export function DashboardScreen() {
               {cases.length} 件（実データ {liveCount}{dummyCount ? ` / ダミー ${dummyCount}` : ''}）
             </span>
           </div>
-          <div className="ocsrc-table-scroll">
+          <div className="ocsrc-table-scroll" tabIndex={0} role="region" aria-label="調査案件一覧">
           <div className="ocsrc-grid-cases" style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.6fr 1fr 1.8fr 1fr 1fr', gap: 0, padding: '10px 20px', background: 'var(--surface-3)', borderBottom: '1px solid var(--border-2)', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '.3px' }}>
             <span>案件名 / 種別</span>
             <span>所在地</span>

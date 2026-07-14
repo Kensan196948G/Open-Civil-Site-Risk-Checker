@@ -22,7 +22,7 @@ export function LogsScreen() {
         {!state.logs.length && '（まだ実行されていないため、参考のサンプルを表示しています。）'}
       </p>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', fontFamily: "'JetBrains Mono', monospace" }}>
-        <div className="ocsrc-table-scroll">
+        <div className="ocsrc-table-scroll" tabIndex={0} role="region" aria-label="取得ログ">
         <div className="ocsrc-grid-logs" style={{ display: 'grid', gridTemplateColumns: COLS, gap: 0, padding: '10px 16px', background: 'var(--surface-3)', borderBottom: '1px solid var(--border-2)', fontSize: 10, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '.3px' }}>
           <span>fetched_at</span>
           <span>source_key</span>

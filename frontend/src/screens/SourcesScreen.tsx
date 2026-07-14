@@ -20,7 +20,7 @@ export function SourcesScreen() {
         API・公開GISデータの接続状態と利用条件を管理します。出典不明データはリスク判定に使用しません。
       </p>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-        <div className="ocsrc-table-scroll">
+        <div className="ocsrc-table-scroll" tabIndex={0} role="region" aria-label="データソース一覧">
         <div className="ocsrc-grid-sources" style={{ display: 'grid', gridTemplateColumns: COLS, gap: 0, padding: '11px 16px', background: 'var(--surface-3)', borderBottom: '1px solid var(--border-2)', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '.3px' }}>
           <span>データソース</span>
           <span>提供元</span>
