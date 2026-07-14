@@ -294,3 +294,14 @@ Monitor フェーズで CTO が Cloudflare API（読み取り専用）から確�
 - [ ] Access アプリのポリシー変更がないか（許可メール一覧など）確認
 - [ ] `curl -I https://riskchecker.mirai-dx-platform.com/` が Access ログインへリダイレクトすること（保護が外れていないこと）を確認
 - [ ] **改善提案**: Alerting policy が 0 件のため、Tunnel down 検知等の通知先（メール等）を Zero Trust ダッシュボードで設定することを推奨（未実施・要ユーザー判断）
+
+## 🚚 main マージ後の本番反映（重要な注意点）
+
+**このプロジェクトは開発機＝本番機の単一ホスト構成であり、GitHub Actions の CI（`.github/workflows/ci.yml`）は lint / typecheck / test / build / security のみで、本番への自動デプロイ工程を含まない。** つまり `main` へ PR がマージされても、このホスト上で明示的にビルドし直すまで本番配信には反映されない。
+
+| コンポーネント | 反映トリガー | 反映方法 | サービス再起動 |
+|---|---|---|---|
+| フロントエンド（`ocsrc-web`） | 手動 | `cd frontend && npm run build` で `dist/` を再生成 | **不要**（`server.mjs` はリクエスト毎に `dist` を stat する設計のため無停止で切り替わる） |
+| バックエンド（`ocsrc-api`） | 手動 | `git pull` 後、依存変更があれば `backend/.venv` を更新 | **必要**（`sudo systemctl restart ocsrc-api`） |
+
+⚠️ **注意**: 開発作業用のブランチ（未マージ）から `npm run build` を実行すると、未マージの変更がそのまま本番へ漏れ出す。ビルド前に必ず `git branch --show-current` が `main` であり、`git log -1` が `origin/main` の最新コミットと一致することを確認すること（`ensure-web-build.sh` は `dist/index.html` が存在する限り自動再生成しないため、放置すると古い内容が配信され続ける、または逆に未マージの内容が配信され続ける事故につながる）。
