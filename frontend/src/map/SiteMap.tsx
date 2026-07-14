@@ -37,7 +37,7 @@ export function SiteMap() {
   useEffect(() => {
     baseRef.current = baseLayer;
     overlaysRef.current = overlays;
-  });
+  }, [baseLayer, overlays]);
 
   // ---- 地図の生成（location が変わるたびに作り直す） ----
   useEffect(() => {

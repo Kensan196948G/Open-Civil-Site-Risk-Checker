@@ -189,7 +189,7 @@ export function useAppController(): AppController {
   const stateRef = useRef(state);
   useEffect(() => {
     stateRef.current = state;
-  });
+  }, [state]);
 
   const patch = useCallback((p: Partial<AppState>) => setState((s) => ({ ...s, ...p })), []);
 
