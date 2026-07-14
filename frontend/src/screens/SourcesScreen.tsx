@@ -20,7 +20,8 @@ export function SourcesScreen() {
         API・公開GISデータの接続状態と利用条件を管理します。出典不明データはリスク判定に使用しません。
       </p>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 0, padding: '11px 16px', background: 'var(--surface-3)', borderBottom: '1px solid var(--border-2)', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '.3px' }}>
+        <div className="ocsrc-table-scroll">
+        <div className="ocsrc-grid-sources" style={{ display: 'grid', gridTemplateColumns: COLS, gap: 0, padding: '11px 16px', background: 'var(--surface-3)', borderBottom: '1px solid var(--border-2)', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '.3px' }}>
           <span>データソース</span>
           <span>提供元</span>
           <span>種別</span>
@@ -35,7 +36,7 @@ export function SourcesScreen() {
           const sl = s._testing ? 'テスト中…' : statLabel(s.stat);
           const rankColor = PRIO[s.rank]?.color ?? 'var(--text-2)';
           return (
-            <div key={s.key} style={{ display: 'grid', gridTemplateColumns: COLS, gap: 0, padding: '12px 16px', borderBottom: '1px solid var(--border-2)', alignItems: 'center', fontSize: 12, opacity: s.enabled ? 1 : 0.55 }}>
+            <div key={s.key} className="ocsrc-grid-sources" style={{ display: 'grid', gridTemplateColumns: COLS, gap: 0, padding: '12px 16px', borderBottom: '1px solid var(--border-2)', alignItems: 'center', fontSize: 12, opacity: s.enabled ? 1 : 0.55 }}>
               <div>
                 <div style={{ fontWeight: 700, color: 'var(--text-strong)' }}>{s.name}</div>
                 <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9.5, color: 'var(--text-4)' }}>{s.key}</div>
@@ -65,6 +66,7 @@ export function SourcesScreen() {
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );

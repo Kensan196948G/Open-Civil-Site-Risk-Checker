@@ -310,4 +310,17 @@ textarea {
   .ocsrc-grid-2col {
     grid-template-columns: 1fr;
   }
+  /* 固定列テーブル（Dashboard案件一覧・Logs・Sources）: 列を潰さず横スクロールで読ませる。 */
+  .ocsrc-table-scroll {
+    overflow-x: auto;
+  }
+  .ocsrc-grid-cases {
+    min-width: 780px;
+  }
+  .ocsrc-grid-logs {
+    min-width: 860px;
+  }
+  .ocsrc-grid-sources {
+    min-width: 760px;
+  }
 }

@@ -164,7 +164,8 @@ export function DashboardScreen() {
               {cases.length} 件（実データ {liveCount}{dummyCount ? ` / ダミー ${dummyCount}` : ''}）
             </span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.6fr 1fr 1.8fr 1fr 1fr', gap: 0, padding: '10px 20px', background: 'var(--surface-3)', borderBottom: '1px solid var(--border-2)', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '.3px' }}>
+          <div className="ocsrc-table-scroll">
+          <div className="ocsrc-grid-cases" style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.6fr 1fr 1.8fr 1fr 1fr', gap: 0, padding: '10px 20px', background: 'var(--surface-3)', borderBottom: '1px solid var(--border-2)', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '.3px' }}>
             <span>案件名 / 種別</span>
             <span>所在地</span>
             <span>実行日</span>
@@ -175,7 +176,7 @@ export function DashboardScreen() {
           {cases.map((c) => {
             const sp = CASE_STATUS[c.status];
             return (
-              <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.6fr 1fr 1.8fr 1fr 1fr', gap: 0, padding: '13px 20px', borderBottom: '1px solid var(--border-2)', alignItems: 'center' }}>
+              <div key={c.id} className="ocsrc-grid-cases" style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.6fr 1fr 1.8fr 1fr 1fr', gap: 0, padding: '13px 20px', borderBottom: '1px solid var(--border-2)', alignItems: 'center' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-strong)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 170 }}>{c.name}</span>
@@ -217,6 +218,7 @@ export function DashboardScreen() {
               </div>
             );
           })}
+          </div>
           {cases.length === 0 && (
             <div style={{ padding: '32px 20px', textAlign: 'center', fontSize: 12.5, color: 'var(--text-3)', lineHeight: 1.7 }}>
               まだ調査案件がありません。<br />
