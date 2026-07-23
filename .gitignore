@@ -23,6 +23,9 @@ __pycache__/
 **/.venv/
 .pytest_cache/
 .ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 
 # ===== Logs =====
 *.log
