@@ -84,9 +84,21 @@ describe('runAnalysis の並列実行性能特性（NFR-002: 30秒以内の設�
 
     expect(outcome.error).toBeUndefined();
     expect(outcome.result).toBeDefined();
-    // モックした 5 ステップ + 内部固定の hazard_portal が success で完了して
-    // いること（並列化で速いだけでなく、中身も正しく揃っていることの確認）。
-    expect(steps.filter((s) => s.status === 'success')).toHaveLength(6);
+    // 並列化で速いだけでなく、9 ステップすべてが期待どおりの最終状態で報告
+    // されること（onStep は各ステップにつき最終状態で 1 回だけ呼ばれる）。
+    // plateau=failed / xroad=skipped は runAnalysis.ts 内部の固定デモ挙動。
+    expect(steps).toHaveLength(9);
+    expect(Object.fromEntries(steps.map((s) => [s.key, s.status]))).toEqual({
+      nominatim: 'skipped',
+      osm_overpass: 'success',
+      open_meteo: 'success',
+      gsi_tile: 'success',
+      ksj: 'success',
+      hazard_portal: 'success',
+      plateau: 'failed',
+      xroad: 'skipped',
+      jma_warning: 'success',
+    });
 
     // 直列実行なら 150ms×5（外部モック） + 500+700+800ms（内部固定） ≒ 2750ms。
     // Promise.all による並列実行なら内部固定の最大値（800ms）付近で完了する

@@ -34,12 +34,11 @@ async function findTests(dir) {
   return out;
 }
 
-/** `import { a, b as c } from 'vitest'` から named import 名一覧を抽出する。 */
+/** `import { a, b as c } from 'vitest'` から named import 名一覧を抽出する。
+ * import 宣言が複数行に分かれていても全宣言を走査する。 */
 function vitestImportNames(src) {
-  const m = src.match(/import\s*\{([^}]*)\}\s*from\s*['"]vitest['"]/);
-  if (!m) return [];
-  return m[1]
-    .split(',')
+  return [...src.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]vitest['"]/g)]
+    .flatMap((m) => m[1].split(','))
     .map((s) => s.trim().split(/\s+as\s+/)[0].trim())
     .filter(Boolean);
 }
