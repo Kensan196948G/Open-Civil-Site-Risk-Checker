@@ -30,10 +30,14 @@ export function SiteMap() {
   const overlayObjsRef = useRef<Partial<Record<OverlayKey, L.Layer>>>({});
 
   // 最新の baseLayer / overlays を init 内から参照するための ref。
+  // 描画中の ref 書き込みは react-hooks/refs で禁止されるため、コミット後の
+  // effect 内で同期する（地図生成 effect より前に宣言し、実行順を保証）。
   const baseRef = useRef(baseLayer);
-  baseRef.current = baseLayer;
   const overlaysRef = useRef(overlays);
-  overlaysRef.current = overlays;
+  useEffect(() => {
+    baseRef.current = baseLayer;
+    overlaysRef.current = overlays;
+  }, [baseLayer, overlays]);
 
   // ---- 地図の生成（location が変わるたびに作り直す） ----
   useEffect(() => {
@@ -56,7 +60,7 @@ export function SiteMap() {
       icon: L.divIcon({
         className: '',
         html:
-          '<div style="position:relative"><div style="width:20px;height:20px;background:#c0392b;border:3px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 5px rgba(0,0,0,.4)"></div></div>',
+          '<div style="position:relative"><div style="width:20px;height:20px;background:#c5392f;border:3px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 5px rgba(0,0,0,.4)"></div></div>',
         iconSize: [20, 20],
         iconAnchor: [10, 20],
       }),
@@ -109,20 +113,20 @@ function buildOverlays(
   const center: [number, number] = [location.lat, location.lon];
   const ov: Partial<Record<OverlayKey, L.Layer>> = {};
 
-  ov.range = L.circle(center, { radius: location.radius, color: '#15616d', weight: 2, fillColor: '#15616d', fillOpacity: 0.06, dashArray: '5 5' });
+  ov.range = L.circle(center, { radius: location.radius, color: '#2E5AAC', weight: 2, fillColor: '#2E5AAC', fillOpacity: 0.06, dashArray: '5 5' });
 
   ov.hillshade = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/hillshademap/{z}/{x}/{y}.png', { opacity: 0.5, attribution: '地理院タイル(陰影起伏図)' });
   ov.flood = L.tileLayer('https://disaportaldata.gsi.go.jp/raster/01_flood_l2_shinsuishin_data/{z}/{x}/{y}.png', { opacity: 0.6, pane: HAZARD_PANE, attribution: 'ハザードマップポータルサイト' });
   ov.sediment = L.tileLayer('https://disaportaldata.gsi.go.jp/raster/05_dosekiryukeikaikuiki/{z}/{x}/{y}.png', { opacity: 0.6, pane: HAZARD_PANE, attribution: 'ハザードマップポータルサイト' });
 
-  ov.roads = L.layerGroup((features.roads || []).map((line) => L.polyline(line, { color: '#d98324', weight: 4, opacity: 0.8 })));
-  ov.water = L.layerGroup((features.water || []).map((line) => L.polyline(line, { color: '#2f6fb0', weight: 5, opacity: 0.6 })));
+  ov.roads = L.layerGroup((features.roads || []).map((line) => L.polyline(line, { color: '#B5701A', weight: 4, opacity: 0.8 })));
+  ov.water = L.layerGroup((features.water || []).map((line) => L.polyline(line, { color: '#2E5AAC', weight: 5, opacity: 0.6 })));
   ov.facilities = L.layerGroup(
     (features.facilities || []).map((f) =>
       L.marker([f.lat, f.lon], {
         icon: L.divIcon({
           className: '',
-          html: `<div style="background:#fff;border:1px solid #b5bcc6;color:#4a5563;font:600 10px/1 'Noto Sans JP',sans-serif;padding:3px 7px;border-radius:4px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25)">${escapeHtml(f.label)}</div>`,
+          html: `<div style="background:#fff;border:1px solid #b5bcc6;color:#4a5563;font:600 10px/1 'IBM Plex Sans JP',sans-serif;padding:3px 7px;border-radius:4px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25)">${escapeHtml(f.label)}</div>`,
           iconSize: undefined,
           iconAnchor: [0, 8],
         }),

@@ -9,12 +9,12 @@ export function SourcesScreen() {
   const { sources, theme } = state;
   const PRIO = getPrio(theme);
 
-  const statColor = (stat: string) => (stat === 'success' ? '#3fb27f' : stat === 'failed' ? '#c0392b' : '#9aa2ae');
+  const statColor = (stat: string) => (stat === 'success' ? 'var(--ok-text)' : stat === 'failed' ? 'var(--err-text)' : 'var(--text-3)');
   const statLabel = (stat: string) => (stat === 'success' ? '接続成功' : stat === 'failed' ? '接続失敗' : '未連携/無効');
 
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'auto', padding: '26px 28px 50px' }}>
-      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-006</div>
+      <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-006</div>
       <h1 style={{ margin: '3px 0 4px', fontSize: 21, fontWeight: 700 }}>データソース管理</h1>
       <p style={{ margin: '0 0 18px', fontSize: 12.5, color: 'var(--text-2)' }}>
         API・公開GISデータの接続状態と利用条件を管理します。出典不明データはリスク判定に使用しません。
@@ -32,20 +32,20 @@ export function SourcesScreen() {
           <span style={{ textAlign: 'right' }}>操作</span>
         </div>
         {sources.map((s) => {
-          const sc = s._testing ? '#bf7d1c' : statColor(s.stat);
+          const sc = s._testing ? 'var(--warn-text)' : statColor(s.stat);
           const sl = s._testing ? 'テスト中…' : statLabel(s.stat);
           const rankColor = PRIO[s.rank]?.color ?? 'var(--text-2)';
           return (
             <div key={s.key} className="ocsrc-grid-sources" style={{ display: 'grid', gridTemplateColumns: COLS, gap: 0, padding: '12px 16px', borderBottom: '1px solid var(--border-2)', alignItems: 'center', fontSize: 12, opacity: s.enabled ? 1 : 0.55 }}>
               <div>
                 <div style={{ fontWeight: 700, color: 'var(--text-strong)' }}>{s.name}</div>
-                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9.5, color: 'var(--text-4)' }}>{s.key}</div>
+                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5, color: 'var(--text-4)' }}>{s.key}</div>
               </div>
               <span style={{ color: 'var(--text-2)', fontSize: 11 }}>{s.provider}</span>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--text-3)' }}>{s.type}</span>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--text-3)' }}>{s.type}</span>
               <span style={{ fontSize: 10.5, color: 'var(--text-2)' }}>{s.license}</span>
               <span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700, color: rankColor }}>{s.rank}</span>
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 700, color: rankColor }}>{s.rank}</span>
               </span>
               <span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: sc }}>
@@ -53,7 +53,7 @@ export function SourcesScreen() {
                   {sl}
                 </span>
               </span>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--text-3)' }}>{s.last}</span>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--text-3)' }}>{s.last}</span>
               <span style={{ textAlign: 'right' }}>
                 <button
                   onClick={() => testSource(s.key)}

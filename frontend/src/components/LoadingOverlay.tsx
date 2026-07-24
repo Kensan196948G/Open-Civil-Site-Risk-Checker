@@ -4,9 +4,9 @@ import type { FetchStep } from '../types';
 // 取得中オーバーレイ。各データソースの取得状況を段階表示する（要件 NFR-003 部分結果）。
 const META: Record<FetchStep['status'], { icon: string; label: string; color: string; bg: string }> = {
   pending: { icon: '', label: '取得中…', color: 'var(--text-3)', bg: 'var(--surface-4)' },
-  success: { icon: '✓', label: '成功', color: '#3fb27f', bg: '#e3f0e8' },
-  failed: { icon: '✕', label: '失敗', color: '#c0392b', bg: '#f7e7e4' },
-  skipped: { icon: '–', label: 'スキップ', color: '#9aa2ae', bg: '#eef0f3' },
+  success: { icon: '✓', label: '成功', color: 'var(--ok-text)', bg: 'var(--ok-bg)' },
+  failed: { icon: '✕', label: '失敗', color: 'var(--err-text)', bg: 'var(--err-bg)' },
+  skipped: { icon: '–', label: 'スキップ', color: 'var(--text-3)', bg: 'var(--surface-3)' },
 };
 
 export function LoadingOverlay() {

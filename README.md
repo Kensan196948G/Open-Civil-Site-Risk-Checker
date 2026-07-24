@@ -46,7 +46,7 @@ npm run test:smoke   # スモークテスト（esbuild ランナー / 制約環�
 | 🌐 インターネット公開       | `https://riskchecker.mirai-dx-platform.com/` | Cloudflare Access（ID ベース・OTP/メール） |
 | LAN（自動割当 IP・現在値） | `http://192.168.0.185:8700/`           | なし（信頼 LAN） |
 | ローカル                   | `http://127.0.0.1:8700/`               | なし |
-| ヘルスチェック             | `http://127.0.0.1:8700/healthz` → `ok` | なし（監視用に開放） |
+| ヘルスチェック             | `http://127.0.0.1:8700/healthz` → `ok` | なし（LAN/ローカルのみ。インターネット経由は Issue #94 対応まで Access 保護下） |
 
 > **インターネット公開**（`riskchecker.mirai-dx-platform.com`）は Cloudflare Tunnel（TLS 終端）+ Cloudflare Access（ID ベース認証・Issue #70）で保護しています。LAN 内は認証なしで直接利用できます（信頼 LAN モデル）。公開の詳細手順・セキュリティ境界は [`docs/deploy-backend.md`](docs/deploy-backend.md) を参照。
 >
@@ -144,7 +144,7 @@ docker compose ps                         # Docker の場合
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | SCR-000 ダッシュボード   | 既定の起動画面。調査案件一覧・KPI・確認優先度の全体集計。**本番データ（実取得）案件**と**ダミー（サンプル）案件**を区別表示。JSON 取込/エクスポート対応                                                                                                                                                                             |
 | SCR-001 地点入力         | 住所 / 緯度経度・検索半径（100m〜3km）・確認カテゴリ選択、入力検証                                                                                                                                                                                                                                                                  |
-| SCR-002 リスク判定       | 地図（地理院タイル＋実ジオメトリ）、確認優先度サマリー、カテゴリ別結果一覧                                                                                                                                                                                                                                                          |
+| SCR-002 リスク判定       | 地図（地理院タイル＋実ジオメトリ）、確認優先度サマリー、カテゴリ別結果一覧、結果クリア→地点入力へ戻る                                                                                                                                                                                                                              |
 | SCR-003 リスク詳細       | 根拠データ・出典・取得日時・距離・注意事項・コメント欄（右ドロワー）                                                                                                                                                                                                                                                                |
 | SCR-004 AI調査メモ       | 断定表現を避けた調査メモを自動生成・編集・再生成。**AI生成（Anthropic Claude・SCR-008 の保存キー利用）**に対応：テンプレートを土台に生成し、禁止表現チェック + 免責文必須化を通す                                                                                                                                                   |
 | SCR-005 レポート出力     | Markdown / CSV 出力（公開区分つき、UTF-8 BOM 付き CSV）                                                                                                                                                                                                                                                                             |
@@ -161,7 +161,7 @@ docker compose ps                         # Docker の場合
 | Open-Meteo                | 7日予報（強雨・強風の抽出）                      | ✅ 実連携                                                     |
 | 国土地理院 地理院タイル   | 背景地図（淡色/標準/写真）・標高                 | ✅ 実連携                                                     |
 | ハザードマップポータル    | 洪水浸水想定・土砂災害の重ね合わせタイル         | ✅ 実連携（視覚確認向け）                                     |
-| 国土数値情報 (KSJ)        | 河川・施設（ローカルDB / PostGIS 空間検索）      | ✅ 実連携（既定: same-origin `/api` プロキシ経由・Phase 2）   |
+| 国土数値情報 (KSJ)        | 河川（ローカルDB / PostGIS 空間検索。施設 `P02` はスキーマ・取込CLI対応済みだが未投入 — 施設は Overpass が実運用でカバー） | ✅ 実連携（既定: same-origin `/api` プロキシ経由・Phase 2）   |
 | 気象庁 警報・注意報       | 都道府県（気象庁発表単位）の警報・注意報発表状況 | ✅ 実連携（Phase 3・認証不要・CORS開放）                      |
 | PLATEAU                   | 3D都市モデル                                     | ⏳ タイムアウト再現（取得失敗の扱いを実証）                   |
 | xROAD                     | 道路交通量                                       | ⏸ 未連携（利用規約同意が必要）                                |
@@ -414,12 +414,11 @@ curl http://127.0.0.1:8000/healthz            # → {"status":"ok","db":"ok",...
 
 | 設計判断 | 内容 |
 | -------- | ---- |
-| 🔓 **無認証 = 公開読み取り API（設計判断）** | バックエンド API が扱うのは**国土交通省の公共オープンデータのみ**（個人情報なし・GET のみ・データ変更手段なし）。利用者の入力・結果はサーバに保存されないため、認証で保護すべきサーバ側リソースが存在しません |
-| 🏠 **HTTP 平文 = 信頼 LAN 内前提** | `:8700` の HTTP 配信は**信頼できる LAN 内**（家庭内・社内閉域）での利用が前提です。インターネットへのポート公開は行いません |
-| 🌍 **LAN 外へ公開する場合（必須要件）** | reverse proxy（nginx / Caddy 等）での **TLS 終端 + 認証 + レート制限**を**公開前に必ず**導入してください（詳細: [`docs/detailed-specification.md`](docs/detailed-specification.md) §15.2.3） |
-| 🔑 **本番 DB パスワード** | `infra/.env.example` の `dev_only_password` は**開発専用**。本番では `OCSRC_DB_PASSWORD` を強パスワード（例 `openssl rand -hex 24`）へ **override 必須**（手順: [`docs/deploy-backend.md`](docs/deploy-backend.md)） |
+| 🔓 **LAN 内は無認証（設計判断）** | バックエンド API が扱うのは**国土交通省の公共オープンデータのみ**（個人情報なし・GET のみ・データ変更手段なし）。信頼できる LAN 内（家庭内・社内閉域）からの直接アクセスには認証を課していません |
+| 🌐 **インターネット公開は Cloudflare Tunnel + Access（導入済み・稼働中）** | `https://riskchecker.mirai-dx-platform.com/` として一般公開中です。Cloudflare Edge で **TLS 終端 + Access 認証（ID ベース）+ レート制限**を行い、origin（`server.mjs`）側でも JWT を多層検証します。手順・現状の稼働状況は [`docs/deploy-backend.md`](docs/deploy-backend.md#-インターネット公開cloudflare-tunnel--cloudflare-access) を参照 |
+| 🔑 **本番 DB** | ローカル PostGIS の場合は `infra/.env.example` の `dev_only_password`（**開発専用**）から `OCSRC_DB_PASSWORD` 強パスワードへ **override 必須**。本番は **Neon（マネージド PostGIS）** に切替済み（構成・監視は [`docs/neon-database.md`](docs/neon-database.md)、切替手順は [`docs/deploy-backend.md`](docs/deploy-backend.md)） |
 
-> ⚠️ 認証・アクセス権限・サーバ側操作ログ（要件 NFR-201/203/204/205・権限ロール）は **MVP スコープ外（クライアント完結設計の意図的判断）**です。サーバ側で案件データを扱う Phase 4+ で導入します（[`docs/requirements.md`](docs/requirements.md) §11.3.1 / [`docs/detailed-specification.md`](docs/detailed-specification.md) §15.4）。
+> ⚠️ **アプリケーション内の認証・アクセス権限・サーバ側操作ログ**（要件 NFR-201/203/204/205・権限ロール）は引き続き **MVP スコープ外（クライアント完結設計の意図的判断）**です。上記の Cloudflare Access は「インターネットから誰が到達できるか」という**境界の認証**であり、アプリケーション内のユーザー管理・権限ロールとは別物です。サーバ側で案件データを扱う Phase 4+ で導入します（[`docs/requirements.md`](docs/requirements.md) §11.3.1 / [`docs/detailed-specification.md`](docs/detailed-specification.md) §15.4）。
 
 ---
 

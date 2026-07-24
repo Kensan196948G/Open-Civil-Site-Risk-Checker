@@ -14,13 +14,13 @@ const BASE_DEFS: [BaseLayer, string][] = [
 ];
 
 const OV_DEFS: [OverlayKey, string, string, string, string][] = [
-  ['range', '検索範囲', '#15616d', 'rgba(21,97,109,.15)', 'GSI'],
-  ['roads', '道路', '#d98324', 'rgba(217,131,36,.25)', 'OSM'],
-  ['water', '水路・河川', '#2f6fb0', 'rgba(47,111,176,.25)', 'OSM/KSJ'],
-  ['flood', '洪水浸水想定', '#3a76c4', 'rgba(58,118,196,.25)', 'ハザード'],
-  ['sediment', '土砂災害', '#b06a2a', 'rgba(176,106,42,.25)', 'ハザード'],
+  ['range', '検索範囲', '#2E5AAC', 'rgba(46,90,172,.15)', 'GSI'],
+  ['roads', '道路', '#B5701A', 'rgba(181,112,26,.25)', 'OSM'],
+  ['water', '水路・河川', '#2E5AAC', 'rgba(46,90,172,.25)', 'OSM/KSJ'],
+  ['flood', '洪水浸水想定', '#3E76D6', 'rgba(62,118,214,.25)', 'ハザード'],
+  ['sediment', '土砂災害', '#B5701A', 'rgba(181,112,26,.25)', 'ハザード'],
   ['hillshade', '陰影起伏', '#777', 'rgba(120,120,120,.25)', 'GSI'],
-  ['facilities', '周辺施設', '#7b8494', 'rgba(123,132,148,.2)', 'OSM'],
+  ['facilities', '周辺施設', '#6B45B0', 'rgba(107,69,176,.2)', 'OSM'],
 ];
 
 const CHIP_DEFS: [string, string][] = [
@@ -37,7 +37,7 @@ const CHIP_DEFS: [string, string][] = [
 const GRADES: Priority[] = ['A', 'B', 'C', 'D'];
 
 export function AnalysisScreen() {
-  const { state, go, setBase, toggleOverlay, setCategoryFilter, openFinding, saveCurrentAsCase } = useApp();
+  const { state, go, setBase, toggleOverlay, setCategoryFilter, openFinding, saveCurrentAsCase, clearResult } = useApp();
   const { ranOnce, location, baseLayer, overlays, categoryFilter, findings, sources, theme, currentSaved } = state;
 
   const allDec = useMemo(() => findings.map((f) => decorate(f, theme)), [findings, theme]);
@@ -82,7 +82,7 @@ export function AnalysisScreen() {
             <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-2)' }}>
               <div style={sectionLabel}>調査地点</div>
               <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.5, marginBottom: 6 }}>{location.address}</div>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11.5, color: 'var(--text-2)', marginBottom: 4 }}>{location.coordLabel}</div>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, color: 'var(--text-2)', marginBottom: 4 }}>{location.coordLabel}</div>
               <div style={{ display: 'flex', gap: 8, fontSize: 11, color: 'var(--text-2)' }}>
                 <span>検索半径</span>
                 <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{location.radiusLabel}</span>
@@ -146,7 +146,7 @@ export function AnalysisScreen() {
             <div style={{ padding: '14px 16px' }}>
               <div style={{ ...sectionLabel, marginBottom: 9 }}>データソース接続</div>
               {sources.map((s) => {
-                const col = s.stat === 'success' ? '#3fb27f' : s.stat === 'failed' ? '#c0392b' : '#9aa2ae';
+                const col = s.stat === 'success' ? 'var(--ok-text)' : s.stat === 'failed' ? 'var(--err-text)' : 'var(--text-3)';
                 const lab = s.stat === 'success' ? '接続' : s.stat === 'failed' ? '失敗' : '未連携';
                 return (
                   <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: 11 }}>
@@ -164,9 +164,9 @@ export function AnalysisScreen() {
             <SiteMap />
             <div style={{ position: 'absolute', left: 10, bottom: 10, zIndex: 500, display: 'flex', flexDirection: 'column', gap: 5, pointerEvents: 'none' }}>
               {[
-                { color: '#c0392b', label: '調査地点' },
-                { color: '#d98324', label: '主要道路' },
-                { color: '#2f6fb0', label: '水路・河川' },
+                { color: 'var(--err-text)', label: '調査地点' },
+                { color: '#B5701A', label: '主要道路' },
+                { color: '#2E5AAC', label: '水路・河川' },
               ].map((lg) => (
                 <div key={lg.label} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--map-legend)', padding: '3px 8px', borderRadius: 4, fontSize: 10.5, boxShadow: '0 1px 3px rgba(0,0,0,.15)' }}>
                   <span style={{ width: 14, height: 3, background: lg.color, borderRadius: 2 }} />
@@ -185,7 +185,7 @@ export function AnalysisScreen() {
               {summaryCards.map((sc) => (
                 <div key={sc.grade} style={{ padding: '11px 12px', borderRadius: 9, background: sc.bg, border: `1px solid ${sc.border}` }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
-                    <span style={{ fontSize: 26, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: sc.color, lineHeight: 1 }}>{sc.count}</span>
+                    <span style={{ fontSize: 26, fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace", color: sc.color, lineHeight: 1 }}>{sc.count}</span>
                     <span style={{ fontSize: 14, fontWeight: 700, color: sc.color }}>{sc.grade}</span>
                   </div>
                   <div style={{ fontSize: 10.5, color: 'var(--text-2)', marginTop: 3 }}>{sc.label}</div>
@@ -222,6 +222,13 @@ export function AnalysisScreen() {
               <button onClick={() => go('aimemo')} style={{ width: '100%', padding: 10, background: 'var(--surface)', color: 'var(--accent)', border: '1.5px solid var(--border)', borderRadius: 7, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
                 AI調査メモを見る
               </button>
+              <button
+                onClick={clearResult}
+                title="この確認結果をクリアして地点入力に戻ります"
+                style={{ width: '100%', marginTop: 10, padding: 10, background: 'transparent', color: 'var(--text-3)', border: '1px dashed var(--border-3)', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+              >
+                結果をクリアして地点入力へ
+              </button>
             </div>
             <div style={{ margin: '0 16px 18px', padding: '10px 12px', background: 'var(--surface-3)', borderRadius: 7 }}>
               <p style={{ margin: 0, fontSize: 10, lineHeight: 1.6, color: 'var(--text-3)' }}>
@@ -235,7 +242,7 @@ export function AnalysisScreen() {
         <div style={{ padding: '18px 22px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
             <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>カテゴリ別確認結果</h2>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--text-3)' }}>
+            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--text-3)' }}>
               {shown.length} / {allDec.length} 件
             </span>
           </div>
@@ -252,7 +259,7 @@ export function AnalysisScreen() {
                       (on ? 'var(--accent);background:var(--accent);color:#fff' : 'var(--border);background:var(--surface);color:var(--text-2)'),
                   )}
                 >
-                  {label} <span style={{ opacity: 0.6, fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}>{count}</span>
+                  {label} <span style={{ opacity: 0.6, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10 }}>{count}</span>
                 </button>
               );
             })}
@@ -275,7 +282,7 @@ export function AnalysisScreen() {
                 }}
               >
                 <div style={{ flex: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: 54 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 8, background: f.bg, color: f.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 8, background: f.bg, color: f.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace" }}>
                     {f.priority}
                   </div>
                   <span style={{ fontSize: 9, color: 'var(--text-4)', textAlign: 'center', lineHeight: 1.2 }}>{f.categoryLabel}</span>
@@ -284,12 +291,12 @@ export function AnalysisScreen() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 4 }}>
                     <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-strong)' }}>{f.title}</span>
                     <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 11, background: f.statusBg, color: f.statusColor, flex: 'none' }}>{f.statusLabel}</span>
-                    {f.distanceLabel && <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>{f.distanceLabel}</span>}
+                    {f.distanceLabel && <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>{f.distanceLabel}</span>}
                   </div>
                   <p style={{ margin: '0 0 7px', fontSize: 12, lineHeight: 1.6, color: 'var(--text-2)' }}>{f.summary}</p>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                     {f.evidence.map((ev, i) => (
-                      <span key={i} style={{ fontSize: 9.5, color: 'var(--text-3)', background: 'var(--surface-4)', border: '1px solid var(--border-3)', padding: '2px 7px', borderRadius: 4, fontFamily: "'JetBrains Mono', monospace" }}>
+                      <span key={i} style={{ fontSize: 9.5, color: 'var(--text-3)', background: 'var(--surface-4)', border: '1px solid var(--border-3)', padding: '2px 7px', borderRadius: 4, fontFamily: "'IBM Plex Mono', monospace" }}>
                         {ev.source_name}
                       </span>
                     ))}

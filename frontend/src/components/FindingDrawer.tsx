@@ -82,14 +82,14 @@ export function FindingDrawer() {
       >
         <div style={{ position: 'sticky', top: 0, background: 'var(--surface)', padding: '18px 22px 12px', borderBottom: '1px solid var(--border-2)', zIndex: 2 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--text-3)', letterSpacing: '1px' }}>SCR-003 / {f.categoryLabel}</div>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'var(--text-3)', letterSpacing: '1px' }}>SCR-003 / {f.categoryLabel}</div>
             <div style={{ flex: 1 }} />
             <button onClick={closeFinding} aria-label="リスク詳細を閉じる" style={{ width: 28, height: 28, border: 'none', background: 'var(--surface-4)', borderRadius: 7, fontSize: 16, color: 'var(--text-3)', cursor: 'pointer', lineHeight: 1 }}>
               <span aria-hidden="true">✕</span>
             </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 10 }}>
-            <div aria-hidden="true" style={{ width: 42, height: 42, borderRadius: 9, background: f.bg, color: f.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", flex: 'none' }}>
+            <div aria-hidden="true" style={{ width: 42, height: 42, borderRadius: 9, background: f.bg, color: f.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace", flex: 'none' }}>
               {f.priority}
             </div>
             <div>
@@ -102,7 +102,7 @@ export function FindingDrawer() {
         <div style={{ padding: '18px 22px 40px' }}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
             <span style={{ fontSize: 11, fontWeight: 600, padding: '4px 11px', borderRadius: 12, background: f.statusBg, color: f.statusColor }}>{f.statusLabel}</span>
-            {f.distanceLabel && <span style={{ fontSize: 11, fontWeight: 600, padding: '4px 11px', borderRadius: 12, background: 'var(--accent-soft)', color: 'var(--accent)', fontFamily: "'JetBrains Mono', monospace" }}>地点から {f.distanceLabel}</span>}
+            {f.distanceLabel && <span style={{ fontSize: 11, fontWeight: 600, padding: '4px 11px', borderRadius: 12, background: 'var(--accent-soft)', color: 'var(--accent)', fontFamily: "'IBM Plex Mono', monospace" }}>地点から {f.distanceLabel}</span>}
           </div>
 
           <div style={miniLabel}>概要</div>
@@ -114,17 +114,17 @@ export function FindingDrawer() {
               <div key={i} style={{ border: '1px solid var(--border-2)', borderRadius: 9, padding: '13px 14px', background: 'var(--surface-2)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-strong)' }}>{ev.layer_name}</span>
-                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9.5, color: 'var(--text-4)', background: 'var(--surface-4)', padding: '1px 6px', borderRadius: 4 }}>{ev.source_key}</span>
+                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5, color: 'var(--text-4)', background: 'var(--surface-4)', padding: '1px 6px', borderRadius: 4 }}>{ev.source_key}</span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '5px 12px', fontSize: 11 }}>
                   <span style={{ color: 'var(--text-3)' }}>出典</span>
                   <span style={{ color: 'var(--text-2)' }}>{ev.attribution}</span>
                   <span style={{ color: 'var(--text-3)' }}>取得日時</span>
-                  <span style={{ color: 'var(--text-2)', fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5 }}>{ev.fetched_at}</span>
+                  <span style={{ color: 'var(--text-2)', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5 }}>{ev.fetched_at}</span>
                   <span style={{ color: 'var(--text-3)' }}>データ更新日</span>
-                  <span style={{ color: 'var(--text-2)', fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5 }}>{ev.source_updated_at}</span>
+                  <span style={{ color: 'var(--text-2)', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5 }}>{ev.source_updated_at}</span>
                   <span style={{ color: 'var(--text-3)' }}>属性</span>
-                  <span style={{ color: 'var(--text-2)', fontFamily: "'JetBrains Mono', monospace", fontSize: 10, lineHeight: 1.6 }}>{ev.propsLabel}</span>
+                  <span style={{ color: 'var(--text-2)', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, lineHeight: 1.6 }}>{ev.propsLabel}</span>
                 </div>
                 {ev.quality_note && (
                   <div style={{ marginTop: 8, fontSize: 10.5, color: 'var(--warn-text)', background: 'var(--warn-bg)', padding: '6px 9px', borderRadius: 5 }}>品質メモ：{ev.quality_note}</div>
@@ -144,7 +144,7 @@ export function FindingDrawer() {
             onChange={(e) => setComment(e.target.value)}
             aria-labelledby="ocsrc-finding-comment-label"
             placeholder="確認結果へのコメントを記入...（現時点では下書きのみ・保存は今後対応）"
-            style={{ width: '100%', height: 80, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontFamily: "'Noto Sans JP', sans-serif", fontSize: 12, resize: 'vertical', outline: 'none', background: 'var(--surface-2)', color: 'var(--text)' }}
+            style={{ width: '100%', height: 80, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontFamily: "'IBM Plex Sans JP', sans-serif", fontSize: 12, resize: 'vertical', outline: 'none', background: 'var(--surface-2)', color: 'var(--text)' }}
           />
           {/* コメント永続化は未実装。誤操作を避けるためボタンは無効化し、状態を明示する。 */}
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
