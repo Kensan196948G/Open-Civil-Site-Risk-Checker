@@ -121,6 +121,28 @@ def ingest_perf_dataset() -> None:
     asyncio.run(_run())
 
 
+def cleanup_perf_dataset() -> None:
+    """ベンチマーク用データを削除する。
+
+    replace_features() は同一 (dataset, source) しか置換しないため、後始末を
+    しないと 500 件が残留し、実行順やデータ量に依存した揺らぎの原因になる。
+    """
+
+    async def _run() -> None:
+        import asyncpg
+
+        conn = await asyncpg.connect(dsn=TEST_DSN)
+        try:
+            await conn.execute(
+                "DELETE FROM ksj_features WHERE dataset = 'facility' AND source = $1",
+                PERF_SOURCE,
+            )
+        finally:
+            await conn.close()
+
+    asyncio.run(_run())
+
+
 def test_ingest_then_nearby_returns_items_with_distance() -> None:
     ingest_samples()
     with make_client() as client:
@@ -170,14 +192,16 @@ def test_geom_gist_index_exists() -> None:
         try:
             await ensure_schema(conn)
             return await conn.fetchval(
-                "SELECT indexname FROM pg_indexes "
+                "SELECT indexdef FROM pg_indexes "
                 "WHERE tablename = 'ksj_features' AND indexname = 'ksj_features_geom_gix'"
             )
         finally:
             await conn.close()
 
-    indexname = asyncio.run(_run())
-    assert indexname == "ksj_features_geom_gix"
+    indexdef = asyncio.run(_run())
+    # 同名の B-tree 等では通らないよう、アクセス方式が GiST であることまで確認する。
+    assert indexdef is not None
+    assert "using gist" in indexdef.lower()
 
 
 def test_nearby_endpoint_completes_within_threshold_at_scale() -> None:
@@ -189,14 +213,16 @@ def test_nearby_endpoint_completes_within_threshold_at_scale() -> None:
     「実際に速いか」という応答時間のみを厳密に検証する。
     """
     ingest_perf_dataset()
+    try:
+        with make_client() as client:
+            start = time.monotonic()
+            res = client.get("/api/v1/nearby", params={"lat": LAT, "lon": LON, "radius_m": 500})
+            elapsed = time.monotonic() - start
 
-    with make_client() as client:
-        start = time.monotonic()
-        res = client.get("/api/v1/nearby", params={"lat": LAT, "lon": LON, "radius_m": 500})
-        elapsed = time.monotonic() - start
-
-    assert res.status_code == 200
-    ours = [i for i in res.json()["items"] if i["source"] == PERF_SOURCE]
-    assert len(ours) == 20  # ヒット対象として意図的に配置した件数と一致
-    # 500 件規模の空間検索が実用的な時間内に完了すること。
-    assert elapsed < 2.0, f"nearby query took {elapsed:.3f}s"
+        assert res.status_code == 200
+        ours = [i for i in res.json()["items"] if i["source"] == PERF_SOURCE]
+        assert len(ours) == 20  # ヒット対象として意図的に配置した件数と一致
+        # 500 件規模の空間検索が実用的な時間内に完了すること。
+        assert elapsed < 2.0, f"nearby query took {elapsed:.3f}s"
+    finally:
+        cleanup_perf_dataset()
