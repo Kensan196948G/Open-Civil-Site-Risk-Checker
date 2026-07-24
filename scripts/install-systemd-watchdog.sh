@@ -19,8 +19,16 @@ RUN_GROUP="$(id -gn "${RUN_USER}")"
 
 [[ -x "${WATCHDOG}" ]] || chmod +x "${WATCHDOG}"
 
-if ! command -v gh >/dev/null 2>&1; then
-  echo "[install-watchdog] WARN: gh CLI が見つかりません。異常検知しても Issue 通知は行われません。" >&2
+# gh の実体ディレクトリを unit の PATH へ動的注入する（install-systemd.sh の
+# NODE_DIR と同じパターン）。snap / brew / ~/.local/bin 等の非標準パスにあると
+# systemd の固定 PATH では解決できず、通知機能だけが無音死するため。
+GH_BIN="$(command -v gh || true)"
+GH_BIN="$(readlink -f "${GH_BIN}" 2>/dev/null || echo "${GH_BIN}")"
+GH_DIR=""
+if [[ -n "${GH_BIN}" && -x "${GH_BIN}" ]]; then
+  GH_DIR="$(dirname "${GH_BIN}")"
+else
+  echo "[install-watchdog] WARN: gh CLI が見つかりません。異常検知しても Issue 通知は行われません（journal ログのみ）。" >&2
 fi
 
 sudo tee "${UNIT_PATH}" >/dev/null <<EOF
@@ -33,8 +41,8 @@ Type=oneshot
 User=${RUN_USER}
 Group=${RUN_GROUP}
 WorkingDirectory=${PROJECT_DIR}
-# gh / curl / systemctl の解決に必要な最小 PATH
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
+# gh / curl / systemctl の解決に必要な最小 PATH（gh の実体ディレクトリを先頭に注入）
+Environment=PATH=${GH_DIR:+${GH_DIR}:}/usr/local/bin:/usr/bin:/bin
 ExecStart=/bin/bash ${WATCHDOG}
 # 低リスク sandboxing（gh 設定が \$HOME 配下のため ProtectHome は付けない）
 NoNewPrivileges=true
