@@ -6,7 +6,7 @@
 //   node scripts/smoke-test.mjs
 //
 import { build } from 'esbuild';
-import { readdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { readdir, readFile, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { join, resolve, relative, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
@@ -16,6 +16,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 const srcDir = join(root, 'src');
 const shimPath = join(__dirname, 'smoke', 'shim.mjs');
+
+// shim.mjs が実装する 'vitest' 互換 export 一覧（vi 等のモック API は未実装）。
+// 全テストを 1 バンドルにまとめる都合上、1 ファイルでも shim 非対応の named import が
+// あるとバンドル全体がビルドエラーで止まり、他の全テストのローカル検証を道連れにする。
+// そのため事前に検出してスキップする（CI では本物の vitest がこれらも実行する）。
+const SHIM_EXPORTS = new Set(['describe', 'it', 'test', 'expect']);
 
 /** src 配下の *.test.ts を再帰列挙する。 */
 async function findTests(dir) {
@@ -28,9 +34,37 @@ async function findTests(dir) {
   return out;
 }
 
-const tests = (await findTests(srcDir)).sort();
-if (!tests.length) {
+/** `import { a, b as c } from 'vitest'` から named import 名一覧を抽出する。 */
+function vitestImportNames(src) {
+  const m = src.match(/import\s*\{([^}]*)\}\s*from\s*['"]vitest['"]/);
+  if (!m) return [];
+  return m[1]
+    .split(',')
+    .map((s) => s.trim().split(/\s+as\s+/)[0].trim())
+    .filter(Boolean);
+}
+
+const allTests = (await findTests(srcDir)).sort();
+if (!allTests.length) {
   console.error('no *.test.ts found under src/');
+  process.exit(1);
+}
+
+const tests = [];
+const skipped = [];
+for (const file of allTests) {
+  const src = await readFile(file, 'utf8');
+  const unsupported = vitestImportNames(src).filter((n) => !SHIM_EXPORTS.has(n));
+  if (unsupported.length) skipped.push({ file, unsupported });
+  else tests.push(file);
+}
+
+if (skipped.length) {
+  console.log(`⚠ smoke: skipping ${skipped.length} file(s) using shim-unsupported vitest API (CI runs these via real vitest):`);
+  for (const s of skipped) console.log(`  • ${relative(root, s.file)}: ${s.unsupported.join(', ')}`);
+}
+if (!tests.length) {
+  console.error('no smoke-runnable *.test.ts left after skipping shim-unsupported files');
   process.exit(1);
 }
 
