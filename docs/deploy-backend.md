@@ -283,7 +283,7 @@ Monitor フェーズで CTO が Cloudflare API（読み取り専用）から確�
 | Tunnel 名 / status | `ocsrc-riskchecker` / `healthy` |
 | 接続数 | 4 本（東京近郊 colo: `nrt05` / `nrt12` / `nrt14` / `nrt15` に分散。Tunnel 1本が複数エッジに冗長接続する標準構成） |
 | Access アプリ（既存） | `riskchecker`（`riskchecker.mirai-dx-platform.com` 全体を保護）。2026-07-11 作成後は更新なし＝ Issue #94 の `/healthz` bypass 専用アプリは未作成 |
-| Alerting policy | **0 件**。Tunnel down・Access 異常等の通知は現状未設定（改善余地。§ 運用チェックリスト参照） |
+| Alerting policy | **0 件**。Cloudflare 側の通知は現状未設定（ダッシュボード設定は要ユーザー判断）。**ローカル側の代替として ocsrc-watchdog（下記 §5）が web / api / DB / tunnel / エッジの死活を 5 分間隔で監視し、異常時に GitHub Issue で通知する** |
 | Workers / Pages | 未使用（0 件）。本プロジェクトは Tunnel + Access 構成のみで、Workers/Pages には依存しない |
 
 > 🔧 Cloudflare API（MCP経由）は読み取り専用スコープのみ付与されている（Access アプリ作成等の書き込みは `10000: Authentication error` で失敗）。ダッシュボードでの作成・変更はユーザーが行う。
@@ -293,7 +293,32 @@ Monitor フェーズで CTO が Cloudflare API（読み取り専用）から確�
 - [ ] `cloudflared tunnel info ocsrc-riskchecker` または Cloudflare API で Tunnel が `healthy` か確認
 - [ ] Access アプリのポリシー変更がないか（許可メール一覧など）確認
 - [ ] `curl -I https://riskchecker.mirai-dx-platform.com/` が Access ログインへリダイレクトすること（保護が外れていないこと）を確認
-- [ ] **改善提案**: Alerting policy が 0 件のため、Tunnel down 検知等の通知先（メール等）を Zero Trust ダッシュボードで設定することを推奨（未実施・要ユーザー判断）
+- [ ] `systemctl list-timers ocsrc-watchdog.timer` で watchdog が稼働していること、ラベル `watchdog` の open Issue（未対応の障害）がないことを確認
+- [ ] **改善提案**: Cloudflare 側の Alerting policy は 0 件のまま。Zero Trust ダッシュボードでの通知設定（メール等）を引き続き推奨（要ユーザー判断。ローカル watchdog はホスト自体の電源断・ネットワーク断を検知できないため、エッジ側通知との併用が完全形）
+
+### 5. ローカル watchdog による死活監視と Issue 通知（ocsrc-watchdog）
+
+Cloudflare Alerting・外形監視（Issue #94）が未設定でも通知を成立させるための、ホスト内蔵の監視。
+`scripts/ocsrc-watchdog.sh` が systemd timer（5 分間隔）で次を確認し、**異常時は GitHub Issue（ラベル `watchdog`）を自動起票**する。GitHub の watch 通知（メール/モバイル）がそのままアラートになる。
+
+| チェック | 内容 |
+|---|---|
+| systemd | `ocsrc-web` / `ocsrc-api` / `ocsrc-tunnel` が `active` |
+| web | `127.0.0.1:8700/healthz` が 200 |
+| api + DB | `127.0.0.1:8000/healthz` が 200 かつ `"db":"ok"`（Neon 到達性込み） |
+| edge | 公開 URL `/healthz` が 200/302（DNS・TLS・エッジ経路の死活。302 = Access 正常） |
+
+```bash
+bash scripts/install-systemd-watchdog.sh    # timer 常駐化 + 初回チェック即時実行
+systemctl list-timers ocsrc-watchdog.timer  # スケジュール確認
+journalctl -u ocsrc-watchdog.service -n 20  # 直近の判定ログ
+bash scripts/uninstall-systemd-watchdog.sh  # 撤去（rollback）
+```
+
+- 異常が継続しても Issue は乱立せず、既存の open Issue へコメント追記される（1 障害 = 1 Issue）
+- 全項目回復を検知すると回復コメントを付けて自動クローズする（障害の開始/終了が Issue に証跡として残る）
+- 通知には実行ユーザーの `gh` CLI 認証を使用する（secret の新規保存は不要）。`gh auth status` が通ることが前提
+- **限界**: ① エッジ 302 は Access がTunnel より手前で応答するため Tunnel 死活を含まない（Tunnel は systemd active で担保）。② ホスト自体の電源断・ネット断は自己検知できない（Cloudflare 側 Alerting または外形監視の併用を推奨）
 
 ## 🚚 main マージ後の本番反映（重要な注意点）
 
