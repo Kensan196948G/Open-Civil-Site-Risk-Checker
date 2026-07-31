@@ -9,9 +9,9 @@
 | リポジトリ | `Open-Civil-Site-Risk-Checker` |
 | リポジトリURL | `https://github.com/Kensan196948G/Open-Civil-Site-Risk-Checker.git` |
 | 文書種別 | 要件定義書 |
-| 版数 | v1.1 |
+| 版数 | v1.2 |
 | 作成日 | 2026-06-18 |
-| 最終更新日 | 2026-07-11 |
+| 最終更新日 | 2026-07-31 |
 | 想定利用段階 | 企画承認前〜PoC / モック開発前 |
 
 ### 1.1 変更履歴
@@ -20,6 +20,7 @@
 |---|---|---|
 | v1.0 | 2026-06-18 | 初版 |
 | v1.1 | 2026-07-11 | MVP スコープ外要件（FR-605、NFR-201/203/204/205、§15 権限ロール）の位置づけと、無認証・HTTP 運用境界を明文化（Issue #37）。実装アーキテクチャの詳細は `docs/detailed-specification.md` §3 参照 |
+| v1.2 | 2026-07-31 | 運用実態を反映: 本番公開（Cloudflare Tunnel + Access）、本番 DB の Neon PostgreSQL 移行、死活監視（ocsrc-watchdog、PR #110）、NFR-002 実測ベンチマーク整備（PR #107）を追記（§11.1〜11.3.1） |
 
 ---
 
@@ -302,6 +303,8 @@
 | NFR-003 | 外部APIが遅延した場合、部分結果を先に表示する |
 | NFR-004 | 重いGISデータは事前ダウンロード・ローカルDB検索を基本とする |
 
+> ✅ NFR-002 は実測ベンチマークテスト（フロントエンド並列実行 / バックエンド KSJ 近傍検索、PR #107）で継続検証している。
+
 ### 11.2 可用性
 
 | ID | 要件 |
@@ -309,6 +312,8 @@
 | NFR-101 | 外部APIの一部が停止しても、他カテゴリの確認は継続できる |
 | NFR-102 | データ取得失敗時は、失敗理由を画面に表示する |
 | NFR-103 | API接続状態を管理画面で確認できる |
+
+> ✅ 運用面の死活監視として、本番ホストで `ocsrc-watchdog.timer`（5 分間隔）が systemd 3 サービス・web/api healthz（DB 到達性含む）・公開 URL エッジ応答を監視し、異常時はラベル `watchdog` の GitHub Issue を自動起票・全回復で自動クローズする（PR #110、手順は `docs/deploy-backend.md` §5）。
 
 ### 11.3 セキュリティ
 
@@ -332,6 +337,8 @@
 | HTTP 平文は信頼 LAN 内前提 | フロント配信（:8700）は**信頼できる LAN 内**での利用を前提とする。認証情報・個人情報を平文で送信しない構成であることが条件 |
 | LAN 外公開時の必須要件 | 信頼 LAN の外へ公開する場合は、**reverse proxy での TLS 終端 + 認証 + レート制限**を公開前に必ず導入する（`docs/detailed-specification.md` §15.2.3） |
 | 本番 DB パスワード | `infra/.env.example` の `OCSRC_DB_PASSWORD=dev_only_password` は開発専用。**本番では強パスワードへの override が必須**（手順の正本: `docs/deploy-backend.md`） |
+
+**運用実態（2026-07-31 現在）**: インターネット公開は Cloudflare Tunnel + Cloudflare Access（エッジでの TLS 終端・認証）経由で行っており、`frontend/server.mjs` が Access JWT を検証する（上表「LAN 外公開時の必須要件」の TLS・認証を充足。レート制限の明示ルールは残課題）。本番 DB は Neon PostgreSQL（マネージド）で、接続情報は `/etc/ocsrc/api.env`（600）で管理する。LAN 直接アクセス（:8700）は従来どおり信頼 LAN 内前提の無認証経路として併存する。
 
 ### 11.4 監査・説明可能性
 

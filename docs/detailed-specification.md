@@ -9,9 +9,9 @@
 | リポジトリ | `Open-Civil-Site-Risk-Checker` |
 | リポジトリURL | `https://github.com/Kensan196948G/Open-Civil-Site-Risk-Checker.git` |
 | 文書種別 | 詳細仕様設計書 |
-| 版数 | v1.1 |
+| 版数 | v1.2 |
 | 作成日 | 2026-06-18 |
-| 最終更新日 | 2026-07-11 |
+| 最終更新日 | 2026-07-31 |
 | 前提文書 | `docs/requirements.md` |
 
 ### 1.1 変更履歴
@@ -20,6 +20,7 @@
 |---|---|---|
 | v1.0 | 2026-06-18 | 初版（バックエンド中心の構想設計） |
 | v1.1 | 2026-07-11 | 実装実態（フロントエンド中心 SPA + KSJ 空間検索補助バックエンド）へ同期。バックエンド中心構想は将来計画（§3.4 等）として分離。運用境界（無認証・HTTP 平文の設計判断）を明文化（Issue #37）。KSJ バックエンド接続の same-origin 既定化（Issue #57）を反映 |
+| v1.2 | 2026-07-31 | 本番運用実態へ同期: インターネット公開経路（Cloudflare Tunnel + Access、`ocsrc-tunnel`）、本番 DB の Neon PostgreSQL 移行、死活監視（`ocsrc-watchdog.timer`、PR #110）を §3・§9・§15.2 へ反映 |
 
 ---
 
@@ -90,14 +91,26 @@ MVP（Phase 1〜3）は**フロントエンド中心（クライアント完結�
                           - Vite ビルド成果物（dist/）の静的配信
                           - セキュリティヘッダ付与（CSP / X-Frame-Options 等）
                           - /api/* same-origin プロキシ（GET/HEAD のみ）
+                          - 公開経路では Cloudflare Access JWT を検証
                                │  OCSRC_BACKEND_ORIGIN（既定 http://127.0.0.1:8000）
                                ▼
                        [ocsrc-api]  FastAPI（systemd 常駐, 127.0.0.1:8000・LAN 非公開）
                           - GET /healthz / /api/v1/ping / /api/v1/nearby
-                               │  OCSRC_DATABASE_URL
+                               │  OCSRC_DATABASE_URL（TLS）
                                ▼
-                       [ocsrc-db]  PostGIS（docker compose, 127.0.0.1:5432）
-                          - ksj_features（国土数値情報ローカル DB）
+                       [Neon PostgreSQL + PostGIS]（本番・マネージド）
+                          - ksj_features（国土数値情報 DB）
+                          ※ ローカル開発は docker compose の PostGIS（127.0.0.1:5432）
+
+[インターネット利用者ブラウザ]
+  └─(C) HTTPS ──► [Cloudflare edge]  TLS 終端 + Cloudflare Access（認証）
+                        │  Tunnel（outbound 接続・受信ポート開放なし）
+                        ▼
+                  [ocsrc-tunnel]  cloudflared（systemd 常駐）──► ocsrc-web（:8700）
+
+[監視] ocsrc-watchdog.timer（systemd, 5 分間隔）
+  - systemd 3 サービス / web・api healthz（DB 到達性含む）/ 公開 URL エッジ応答を確認
+  - 異常時はラベル watchdog の GitHub Issue を自動起票、全回復で自動クローズ
 ```
 
 ### 3.2 現行構成の要素
@@ -107,18 +120,21 @@ MVP（Phase 1〜3）は**フロントエンド中心（クライアント完結�
 | フロントエンド | React + TypeScript + Vite（`frontend/src/`） | 画面（SCR-000〜008）、外部 API 直接取得、確認優先度判定、AI メモ、レポート生成 |
 | 配信サーバ | `frontend/server.mjs`（依存ゼロ Node.js、systemd `ocsrc-web`） | 静的配信、セキュリティヘッダ、`/api/*` same-origin プロキシ |
 | バックエンド API | FastAPI（`backend/app/`、systemd `ocsrc-api`） | KSJ 空間検索（`/api/v1/nearby`）、ヘルスチェック。**127.0.0.1 バインドで LAN へ直接露出しない** |
-| 空間 DB | PostgreSQL + PostGIS（docker compose `--profile phase2`） | KSJ 取込データ（`ksj_features`）、`ST_DWithin` 近傍検索 |
+| 空間 DB | PostgreSQL + PostGIS（**本番: Neon マネージド** / ローカル開発: docker compose `--profile phase2`） | KSJ 取込データ（`ksj_features`）、`ST_DWithin` 近傍検索 |
 | データ取込 | `python -m app.ingest`（CLI） | KSJ GeoJSON を PostGIS へ取込（冪等・洗い替え） |
+| 公開トンネル | `cloudflared`（systemd `ocsrc-tunnel`） | Cloudflare Tunnel による outbound 接続でエッジと接続（受信ポート開放なし）。エッジ側で TLS 終端 + Cloudflare Access 認証 |
+| 死活監視 | `scripts/ocsrc-watchdog.sh`（systemd `ocsrc-watchdog.timer`、5 分間隔） | systemd 3 サービス・web/api healthz・公開 URL を監視し、異常をラベル `watchdog` の GitHub Issue へ自動起票（`docs/deploy-backend.md` §5） |
 | 永続化（利用者データ） | ブラウザ `localStorage` | 調査案件・システム設定・AI API キー。サーバ側 DB には保存しない |
 
 ### 3.3 通信経路と公開範囲
 
 | 経路 | プロトコル | 公開範囲 | 備考 |
 |---|---|---|---|
-| ブラウザ → ocsrc-web（:8700） | HTTP | 信頼 LAN 内 | §15.2 運用境界参照。LAN 外公開時は TLS 終端等が必須 |
+| ブラウザ → ocsrc-web（:8700） | HTTP | 信頼 LAN 内 | §15.2 運用境界参照。WAN からポート 8700 へは到達不可を維持 |
+| ブラウザ → Cloudflare edge → ocsrc-tunnel → ocsrc-web | HTTPS | インターネット（Cloudflare Access 認証必須） | エッジで TLS 終端 + Access 認証。`frontend/server.mjs` が Access JWT を検証し、JWT/cookie はバックエンドへ転送しない |
 | ブラウザ → 外部公開 API | HTTPS | インターネット | CSP `connect-src` / `img-src` の許可リストで制限 |
 | ocsrc-web → ocsrc-api | HTTP（ループバック） | 同一ホスト内のみ | `/api/*` same-origin プロキシ。転送先は環境変数固定（SSRF 防止） |
-| ocsrc-api → PostGIS | TCP（ループバック） | 同一ホスト内のみ | DB 資格情報は `/etc/ocsrc/api.env`（root:root, 600）で管理 |
+| ocsrc-api → PostgreSQL | TLS（本番: Neon） | 外向き接続のみ | DB 資格情報は `/etc/ocsrc/api.env`（root:root, 600）で管理。ローカル開発はループバックの docker PostGIS |
 
 KSJ 連携（経路 B）は**既定で有効**である（Issue #57）。バックエンド base の解決順位は「① SCR-008 のカスタム URL（`localStorage`） > ② ビルド時 `VITE_OCSRC_BACKEND_URL` > ③ `''`（same-origin 既定）」で、③のときは相対パス（`/api/v1/...`）として配信オリジンの `/api` プロキシ経由で到達する（LAN 上の別端末のブラウザでも追加設定不要）。バックエンド停止・DB 未整備時は「取得失敗（failed）」として誠実に表示し、「該当なし」と区別する（NFR-504）。なお経路 A（外部公開 API）のみでもアプリの他機能は完結する。
 
@@ -504,7 +520,7 @@ https://api.open-meteo.com/v1/forecast?latitude=35.0&longitude=139.0&hourly=prec
 | 保存先 | 内容 |
 |---|---|
 | ブラウザ `localStorage` | 調査案件（`ocsrc-cases`、確認結果スナップショット含む）、システム設定（AI キー・バックエンド URL・既定値）、テーマ |
-| PostGIS `ksj_features` | KSJ 取込データ（河川・公共施設）のみ。**利用者の検索履歴・分析結果はサーバ側に保存しない** |
+| PostGIS `ksj_features`（本番: Neon マネージド PostgreSQL / ローカル開発: docker compose） | KSJ 取込データ（河川・公共施設）のみ。**利用者の検索履歴・分析結果はサーバ側に保存しない** |
 
 ### 9.2 ksj_features テーブル（現行・`backend/app/ksj.py`）
 
@@ -970,7 +986,7 @@ site-risk-check_{YYYYMMDD_HHMM}_{location_slug}.md
 | 前提 | 内容 |
 |---|---|
 | 通信内容 | 公開データの取得結果・画面資材のみ（認証情報・個人情報の送信なし） |
-| ネットワーク | 信頼 LAN 内。インターネットへのポート公開は行わない |
+| ネットワーク | 信頼 LAN 内。インターネットへのポート公開は行わない（公開は §15.2.3 の Cloudflare Tunnel 経由のみ） |
 | ブラウザ→外部 API | HTTPS（CSP の許可リストで送信先を制限） |
 
 #### 15.2.3 LAN 外へ公開する場合の必須要件
@@ -983,6 +999,8 @@ site-risk-check_{YYYYMMDD_HHMM}_{location_slug}.md
 | 2 | 認証 | reverse proxy での Basic 認証 / OIDC（Entra ID 等）連携 |
 | 3 | レート制限 | reverse proxy のレート制限（外部公開 API の利用ポリシー保護のためにも必須） |
 | 4 | 秘密情報の再点検 | `OCSRC_DB_PASSWORD` の強パスワード化（§15.2.4）、`/etc/ocsrc/api.env` の権限確認 |
+
+**公開実態（2026-07-31 現在）**: 上表の要件 1・2 は **Cloudflare Tunnel（`ocsrc-tunnel`）+ Cloudflare Access** で充足して公開中である。エッジで TLS 終端と認証を行い、`frontend/server.mjs` が Access JWT（`Cf-Access-Jwt-Assertion`）を JWKS で検証する。未認証アクセスは Access ログインへ 302 誘導される。要件 3（明示的なレート制限ルール）は未設定の残課題。要件 4 は本番 DB の Neon 移行に伴い、接続文字列を `/etc/ocsrc/api.env`（root:root, 600）で管理する。ポート 8700 の WAN 直接到達不可は維持している（Tunnel は outbound 接続のため受信ポート開放なし）。
 
 > 補足: SCR-008 の AI API キーは `localStorage` 保存のため、共有端末・不特定利用者での運用ではキーを保存しない運用とする。
 
