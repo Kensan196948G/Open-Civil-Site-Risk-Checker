@@ -755,6 +755,12 @@ def classify_priority(findings: list[Finding], data_quality: DataQuality) -> str
 
 > 現行実装はフロントエンド（`frontend/src/risk/memo.ts`・`aiMemo.ts`）にあり、テンプレート生成を基本とする。AI 生成はサーバー側ブローカー（`backend/app/ai.py`・`POST /api/v1/ai/memo`）を経由し、Anthropic API キーはサーバー環境変数（`OCSRC_ANTHROPIC_API_KEY`）のみで管理する（外部評価 Phase 0）。ブラウザから Anthropic API への直接送信・キー保存は行わない。
 
+**利用量制御（CodeRabbit #241 指摘対応・§15.2.1 の設計判断）**: AI ブローカーは
+コストを伴う外部 API 呼び出しのため、web 層（IP 別・60 秒・20 回の POST レート制限）と
+API 層（プロセス内・60 秒・10 回の固定窓 + 同時実行上限 2、超過は 429 で即拒否）で
+利用量を制限する。AI 経路の上流アイドルタイムアウトは 95 秒（`OCSRC_AI_PROXY_TIMEOUT_MS`）、
+POST ボディ受信は 64KB 上限 + `OCSRC_PROXY_TIMEOUT_MS` の受信タイムアウトを適用する。
+
 ### 12.1 AIメモ生成入力
 
 ```json

@@ -79,6 +79,32 @@ function request(port, path, { method = 'GET', headers = {}, body } = {}) {
   });
 }
 
+/** chunked POST を指定間隔で分割送信する（ボディ受信タイムアウト検証用）。 */
+function slowChunkedPost(port, path, chunks, chunkDelayMs) {
+  return new Promise((resolve) => {
+    const req = http.request(
+      { host: '127.0.0.1', port, path, method: 'POST', headers: { 'transfer-encoding': 'chunked', 'content-type': 'application/json' } },
+      (r) => {
+        const parts = [];
+        r.on('data', (c) => parts.push(c));
+        r.on('end', () => resolve({ status: r.statusCode, body: Buffer.concat(parts).toString('utf8') }));
+      },
+    );
+    req.on('error', () => resolve({ status: 0, body: '' }));
+    let i = 0;
+    const send = () => {
+      if (i >= chunks.length) {
+        req.end();
+        return;
+      }
+      req.write(chunks[i]);
+      i += 1;
+      setTimeout(send, chunkDelayMs);
+    };
+    send();
+  });
+}
+
 /** OS に空きポートを割り当てさせて返す。 */
 function getPort() {
   return new Promise((res, rej) => {
@@ -153,8 +179,17 @@ const backend = http.createServer((req, res) => {
     const chunks = [];
     req.on('data', (c) => chunks.push(c));
     req.on('end', () => {
+      const body = Buffer.concat(chunks).toString('utf8');
+      // "slow" を含むプロンプトは 1.2 秒後に応答（AI 経路の長いアイドルタイムアウト検証用）。
+      if (body.includes('"slow"')) {
+        setTimeout(() => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ seenPath: req.url, method: req.method, body }));
+        }, 1200);
+        return;
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ seenPath: req.url, method: req.method, body: Buffer.concat(chunks).toString('utf8'), headers: req.headers }));
+      res.end(JSON.stringify({ seenPath: req.url, method: req.method, body, headers: req.headers }));
     });
     return;
   }
@@ -175,6 +210,7 @@ const webUpPort = await getPort();
 const webDownPort = await getPort();
 const webAuthPort = await getPort();
 const webJwksDownPort = await getPort();
+const webSlowPort = await getPort();
 const deadPort = await getPort(); // 取得後 listen しない = backend 停止相当
 const jwksDeadPort = await getPort(); // 取得後 listen しない = JWKS 到達不可相当
 
@@ -187,7 +223,7 @@ const jwksPort = await getPort();
 await new Promise((res) => jwksServer.listen(jwksPort, '127.0.0.1', res));
 const jwksUrl = `http://127.0.0.1:${jwksPort}/certs`;
 
-let webUp, webDown, webAuth, webJwksDown;
+let webUp, webDown, webAuth, webJwksDown, webSlow;
 try {
   webUp = await startWeb({
     PORT: String(webUpPort),
@@ -207,6 +243,14 @@ try {
     OCSRC_ACCESS_TEAM_DOMAIN: ACCESS_TEAM,
     OCSRC_ACCESS_AUD: ACCESS_AUD,
     OCSRC_ACCESS_CERTS_URL: jwksUrl,
+  });
+  // 通常プロキシ 400ms / AI 経路 1600ms の短縮設定でタイムアウト差を検証する。
+  webSlow = await startWeb({
+    PORT: String(webSlowPort),
+    DIST: distTmp,
+    OCSRC_BACKEND_ORIGIN: `http://127.0.0.1:${backendPort}`,
+    OCSRC_PROXY_TIMEOUT_MS: '400',
+    OCSRC_AI_PROXY_TIMEOUT_MS: '1600',
   });
 
   // ---- 1. セキュリティヘッダ（静的・healthz・405・SPA fallback） ----
@@ -270,6 +314,23 @@ try {
     aiPost.status === 200 && aiPostBody.method === 'POST' && aiPostBody.body === '{"prompt":"テスト"}' && aiPostBody.headers['content-type'] === 'application/json',
     `status=${aiPost.status} body=${aiPost.body.slice(0, 120)}`,
   );
+
+  // AI 経路は通常プロキシより長いアイドルタイムアウトを使う。
+  // webSlow は PROXY=400ms / AI=1600ms のため、1.2 秒応答が 502 にならず通るはず。
+  const aiSlow = await request(webSlowPort, '/api/v1/ai/memo', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt: 'slow' }),
+  });
+  check(
+    'AI route uses long idle timeout (slow upstream returns 200, not 502)',
+    aiSlow.status === 200 && JSON.parse(aiSlow.body).body.includes('"slow"'),
+    `status=${aiSlow.status} body=${aiSlow.body.slice(0, 100)}`,
+  );
+
+  // 低速 chunked POST はボディ受信タイムアウト（PROXY_TIMEOUT_MS=800）で切断される。
+  const slowBody = await slowChunkedPost(webUpPort, '/api/v1/ai/memo', ['{"prompt":"a', 'b', 'c', 'd"}'], 350);
+  check('slow chunked POST body receive times out (408 or closed)', slowBody.status === 408 || slowBody.status === 0, `status=${slowBody.status}`);
 
   // ---- 2b. /api プロキシ（ヘッダ精製: Issue #43 items 6/7） ----
   console.log('▶ /api proxy (header hygiene)');
@@ -412,6 +473,7 @@ try {
   webDown?.kill('SIGTERM');
   webAuth?.kill('SIGTERM');
   webJwksDown?.kill('SIGTERM');
+  webSlow?.kill('SIGTERM');
   jwksServer.closeAllConnections?.();
   await new Promise((res) => jwksServer.close(res));
   backend.closeAllConnections?.();

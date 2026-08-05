@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-5"
     anthropic_timeout_seconds: float = 90.0
     anthropic_max_prompt_chars: int = 20_000
+    # AI 利用量制御（コストのある外部 API 呼び出しの踏み台・乱用を防ぐ）。
+    anthropic_rate_limit_per_window: int = 10
+    anthropic_rate_limit_window_seconds: float = 60.0
+    anthropic_max_concurrency: int = 2
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -353,6 +353,13 @@ sudo systemctl restart ocsrc-api
 ブラウザは `GET /api/v1/ai/status`（設定状態）と `POST /api/v1/ai/memo`（生成）を
 同一オリジンの `/api` プロキシ経由で呼ぶ。キーはサーバーからブラウザへ一切送られない。
 
+**利用量制御（CodeRabbit #241 指摘対応）**:
+
+- web 層: AI POST は IP 別・60 秒・20 回のレート制限（`server.mjs`）
+- API 層: プロセス内・60 秒・10 回の固定窓 + 同時実行上限 2（既定。`OCSRC_ANTHROPIC_RATE_LIMIT_PER_WINDOW` / `OCSRC_ANTHROPIC_MAX_CONCURRENCY`）
+- AI 経路の上流アイドルタイムアウトは通常プロキシより長い 95 秒（既定。`OCSRC_AI_PROXY_TIMEOUT_MS`）
+- POST ボディは 64KB 上限 + 受信タイムアウト（`OCSRC_PROXY_TIMEOUT_MS`）
+
 ## 🚚 main マージ後の本番反映（重要な注意点）
 
 **このプロジェクトは開発機＝本番機の単一ホスト構成であり、GitHub Actions の CI（`.github/workflows/ci.yml`）は lint / typecheck / test / build / security のみで、本番への自動デプロイ工程を含まない。** つまり `main` へ PR がマージされても、このホスト上で明示的にビルドし直すまで本番配信には反映されない。

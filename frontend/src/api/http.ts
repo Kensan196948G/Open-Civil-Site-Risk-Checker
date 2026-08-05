@@ -16,6 +16,8 @@ export interface FetchOpts {
   /** タイムアウト[ms]。既定 15 秒。 */
   timeout?: number;
   init?: RequestInit;
+  /** 非 2xx 応答の JSON ボディも data として保持する（readiness の detail 展開などに使う）。 */
+  errorBody?: boolean;
 }
 
 /** 現在時刻を HH:MM:SS（JST 表示前提のローカル時刻）で返す。 */
@@ -41,7 +43,15 @@ export async function fetchJson<T = unknown>(url: string, opts: FetchOpts = {}):
     const res = await fetch(url, { ...opts.init, signal: controller.signal });
     const ms = Math.round(performance.now() - start);
     if (!res.ok) {
-      return { ok: false, status: res.status, code: String(res.status), ms, data: null, error: `HTTP ${res.status}` };
+      let data: T | null = null;
+      if (opts.errorBody) {
+        try {
+          data = (await res.json()) as T;
+        } catch {
+          data = null;
+        }
+      }
+      return { ok: false, status: res.status, code: String(res.status), ms, data, error: `HTTP ${res.status}` };
     }
     const data = (await res.json()) as T;
     return { ok: true, status: res.status, code: String(res.status), ms, data, error: '—' };

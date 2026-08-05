@@ -49,10 +49,13 @@ WantedBy=timers.target
 
 ```bash
 # 例: ローカル PostGIS へ復元（docker compose の phase2 を利用）
+sha256sum -c /var/backups/ocsrc/ocsrc-XXXX.dump.sha256   # ★ pg_restore より前に必ず検証（CodeRabbit #241 指摘対応）
 createdb -h 127.0.0.1 -U postgres ocsrc_restore
 pg_restore --no-owner --no-privileges \
   -h 127.0.0.1 -U postgres -d ocsrc_restore /var/backups/ocsrc/ocsrc-XXXX.dump
 ```
+
+> ハッシュ検証が失敗した場合は **pg_restore を実行せず**、バックアップの再取得または別世代を選ぶこと。
 
 Neon の場合はコンソールまたは Neon MCP で復元用ブランチを作成し、その DSN へ
 `pg_restore` する。**本番 `main` ブランチへは直接リストアしない。**
@@ -62,7 +65,7 @@ Neon の場合はコンソールまたは Neon MCP で復元用ブランチを�
 1. `ksj_features` の件数・最終取得日時がバックアップ時点と一致
 2. サンプル地点の `/api/v1/nearby` が 200 を返し、件数が期待どおり
 3. `/livez` が 200、`/readyz` が `db:ok`
-4. ダンプの SHA-256 が一致（`sha256sum -c`）
+4. ダンプの SHA-256 が一致（`sha256sum -c`。復元前検証で実施済みのため、復元後は任意の再確認）
 
 ### 2.3 復元演習の記録
 
