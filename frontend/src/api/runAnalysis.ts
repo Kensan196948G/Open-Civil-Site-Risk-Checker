@@ -18,8 +18,9 @@ import type {
 
 // 地点確認のオーケストレーション（要件 §6.1 / NFR-003 部分結果表示）。
 // 実 API（Nominatim / Overpass / Open-Meteo / 地理院標高 / KSJ バックエンド）を並行実行し、
-// 取得できないソース（KSJ バックエンド停止・DB未整備 / PLATEAU タイムアウト / xROAD 規約未同意）は
-// 誠実に skipped / failed として表示する。
+// 取得できないソース（KSJ バックエンド停止・DB未整備 / PLATEAU 未実装 / xROAD 規約未同意）は
+// 誠実に skipped / not_attempted として表示する。
+// 実通信を行っていない項目に HTTP コードや応答時間を記録しない（外部評価 Phase 0: 疑似ログ廃止）。
 
 export interface AnalysisInputForm {
   type: 'address' | 'coord';
@@ -162,28 +163,53 @@ export async function runAnalysis(form: AnalysisInputForm, opts: RunOpts = {}): 
         onStep('ksj', 'skipped');
       });
 
-  // ハザードマップ: タイル重ね合わせは可能。重なりの自動判定はしない（視覚確認要）。
-  const hazardP = delay(500).then(() => {
+  // ハザードマップ: タイルレイヤは表示可能（重ね合わせは利用者が目視確認）。
+  // 実タイルリクエストの成否を検証していないため、HTTP 200 等の疑似ログは記録しない。
+  const hazardP = Promise.resolve().then(() => {
     if (cat.hazard) {
       findings.push(hazardVisualFinding());
-      logs.push({ time: nowHMS(), source: 'hazard_portal', endpoint: 'GET /raster/flood_l2/{z}/{x}/{y}', code: '200', status: 'success', ms: '—', error: '—' });
+      logs.push({
+        time: nowHMS(),
+        source: 'hazard_portal',
+        endpoint: '（タイルレイヤ表示のみ・実リクエストなし）',
+        code: '—',
+        status: 'visual_only',
+        ms: '—',
+        error: '重ね合わせ表示は可能。区域判定は目視確認が必要で、実タイル取得の成否は検証していない',
+      });
       onStep('hazard_portal', 'success');
     } else {
       onStep('hazard_portal', 'skipped');
     }
   });
 
-  // PLATEAU: タイムアウトを再現（取得失敗の扱いを実証、要件 FR-105 / AC-006 / AC-009）。
-  const plateauP = delay(700).then(() => {
+  // PLATEAU: 未実装（実リクエストなし）。固定タイムアウトを疑似記録しない。
+  const plateauP = Promise.resolve().then(() => {
     findings.push(dataQualityFinding('plateau'));
-    logs.push({ time: nowHMS(), source: 'plateau', endpoint: 'GET /api/v1/datasets?bbox=...', code: '—', status: 'timeout', ms: '20000', error: 'Read timed out after 20s' });
-    onStep('plateau', 'failed');
+    logs.push({
+      time: nowHMS(),
+      source: 'plateau',
+      endpoint: '（未実装・実リクエストなし）',
+      code: '—',
+      status: 'not_attempted',
+      ms: '—',
+      error: 'PLATEAU アダプタ未実装。実通信による取得・失敗判定は行っていない',
+    });
+    onStep('plateau', 'skipped');
   });
 
-  // xROAD: 利用規約未同意のためスキップ。
-  const xroadP = delay(800).then(() => {
+  // xROAD: 利用規約未同意のため未連携（実リクエストなし）。固定 401 を疑似記録しない。
+  const xroadP = Promise.resolve().then(() => {
     findings.push(dataQualityFinding('xroad'));
-    logs.push({ time: nowHMS(), source: 'xroad', endpoint: 'GET /api/traffic', code: '401', status: 'skipped', ms: '—', error: '利用規約未同意のためスキップ' });
+    logs.push({
+      time: nowHMS(),
+      source: 'xroad',
+      endpoint: '（未連携・実リクエストなし）',
+      code: '—',
+      status: 'not_attempted',
+      ms: '—',
+      error: 'xROAD は利用規約未同意のため未連携。実 HTTP リクエストなし',
+    });
     onStep('xroad', 'skipped');
   });
 

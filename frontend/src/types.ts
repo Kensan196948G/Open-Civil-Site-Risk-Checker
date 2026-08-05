@@ -100,7 +100,8 @@ export interface LogEntry {
   endpoint: string;
   /** HTTP コード。コードを持たない処理は '—'。 */
   code: string;
-  status: 'success' | 'timeout' | 'failed' | 'skipped';
+  /** 実通信の結果を表す。not_attempted/visual_only は「実リクエストなし」の誠実な区別（外部評価 Phase 0）。 */
+  status: 'success' | 'timeout' | 'failed' | 'skipped' | 'not_attempted' | 'visual_only';
   /** 応答時間[ms]。 */
   ms: string;
   error: string;

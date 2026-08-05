@@ -7,7 +7,7 @@ const COLS = '1.2fr 1.3fr 2.4fr 0.7fr 0.9fr 0.8fr 2fr';
 
 const codeColor = (code: string) => (code === '200' ? 'var(--ok-text)' : code === '—' ? 'var(--text-3)' : 'var(--warn-text)');
 const statColor = (status: string) =>
-  ({ success: 'var(--ok-text)', timeout: 'var(--warn-text)', failed: 'var(--err-text)', skipped: 'var(--text-3)' }[status] || 'var(--text-3)');
+  ({ success: 'var(--ok-text)', timeout: 'var(--warn-text)', failed: 'var(--err-text)', skipped: 'var(--text-3)', not_attempted: 'var(--text-3)', visual_only: 'var(--warn-text)' }[status] || 'var(--text-3)');
 
 export function LogsScreen() {
   const { state } = useApp();
@@ -18,7 +18,7 @@ export function LogsScreen() {
       <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-007</div>
       <h1 style={{ margin: '3px 0 4px', fontSize: 21, fontWeight: 700 }}>取得ログ</h1>
       <p style={{ margin: '0 0 18px', fontSize: 12.5, color: 'var(--text-2)' }}>
-        API実行履歴です。レート制限・認証エラー・タイムアウトを区別して記録します。
+        API実行履歴です。レート制限・認証エラー・タイムアウトを区別して記録します。実通信を行っていない項目は「not_attempted / visual_only」と明示します。
         {!state.logs.length && '（まだ実行されていないため、参考のサンプルを表示しています。）'}
       </p>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', fontFamily: "'IBM Plex Mono', monospace" }}>
