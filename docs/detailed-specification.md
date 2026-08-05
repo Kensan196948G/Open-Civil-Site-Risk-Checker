@@ -131,7 +131,7 @@ MVP（Phase 1〜3）は**フロントエンド中心（クライアント完結�
 
 | 経路 | プロトコル | 公開範囲 | 備考 |
 |---|---|---|---|
-| ブラウザ → ocsrc-web（:8700） | HTTP | 信頼 LAN 内 | §15.2 運用境界参照。WAN からポート 8700 へは到達不可を維持 |
+| ブラウザ → ocsrc-web（:8700） | HTTP | 信頼 LAN 内 | §15.2 運用境界参照。WAN からポート 8700 へは到達不可を維持。本番は Access JWT 必須（外部評価 #240） |
 | ブラウザ → Cloudflare edge → ocsrc-tunnel → ocsrc-web | HTTPS | インターネット（Cloudflare Access 認証必須） | エッジで TLS 終端 + Access 認証。`frontend/server.mjs` が Access JWT を検証し、JWT/cookie はバックエンドへ転送しない |
 | ブラウザ → 外部公開 API | HTTPS | インターネット | CSP `connect-src` / `img-src` の許可リストで制限 |
 | ocsrc-web → ocsrc-api | HTTP（ループバック） | 同一ホスト内のみ | `/api/*` same-origin プロキシ。転送先は環境変数固定（SSRF 防止） |
@@ -988,9 +988,13 @@ site-risk-check_{YYYYMMDD_HHMM}_{location_slug}.md
 バックエンド API（`/api/v1/*`）は認証を持たない。これは以下を根拠とする**意図的な設計判断**であり、実装漏れではない。
 
 1. 提供するデータは**国土交通省の公共オープンデータ（国土数値情報）のみ**であり、個人情報・業務機密を含まない。
-2. API は**読み取り専用（GET のみ）**で、データを変更・削除する手段を持たない。
+2. API は**読み取り専用（GET のみ。AI ブローカー `POST /api/v1/ai/memo` を除く）**で、データを変更・削除する手段を持たない。
 3. 利用者の入力（候補地住所等）はサーバ側に保存されず、認証で保護すべきサーバ側リソースが存在しない。
-4. API は 127.0.0.1 バインドで、到達経路は same-origin プロキシ（信頼 LAN 内）に限定される。
+4. API は 127.0.0.1 バインドで、到達経路は same-origin プロキシに限定される。
+5. **外部評価 #240 対応**: 本番（`OCSRC_ACCESS_TEAM_DOMAIN` / `OCSRC_ACCESS_AUD` 設定時）は
+   LAN 直アクセスにも Access JWT を必須化した。LAN 利用者は公開 URL 経由で Access セッションを
+   取得し、個人 ID（Access の IdP が発行する JWT の email 等）で識別される。開発モード
+   （Access 未設定）のみ LAN 直アクセスを許可する。
 
 #### 15.2.2 HTTP 平文は信頼 LAN 内前提である
 
@@ -1014,6 +1018,10 @@ site-risk-check_{YYYYMMDD_HHMM}_{location_slug}.md
 | 4 | 秘密情報の再点検 | `OCSRC_DB_PASSWORD` の強パスワード化（§15.2.4）、`/etc/ocsrc/api.env` の権限確認 |
 
 **公開実態（2026-07-31 現在）**: 上表の要件 1・2 は **Cloudflare Tunnel（`ocsrc-tunnel`）+ Cloudflare Access** で充足して公開中である。エッジで TLS 終端と認証を行い、`frontend/server.mjs` が Access JWT（`Cf-Access-Jwt-Assertion`）を JWKS で検証する。未認証アクセスは Access ログインへ 302 誘導される。要件 3（明示的なレート制限ルール）は未設定の残課題。要件 4 は本番 DB の Neon 移行に伴い、接続文字列を `/etc/ocsrc/api.env`（root:root, 600）で管理する。ポート 8700 の WAN 直接到達不可は維持している（Tunnel は outbound 接続のため受信ポート開放なし）。
+
+> **更新（2026-08-05・外部評価 #240）**: JWT 検証は Tunnel 経由に加えて **LAN 直アクセスにも適用**。
+> Access 未設定の開発モード以外で、`/healthz` を除く全経路が認証必須となった。要件 3
+> （レート制限）は web 層（認証失敗 10 回/60s）+ AI POST（20 回/60s）+ API 層（AI 10 回/60s・同時実行 2）を導入済み。
 
 > 補足: 外部評価 Phase 0 以降、AI API キーはブラウザ・localStorage に保存しない。サーバー側の `OCSRC_ANTHROPIC_API_KEY` のみで管理するため、共有端末でのキー漏えいリスクは解消される。
 

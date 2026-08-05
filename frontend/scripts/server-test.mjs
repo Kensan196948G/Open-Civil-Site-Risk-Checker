@@ -383,9 +383,14 @@ try {
   const CF_IP = { 'CF-Connecting-IP': '203.0.113.10' };
   const jwtHeader = (token) => ({ ...CF_IP, 'Cf-Access-Jwt-Assertion': token });
 
-  // LAN 直アクセス（cf-connecting-ip なし）は Access 設定があっても従来どおり素通し。
-  const lanDirect = await request(webAuthPort, '/');
-  check('access: LAN direct access stays 200 without token', lanDirect.status === 200 && lanDirect.body.includes('ocsrc-test'));
+  // 外部評価 #240: Access 設定時は LAN 直アクセスにも JWT を要求する。
+  const lanDirectNoToken = await request(webAuthPort, '/');
+  check('access: LAN direct access without token is 403', lanDirectNoToken.status === 403, `status=${lanDirectNoToken.status}`);
+  const lanDirectOk = await request(webAuthPort, '/', { headers: { 'Cf-Access-Jwt-Assertion': signAccessJwt() } });
+  check('access: LAN direct access with valid JWT is 200', lanDirectOk.status === 200 && lanDirectOk.body.includes('ocsrc-test'), `status=${lanDirectOk.status}`);
+  // Access 未設定（開発モード）の webUp は LAN 直アクセスを許可する。
+  const devLanDirect = await request(webUpPort, '/');
+  check('access: dev mode (Access unset) keeps LAN direct 200', devLanDirect.status === 200, `status=${devLanDirect.status}`);
 
   const noToken = await request(webAuthPort, '/', { headers: CF_IP });
   check('access: tunnel request without JWT is 403', noToken.status === 403, `status=${noToken.status}`);

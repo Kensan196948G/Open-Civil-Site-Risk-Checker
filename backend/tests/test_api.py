@@ -50,6 +50,7 @@ def test_readyz_with_unreachable_database_returns_503() -> None:
     res = client.get("/readyz")
     assert res.status_code == 503
     assert res.json()["detail"]["db"] in ("error", "unavailable")
+    assert res.json()["detail"]["db_error"] in ("connect", "unknown", "timeout")
 
 
 def test_healthz_is_legacy_alias_of_readyz() -> None:
