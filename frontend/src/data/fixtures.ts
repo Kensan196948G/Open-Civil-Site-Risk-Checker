@@ -3,8 +3,8 @@ import type { Finding, LogEntry } from '../types';
 // デザインモック由来のフォールバック確認結果。
 // 用途:
 //  1) 個別アダプタの取得失敗時に、該当カテゴリの代替表示として使う（要件 AC-009）。
-//  2) data_quality（PLATEAU タイムアウト / xROAD 未連携）の固定項目を供給する。
-//     これらは「取得失敗・未連携」を誠実に表すための項目であり、常に表示してよい。
+//  2) data_quality（PLATEAU 未実装 / xROAD 未連携）の固定項目を供給する。
+//     実通信を行っていないため HTTP コード・応答時間は記録しない（外部評価 Phase 0: 疑似ログ廃止）。
 //
 // 注意: これらは霞が関サンプルを前提とした参考データであり、実 API 取得値が
 // 得られた場合は runAnalysis 側で実データに置き換えられる。
@@ -152,13 +152,13 @@ export const FALLBACK_FINDINGS: Finding[] = [
     id: 'dq-1',
     category: 'data_quality',
     priority: 'D',
-    title: 'PLATEAUデータ：取得失敗',
+    title: 'PLATEAUデータ：未実装（取得試行なし）',
     summary:
-      'PLATEAUアダプタでタイムアウトが発生しました。3D都市モデルによる建物・周辺密度確認は未取得です。判断材料が不足しています。',
-    status: 'failed',
+      'PLATEAUアダプタは未実装のため実リクエストを行っていません。3D都市モデルによる建物・周辺密度確認は未取得です。判断材料が不足しています。',
+    status: 'no_data',
     distance_m: null,
     caution:
-      '再実行するか、対象地域のデータ整備状況を確認してください。Dは判断材料不足を意味します。',
+      '実通信による取得失敗ではなく未実装です（タイムアウト等の固定値を記録していません）。Dは判断材料不足を意味します。',
     evidence: [
       {
         source_key: 'plateau',
@@ -166,8 +166,8 @@ export const FALLBACK_FINDINGS: Finding[] = [
         attribution: 'PLATEAU / 国土交通省',
         fetched_at: '—',
         source_updated_at: '—',
-        quality_note: 'Read timeout (20s)',
-        props: { error: 'timeout' },
+        quality_note: '未実装・実リクエストなし',
+        props: { status: 'not_attempted' },
       },
     ],
   },
@@ -175,13 +175,13 @@ export const FALLBACK_FINDINGS: Finding[] = [
     id: 'dq-2',
     category: 'data_quality',
     priority: 'D',
-    title: 'xROAD連携：未連携',
+    title: 'xROAD連携：未連携（実リクエストなし）',
     summary:
-      'xROAD APIは利用規約同意が必要なため未連携です。道路交通量・旅行速度・道路施設情報は未取得です。',
+      'xROAD APIは利用規約同意が必要なため未連携です。実 HTTP リクエストは行っておらず、道路交通量・旅行速度・道路施設情報は未取得です。',
     status: 'no_data',
     distance_m: null,
     caution:
-      'API利用規約への同意後に連携できます。対象道路範囲（直轄国道等）に注意してください。',
+      'API利用規約への同意後に連携できます。401 等の固定疑似ログは記録しません。対象道路範囲（直轄国道等）に注意してください。',
     evidence: [
       {
         source_key: 'xroad',
@@ -189,8 +189,8 @@ export const FALLBACK_FINDINGS: Finding[] = [
         attribution: 'xROAD / 国土交通省',
         fetched_at: '—',
         source_updated_at: '—',
-        quality_note: '利用規約未同意',
-        props: { status: 'skipped' },
+        quality_note: '利用規約未同意・実リクエストなし',
+        props: { status: 'not_attempted' },
       },
     ],
   },
@@ -198,6 +198,7 @@ export const FALLBACK_FINDINGS: Finding[] = [
 
 /** 取得ログのフォールバック（実 API 実行前の空状態などで参照）。 */
 export const FALLBACK_LOGS: LogEntry[] = [
-  { time: '—', source: 'plateau', endpoint: 'GET /api/v1/datasets?bbox=...', code: '—', status: 'timeout', ms: '20000', error: 'Read timed out after 20s' },
-  { time: '—', source: 'xroad', endpoint: 'GET /api/traffic', code: '401', status: 'skipped', ms: '—', error: '利用規約未同意のためスキップ' },
+  { time: '—', source: 'hazard_portal', endpoint: '（タイルレイヤ表示のみ）', code: '—', status: 'visual_only', ms: '—', error: '実タイルリクエストなし・目視確認要' },
+  { time: '—', source: 'plateau', endpoint: '（未実装）', code: '—', status: 'not_attempted', ms: '—', error: '実リクエストなし' },
+  { time: '—', source: 'xroad', endpoint: '（未連携）', code: '—', status: 'not_attempted', ms: '—', error: '利用規約未同意・実リクエストなし' },
 ];

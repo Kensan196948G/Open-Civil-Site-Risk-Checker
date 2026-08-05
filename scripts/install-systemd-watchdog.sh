@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # ocsrc-watchdog（本番ヘルスチェック + GitHub Issue 通知）を systemd timer として常駐化する。
+# 外部評価 Phase 0 以降: インシデント集約（1 障害 = 1 Issue・コメント 30 分抑制）を行う。
 # - /etc/systemd/system/ocsrc-watchdog.service（oneshot）と .timer（5 分間隔）を生成
 # - enable --now で有効化し、初回チェックを即時実行して結果を表示
 #
@@ -14,10 +15,16 @@ UNIT_PATH="/etc/systemd/system/${SERVICE}.service"
 TIMER_PATH="/etc/systemd/system/${SERVICE}.timer"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WATCHDOG="${PROJECT_DIR}/scripts/ocsrc-watchdog.sh"
+STATE_DIR="/var/lib/ocsrc-watchdog"
 RUN_USER="${SUDO_USER:-$(id -un)}"
 RUN_GROUP="$(id -gn "${RUN_USER}")"
 
 [[ -x "${WATCHDOG}" ]] || chmod +x "${WATCHDOG}"
+
+# インシデント集約用の状態ディレクトリ（watchdog 実行ユーザーが書き込めるようにする）。
+sudo mkdir -p "${STATE_DIR}"
+sudo chown "${RUN_USER}:${RUN_GROUP}" "${STATE_DIR}"
+sudo chmod 750 "${STATE_DIR}"
 
 # gh の実体ディレクトリを unit の PATH へ動的注入する（install-systemd.sh の
 # NODE_DIR と同じパターン）。snap / brew / ~/.local/bin 等の非標準パスにあると
@@ -41,6 +48,7 @@ Type=oneshot
 User=${RUN_USER}
 Group=${RUN_GROUP}
 WorkingDirectory=${PROJECT_DIR}
+Environment=OCSRC_WATCHDOG_STATE_DIR=${STATE_DIR}
 # gh / curl / systemctl の解決に必要な最小 PATH（gh の実体ディレクトリを先頭に注入）
 Environment=PATH=${GH_DIR:+${GH_DIR}:}/usr/local/bin:/usr/bin:/bin
 ExecStart=/bin/bash ${WATCHDOG}

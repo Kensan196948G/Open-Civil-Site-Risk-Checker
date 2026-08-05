@@ -1,13 +1,12 @@
 import { fetchJson } from '../api/http';
+import { ksjBaseUrl } from '../api/ksj';
 import { buildMemoText } from './memo';
 import type { Finding, SiteLocation } from '../types';
-import type { AiSettings } from '../settings/aiSettings';
 
-// AI調査メモの実 AI 生成（要件 FR-401〜405 / §3.2 / 詳細仕様 Sprint 4）。
-// プロバイダは Anthropic（Claude）のみ（運用方針）。
-// テンプレート版メモ（根拠つき）を土台に LLM で肉付けし、
+// AI調査メモの生成（要件 FR-401〜405 / §3.2 / 詳細仕様 Sprint 4）。
+// 外部評価 Phase 0: ブラウザは Anthropic API を直接呼ばず、自社バックエンドの
+// AI ブローカー（POST /api/v1/ai/memo）を経由する。API キーはサーバー側のみ。
 // 生成結果は禁止表現チェック + 免責文の必須化を通してから画面に渡す。
-// 検出した禁止表現は黙って改変せず、警告として利用者に提示する（誠実な表示）。
 
 /** 断定を示す禁止表現（要件 §3.2）。部分一致で検出し、警告表示に使う。 */
 export const FORBIDDEN_EXPRESSIONS = [
@@ -62,45 +61,11 @@ export function buildAiMemoPrompt(location: SiteLocation, findings: Finding[]): 
   ].join('\n');
 }
 
-export interface GenerateRequest {
-  url: string;
-  init: RequestInit;
-}
-
-/** Anthropic Messages API の生成リクエストを組み立てる（pure）。 */
-export function buildGenerateRequest(settings: AiSettings, prompt: string): GenerateRequest {
-  return {
-    url: 'https://api.anthropic.com/v1/messages',
-    init: {
-      method: 'POST',
-      headers: {
-        'x-api-key': settings.apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: settings.model,
-        max_tokens: 3000,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    },
-  };
-}
-
-interface AnthropicResponse {
-  content?: { type: string; text?: string }[];
-}
-
-/** Anthropic 応答からテキストを取り出す（pure）。解析不能は null。 */
-export function extractResponseText(data: unknown): string | null {
-  if (!data || typeof data !== 'object') return null;
-  const d = data as AnthropicResponse;
-  const text = d.content
-    ?.filter((b) => b.type === 'text' && typeof b.text === 'string')
-    .map((b) => b.text)
-    .join('');
-  return text && text.trim() ? text.trim() : null;
+interface AiMemoResponse {
+  ok?: boolean;
+  text?: string;
+  error?: string;
+  model?: string;
 }
 
 export interface AiMemoResult {
@@ -112,36 +77,42 @@ export interface AiMemoResult {
   message: string;
 }
 
-/** AI でメモを生成する（キーの送信先は Anthropic のみ）。 */
+/** サーバー側 AI ブローカーでメモを生成する（キーはブラウザに存在しない）。 */
 export async function generateAiMemo(
-  settings: AiSettings,
   location: SiteLocation,
   findings: Finding[],
 ): Promise<AiMemoResult> {
-  const req = buildGenerateRequest(settings, buildAiMemoPrompt(location, findings));
-  const out = await fetchJson<AnthropicResponse>(req.url, { timeout: 90000, init: req.init });
+  const prompt = buildAiMemoPrompt(location, findings);
+  const out = await fetchJson<AiMemoResponse>(`${ksjBaseUrl()}/api/v1/ai/memo`, {
+    timeout: 90000,
+    init: {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    },
+  });
 
-  if (!out.ok || !out.data) {
+  if (!out.ok || !out.data?.ok || typeof out.data.text !== 'string') {
+    const detail = out.data?.error || out.error || '不明なエラー';
     if (out.status === 401 || out.status === 403) {
-      return { ok: false, warnings: [], message: `認証失敗（HTTP ${out.status}）。システム設定で API キーを確認してください。` };
+      return { ok: false, warnings: [], message: `認証失敗（HTTP ${out.status}）。サーバー側 API キーを確認してください。` };
     }
     if (out.status === 429) {
       return { ok: false, warnings: [], message: 'レート制限（HTTP 429）。時間をおいて再試行してください。' };
     }
-    return { ok: false, warnings: [], message: `生成に失敗しました（${out.status ? `HTTP ${out.status}: ` : ''}${out.error}）` };
+    if (out.status === 503) {
+      return { ok: false, warnings: [], message: `AI はサーバー側で利用できません（${detail}）` };
+    }
+    return { ok: false, warnings: [], message: `生成に失敗しました（${out.status ? `HTTP ${out.status}: ` : ''}${detail}）` };
   }
 
-  const raw = extractResponseText(out.data);
-  if (!raw) {
-    return { ok: false, warnings: [], message: '応答の解析に失敗しました（モデル名が正しいか確認してください）。' };
-  }
-
+  const raw = out.data.text;
   const text = ensureDisclaimer(raw);
   const warnings = findForbiddenExpressions(text);
   return {
     ok: true,
     text,
     warnings,
-    message: `AI 生成が完了しました（Claude / ${settings.model}）。内容を確認のうえ必要に応じて編集してください。`,
+    message: `AI 生成が完了しました（Claude / ${out.data.model || '—'}）。内容を確認のうえ必要に応じて編集してください。`,
   };
 }

@@ -1,20 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../store';
 import { buildTimeBackendUrl } from '../api/ksj';
 import { CATEGORY_OPTIONS, RADIUS_OPTIONS, radiusLabel } from '../data/constants';
 import {
-  API_KEY_PREFIX,
-  clearAiSettings,
-  DEFAULT_MODEL,
   PROVIDER_NAME,
-  canSave,
-  loadAiSettings,
-  maskApiKey,
-  sanitizeApiKeyInput,
-  saveAiSettings,
-  testAiConnection,
-  type AiSettings,
-  type TestVerdict,
+  fetchAiServerStatus,
+  testAiServerConnection,
+  type AiServerStatus,
+  type AiTestVerdict,
 } from '../settings/aiSettings';
 import {
   canSaveAnalysisDefaults,
@@ -80,7 +73,7 @@ function btnStyle(kind: 'primary' | 'ghost' | 'danger', disabled = false): React
   return { ...base, background: 'var(--surface)', color: 'var(--text-2)', border: '1px solid var(--border)' };
 }
 
-function VerdictBanner({ verdict }: { verdict: TestVerdict | BackendTestVerdict | null }) {
+function VerdictBanner({ verdict }: { verdict: AiTestVerdict | BackendTestVerdict | null }) {
   if (!verdict) return null;
   return (
     <div
@@ -105,52 +98,28 @@ export function SettingsScreen() {
   const { state } = useApp();
 
   // ---- AI 設定 ----
-  const [savedAi, setSavedAi] = useState<AiSettings>(() => loadAiSettings());
-  const [apiKey, setApiKey] = useState<string>(savedAi.apiKey);
-  const [model, setModel] = useState<string>(savedAi.model);
-  const [showKey, setShowKey] = useState(false);
+  const [aiStatus, setAiStatus] = useState<AiServerStatus | null>(null);
   const [testingAi, setTestingAi] = useState(false);
-  const [aiVerdict, setAiVerdict] = useState<TestVerdict | null>(null);
-  const [aiNotice, setAiNotice] = useState('');
+  const [aiVerdict, setAiVerdict] = useState<AiTestVerdict | null>(null);
 
-  const aiSavable = canSave(apiKey);
+  useEffect(() => {
+    let alive = true;
+    void fetchAiServerStatus().then((s) => {
+      if (alive) setAiStatus(s);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const onTestAi = () => {
-    if (!aiSavable || testingAi) return;
+    if (testingAi) return;
     setTestingAi(true);
     setAiVerdict(null);
-    void testAiConnection(apiKey.trim()).then((v) => {
+    void testAiServerConnection().then((v) => {
       setAiVerdict(v);
       setTestingAi(false);
     });
-  };
-
-  const onSaveAi = () => {
-    if (!aiSavable) return;
-    const stamped = saveAiSettings({ apiKey, model: model.trim() || DEFAULT_MODEL });
-    if (stamped) {
-      setSavedAi(stamped);
-      setModel(stamped.model);
-      setAiNotice(`保存しました（${stamped.savedAt}）`);
-    } else {
-      setAiNotice('保存できませんでした（この環境では localStorage が利用できません）。');
-    }
-  };
-
-  const onClearAiInput = () => {
-    setApiKey('');
-    setModel('');
-    setAiVerdict(null);
-    setAiNotice('入力をクリアしました（保存済み設定は保持されています）。');
-  };
-
-  const onDeleteSavedAi = () => {
-    clearAiSettings();
-    setSavedAi({ apiKey: '', model: '', savedAt: '' });
-    setApiKey('');
-    setModel('');
-    setAiVerdict(null);
-    setAiNotice('保存済みの AI 設定を削除しました。');
   };
 
   // ---- バックエンド接続（KSJ 連携） ----
@@ -175,7 +144,7 @@ export function SettingsScreen() {
     if ((!backendInputEmpty && !backendUrlValid) || testingBackend) return;
     setTestingBackend(true);
     setBackendVerdict(null);
-    // 空欄 = 既定をテスト（ビルド時設定があればそれ、なければこのサイト経由 /api/healthz）。
+    // 空欄 = 既定をテスト（ビルド時設定があればそれ、なければこのサイト経由 /api/readyz）。
     void testBackendConnection(backendInputEmpty ? buildTimeBase : backendUrl).then((v) => {
       setBackendVerdict(v);
       setTestingBackend(false);
@@ -249,78 +218,35 @@ export function SettingsScreen() {
       <section style={{ ...sectionStyle, marginTop: 0 }}>
         <h2 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>AI 設定（AI調査メモ）</h2>
         <p style={{ margin: '0 0 14px', fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-3)' }}>
-          API キーは<strong>このブラウザの localStorage のみ</strong>に保存され、送信先は接続テスト・メモ生成時の Anthropic API だけです（本アプリのサーバへは送信しません）。共有端末では保存後の取り扱いに注意してください。
+          API キーは<strong>サーバー側（OCSRC_ANTHROPIC_API_KEY）のみ</strong>で管理し、ブラウザには保存・送信しません（外部評価 Phase 0 対応）。AI メモ生成は自社サーバーのブローカー（/api/v1/ai/memo）を経由します。
         </p>
 
-        <div className="ocsrc-grid-2col" style={{ display: 'grid', gap: 14, marginBottom: 14 }}>
-          <div>
-            <label style={labelStyle}>AI プロバイダ</label>
-            <div style={{ ...inputStyle, fontFamily: "'IBM Plex Sans JP', sans-serif", background: 'var(--surface-3)', color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              {PROVIDER_NAME}
-              <span style={{ fontSize: 10, color: 'var(--text-4)' }}>（本アプリは Anthropic のみ対応）</span>
-            </div>
-          </div>
-          <div>
-            <label style={labelStyle}>モデル（空欄で既定: {DEFAULT_MODEL}）</label>
-            <input value={model} onChange={(e) => setModel(e.target.value)} placeholder={DEFAULT_MODEL} style={inputStyle} />
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>AI プロバイダ</label>
+          <div style={{ ...inputStyle, fontFamily: "'IBM Plex Sans JP', sans-serif", background: 'var(--surface-3)', color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {PROVIDER_NAME}
+            <span style={{ fontSize: 10, color: 'var(--text-4)' }}>（本アプリは Anthropic のみ対応）</span>
           </div>
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <label style={labelStyle}>API キー</label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              type={showKey ? 'text' : 'password'}
-              value={apiKey}
-              onChange={(e) => {
-                setApiKey(sanitizeApiKeyInput(e.target.value));
-                setAiVerdict(null);
-              }}
-              placeholder="sk-ant-…"
-              autoComplete="off"
-              style={{ ...inputStyle, flex: 1 }}
-            />
-            <button onClick={() => setShowKey((v) => !v)} style={btnStyle('ghost')} title={showKey ? '隠す' : '表示する'}>
-              {showKey ? '隠す' : '表示'}
-            </button>
+          <label style={labelStyle}>サーバー側設定状態</label>
+          <div style={{ fontSize: 12.5, lineHeight: 1.7, color: 'var(--text-2)' }}>
+            {aiStatus === null
+              ? '確認中…'
+              : aiStatus.configured
+                ? `設定済み（モデル: ${aiStatus.model}）`
+                : '未設定（サーバーの環境変数 OCSRC_ANTHROPIC_API_KEY を設定してください。ブラウザ側での入力欄はありません）'}
           </div>
-          {apiKey.length > 0 && !apiKey.startsWith(API_KEY_PREFIX) && (
-            <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 4 }}>
-              Anthropic の API キーは通常 "{API_KEY_PREFIX}" から始まります。認証失敗（HTTP 401）が出る場合は、キーの種類や貼り付け内容をご確認ください。
-            </div>
-          )}
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={onTestAi} disabled={!aiSavable || testingAi} style={btnStyle('ghost', !aiSavable || testingAi)}>
+          <button onClick={onTestAi} disabled={testingAi} style={btnStyle('ghost', testingAi)}>
             {testingAi ? 'テスト中…' : '接続テスト'}
-          </button>
-          <button onClick={onClearAiInput} style={btnStyle('ghost')}>
-            入力クリア
-          </button>
-          <button onClick={onSaveAi} disabled={!aiSavable} style={btnStyle('primary', !aiSavable)}>
-            設定を保存
           </button>
         </div>
 
         <VerdictBanner verdict={aiVerdict} />
-        {aiNotice && <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--text-3)' }}>{aiNotice}</div>}
-
-        <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-2)', display: 'flex', alignItems: 'center', gap: 10, fontSize: 11.5 }}>
-          {savedAi.savedAt ? (
-            <>
-              <span style={{ color: 'var(--text-2)' }}>
-                保存済み: {PROVIDER_NAME} / <span style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{maskApiKey(savedAi.apiKey)}</span> / {savedAi.model}
-                <span style={{ color: 'var(--text-4)' }}>（{savedAi.savedAt}）</span>
-              </span>
-              <button onClick={onDeleteSavedAi} style={btnStyle('danger')}>
-                保存済み設定を削除
-              </button>
-            </>
-          ) : (
-            <span style={{ color: 'var(--text-4)' }}>保存済みの AI 設定はありません。</span>
-          )}
-        </div>
       </section>
 
       {/* ---- バックエンド接続（KSJ 連携） ---- */}
@@ -455,7 +381,7 @@ export function SettingsScreen() {
       <section style={sectionStyle}>
         <h2 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>ローカルデータ管理</h2>
         <p style={{ margin: '0 0 14px', fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-3)' }}>
-          本アプリのデータ（調査案件・テーマ・AI設定・バックエンド設定・既定値）はすべてこのブラウザの localStorage に保存されています。サーバ側には保存されません。
+          本アプリのデータ（調査案件・テーマ・バックエンド設定・既定値）はこのブラウザの localStorage に保存されています。AI API キーは保存しません（サーバー側管理・外部評価 Phase 0）。
         </p>
 
         {!confirmingReset ? (
@@ -465,7 +391,7 @@ export function SettingsScreen() {
         ) : (
           <div style={{ padding: '12px 14px', borderRadius: 8, background: 'var(--err-bg)', border: '1px solid var(--err-border)' }}>
             <p style={{ margin: '0 0 10px', fontSize: 12, lineHeight: 1.7, color: 'var(--text)' }}>
-              <strong>本当にすべてのローカルデータを削除しますか？</strong> 調査案件（実データ）・AI設定・バックエンド設定・既定値がすべて削除され、元に戻せません。ダッシュボードの「↓ エクスポート」で事前にバックアップを取ることを推奨します。
+              <strong>本当にすべてのローカルデータを削除しますか？</strong> 調査案件（実データ）・バックエンド設定・既定値・旧 AI 設定キーがすべて削除され、元に戻せません。ダッシュボードの「↓ エクスポート」で事前にバックアップを取ることを推奨します。
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setConfirmingReset(false)} style={btnStyle('ghost')}>
@@ -486,10 +412,10 @@ export function SettingsScreen() {
           [
             ['アプリ', 'Open Civil Site Risk Checker（工事候補地リスクチェッカー）'],
             ['フェーズ', 'MVP（Phase 1）+ Phase 2（KSJ ローカルDB / 空間検索）'],
-            ['AI 連携', `${PROVIDER_NAME} のみ対応（AI調査メモ生成）`],
+            ['AI 連携', `${PROVIDER_NAME}（サーバー側ブローカー / キーはブラウザ非保持）`],
             ['バックエンド連携', `${backendEffectiveLabel}（KSJ 空間検索）`],
             ['テーマ', state.theme === 'dark' ? 'ダーク' : 'ライト'],
-            ['ローカル保存データ', 'ocsrc-cases / ocsrc-theme / ocsrc-ai-settings / ocsrc-backend-url / ocsrc-default-analysis'],
+            ['ローカル保存データ', 'ocsrc-cases / ocsrc-theme / ocsrc-backend-url / ocsrc-default-analysis（旧 ocsrc-ai-settings は削除対象）'],
           ] as const
         ).map(([k, v]) => (
           <div key={k} style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 10, padding: '7px 0', borderBottom: '1px solid var(--border-2)', fontSize: 12 }}>

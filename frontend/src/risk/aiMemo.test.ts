@@ -1,13 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildAiMemoPrompt,
-  buildGenerateRequest,
   ensureDisclaimer,
-  extractResponseText,
   findForbiddenExpressions,
 } from './aiMemo';
 import type { Finding, SiteLocation } from '../types';
-import type { AiSettings } from '../settings/aiSettings';
 
 const LOC: SiteLocation = {
   address: '東京都千代田区霞が関1-1',
@@ -38,12 +35,6 @@ const FINDING: Finding = {
       props: {},
     },
   ],
-};
-
-const SETTINGS: AiSettings = {
-  apiKey: 'sk-ant-test-12345678',
-  model: 'claude-sonnet-5',
-  savedAt: '2026-07-04 12:00:00',
 };
 
 describe('buildAiMemoPrompt', () => {
@@ -82,32 +73,5 @@ describe('ensureDisclaimer', () => {
   it('免責文があればそのまま', () => {
     const src = '本メモは…断定するものではありません。';
     expect(ensureDisclaimer(src)).toBe(src);
-  });
-});
-
-describe('buildGenerateRequest', () => {
-  it('Anthropic Messages API + ブラウザ直接ヘッダ + モデル指定', () => {
-    const r = buildGenerateRequest(SETTINGS, 'PROMPT');
-    expect(r.url).toBe('https://api.anthropic.com/v1/messages');
-    const h = r.init.headers as Record<string, string>;
-    expect(h['x-api-key']).toBe('sk-ant-test-12345678');
-    expect(h['anthropic-dangerous-direct-browser-access']).toBe('true');
-    const body = JSON.parse(r.init.body as string);
-    expect(body.model).toBe('claude-sonnet-5');
-    expect(body.max_tokens).toBe(3000);
-    expect(body.messages[0].content).toBe('PROMPT');
-  });
-});
-
-describe('extractResponseText', () => {
-  it('text ブロックを連結する', () => {
-    const t = extractResponseText({ content: [{ type: 'text', text: 'A' }, { type: 'text', text: 'B' }] });
-    expect(t).toBe('AB');
-  });
-
-  it('解析不能・空応答は null', () => {
-    expect(extractResponseText(null)).toBeNull();
-    expect(extractResponseText({})).toBeNull();
-    expect(extractResponseText({ content: [{ type: 'text', text: '  ' }] })).toBeNull();
   });
 });

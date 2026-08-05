@@ -1,11 +1,15 @@
 """FastAPI application factory for the OCSRC backend (Phase 2).
 
 Endpoints:
-  GET /healthz               — liveness + database reachability
+  GET /livez                 — liveness (process only)
+  GET /readyz                — readiness (database reachability, 503 when not ready)
+  GET /healthz               — legacy alias of /readyz
   GET /api/v1/ping           — API smoke endpoint
   GET /api/v1/nearby         — spatial search over the local KSJ store (PostGIS)
   GET /api/v1/geocode        — Nominatim /search proxy (Issue #84)
   GET /api/v1/reverse-geocode — Nominatim /reverse proxy (Issue #84)
+  GET /api/v1/ai/status      — server-side AI configuration status (no secrets)
+  POST /api/v1/ai/memo       — AI memo broker (Anthropic key stays server-side)
 """
 
 from contextlib import asynccontextmanager
@@ -13,7 +17,9 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
+from .ai import AiMemoRequest, AiUpstreamError, call_anthropic
 from .db import check_database, close_pools, get_pool
 from .geocode import GeocodeUnavailableError
 from .geocode import reverse as geocode_reverse
@@ -57,13 +63,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_credentials=False,
         )
 
+    @app.get("/livez")
+    async def livez(settings: Annotated[Settings, Depends(get_settings)]) -> dict:
+        """Liveness: the process is up and can serve requests (no DB dependency)."""
+        return {"status": "ok", "version": API_VERSION, "env": settings.app_env}
+
+    @app.get("/readyz")
+    async def readyz(settings: Annotated[Settings, Depends(get_settings)]) -> dict:
+        """Readiness: DB reachability included. Returns 503 when not ready.
+
+        Splitting liveness from readiness lets monitors distinguish a dead
+        process from a backend whose database is temporarily unavailable
+        (external evaluation Phase 0).
+        """
+        db_status = await _db_status(settings)
+        if db_status != "ok":
+            raise HTTPException(
+                status_code=503,
+                detail={"status": "error", "db": db_status, "version": API_VERSION},
+            )
+        return {"status": "ok", "db": db_status, "version": API_VERSION}
+
     @app.get("/healthz")
     async def healthz(settings: Annotated[Settings, Depends(get_settings)]) -> dict:
-        if settings.database_url is None:
-            db_status = "not_configured"
-        else:
-            db_status = await check_database(
-                settings.database_url, timeout=settings.db_check_timeout_seconds
+        """Legacy alias of /readyz (kept for external monitors; DB error => 503)."""
+        db_status = await _db_status(settings)
+        if db_status != "ok":
+            raise HTTPException(
+                status_code=503,
+                detail={"status": "error", "db": db_status, "version": API_VERSION},
             )
         return {"status": "ok", "db": db_status, "version": API_VERSION}
 
@@ -130,7 +158,42 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except GeocodeUnavailableError as exc:
             raise HTTPException(status_code=503, detail="geocoding upstream unavailable") from exc
 
+    @app.get("/api/v1/ai/status")
+    async def ai_status(settings: Annotated[Settings, Depends(get_settings)]) -> dict:
+        """AI 設定状態（サーバー側のみ）。API キーは絶対に返さない。"""
+        return {
+            "configured": bool(settings.anthropic_api_key),
+            "model": settings.anthropic_model,
+        }
+
+    @app.post("/api/v1/ai/memo")
+    async def ai_memo(
+        req: AiMemoRequest,
+        settings: Annotated[Settings, Depends(get_settings)],
+    ) -> dict:
+        """AI 調査メモ生成ブローカー。キーはサーバー環境変数のみで管理する。"""
+        if not settings.anthropic_api_key:
+            message = "AI はサーバー側で未設定です（OCSRC_ANTHROPIC_API_KEY 未設定）"
+            return JSONResponse(
+                status_code=503,
+                content={"ok": False, "error": message},
+            )
+        try:
+            text = await call_anthropic(settings, req.prompt)
+        except AiUpstreamError as exc:
+            status = exc.status if exc.status in (401, 429, 502, 503) else 502
+            return JSONResponse(status_code=status, content={"ok": False, "error": exc.message})
+        return {"ok": True, "text": text, "model": settings.anthropic_model}
+
     return app
+
+
+async def _db_status(settings: Settings) -> str:
+    if settings.database_url is None:
+        return "not_configured"
+    return await check_database(
+        settings.database_url, timeout=settings.db_check_timeout_seconds
+    )
 
 
 app = create_app()

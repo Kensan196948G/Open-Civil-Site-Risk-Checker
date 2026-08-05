@@ -79,23 +79,24 @@ MVP（Phase 1〜3）は**フロントエンド中心（クライアント完結�
   │   - 確認優先度判定（src/api/* 各アダプタ）
   │   - AI 調査メモ生成（src/risk/memo.ts、断定表現チェック）
   │   - レポート生成（src/report/markdown.ts / csv.ts）
-  │   - 永続化: ブラウザ localStorage のみ（案件・設定・API キー）
+  │   - 永続化: ブラウザ localStorage のみ（案件・設定。AI API キーはサーバー側管理）
   │
   ├─(A) HTTPS 直接 fetch ────────► [外部公開 API 群]（認証不要・読み取り専用）
   │       Nominatim（住所検索）/ Overpass（道路・水域・施設）/
   │       Open-Meteo（気象・標高）/ 地理院タイル・標高 API /
   │       ハザードマップポータル（タイル）/ 気象庁 警報・注意報 /
-  │       Anthropic API（AI メモ生成・任意・キーは利用者自身が管理）
+  │       （AI メモ生成はサーバー側ブローカー経由・ブラウザから Anthropic へは送信しない）
   │
   └─(B) HTTP :8700 ──► [ocsrc-web]  frontend/server.mjs（systemd 常駐, 0.0.0.0:8700）
                           - Vite ビルド成果物（dist/）の静的配信
                           - セキュリティヘッダ付与（CSP / X-Frame-Options 等）
-                          - /api/* same-origin プロキシ（GET/HEAD のみ）
+                          - /api/* same-origin プロキシ（GET/HEAD 基本。AI ブローカー /api/v1/ai/* のみ POST 可）
                           - 公開経路では Cloudflare Access JWT を検証
                                │  OCSRC_BACKEND_ORIGIN（既定 http://127.0.0.1:8000）
                                ▼
                        [ocsrc-api]  FastAPI（systemd 常駐, 127.0.0.1:8000・LAN 非公開）
-                          - GET /healthz / /api/v1/ping / /api/v1/nearby
+                          - GET /livez / /readyz / /api/v1/ping / /api/v1/nearby
+                          - GET /api/v1/ai/status / POST /api/v1/ai/memo（AI ブローカー）
                                │  OCSRC_DATABASE_URL（TLS）
                                ▼
                        [Neon PostgreSQL + PostGIS]（本番・マネージド）
@@ -108,9 +109,9 @@ MVP（Phase 1〜3）は**フロントエンド中心（クライアント完結�
                         ▼
                   [ocsrc-tunnel]  cloudflared（systemd 常駐）──► ocsrc-web（:8700）
 
-[監視] ocsrc-watchdog.timer（systemd, 5 分間隔）
-  - systemd 3 サービス / web・api healthz（DB 到達性含む）/ 公開 URL エッジ応答を確認
-  - 異常時はラベル watchdog の GitHub Issue を自動起票、全回復で自動クローズ
+[監視] ocsrc-watchdog.timer（systemd, 5 分間隔・インシデント集約）
+  - systemd 3 サービス / web healthz / api readiness（/readyz・再試行つき）/ 公開 URL エッジ応答を確認
+  - 異常時はラベル watchdog の GitHub Issue を 1 障害 1 Issue で起票（コメント 30 分抑制）、連続 2 回 OK でクローズ
 ```
 
 ### 3.2 現行構成の要素
@@ -123,8 +124,8 @@ MVP（Phase 1〜3）は**フロントエンド中心（クライアント完結�
 | 空間 DB | PostgreSQL + PostGIS（**本番: Neon マネージド** / ローカル開発: docker compose `--profile phase2`） | KSJ 取込データ（`ksj_features`）、`ST_DWithin` 近傍検索 |
 | データ取込 | `python -m app.ingest`（CLI） | KSJ GeoJSON を PostGIS へ取込（冪等・洗い替え） |
 | 公開トンネル | `cloudflared`（systemd `ocsrc-tunnel`） | Cloudflare Tunnel による outbound 接続でエッジと接続（受信ポート開放なし）。エッジ側で TLS 終端 + Cloudflare Access 認証 |
-| 死活監視 | `scripts/ocsrc-watchdog.sh`（systemd `ocsrc-watchdog.timer`、5 分間隔） | systemd 3 サービス・web/api healthz・公開 URL を監視し、異常をラベル `watchdog` の GitHub Issue へ自動起票（`docs/deploy-backend.md` §5） |
-| 永続化（利用者データ） | ブラウザ `localStorage` | 調査案件・システム設定・AI API キー。サーバ側 DB には保存しない |
+| 死活監視 | `scripts/ocsrc-watchdog.sh`（systemd `ocsrc-watchdog.timer`、5 分間隔） | systemd 3 サービス・web healthz・api readiness（`/readyz`）・公開 URL を監視し、異常をラベル `watchdog` の GitHub Issue へ**インシデント集約**で起票（`docs/deploy-backend.md` §5） |
+| 永続化（利用者データ） | ブラウザ `localStorage` | 調査案件・システム設定。AI API キーはサーバー側のみで管理（外部評価 Phase 0） |
 
 ### 3.3 通信経路と公開範囲
 
@@ -260,18 +261,18 @@ Open-Civil-Site-Risk-Checker/
 | アダプタ層 | `src/api/*.ts` | Nominatim / Overpass / Open-Meteo / 標高 / 気象庁警報 / KSJ / 接続テスト（NFR-401） |
 | 確認優先度サマリー・一覧（SCR-002） | `src/screens/` `src/decorate.ts` | A〜D 件数、カテゴリ別結果 |
 | リスク詳細（SCR-003） | `src/components/FindingDrawer.tsx` | 根拠・出典・取得日時・距離・注意事項・コメント |
-| AI 調査メモ（SCR-004） | `src/risk/memo.ts` | テンプレート生成 + Anthropic API 生成（任意）、禁止表現チェック・免責必須化 |
+| AI 調査メモ（SCR-004） | `src/risk/memo.ts` `src/risk/aiMemo.ts` | テンプレート生成 + サーバー側 AI ブローカー経由の生成（任意）、禁止表現チェック・免責必須化 |
 | レポート出力（SCR-005） | `src/report/markdown.ts` `csv.ts` | Markdown / CSV（公開区分・UTF-8 BOM） |
 | データソース管理（SCR-006） | `src/data/` `src/api/ping.ts` | 台帳表示・接続テスト（実疎通） |
-| 取得ログ（SCR-007） | `src/store.tsx` | セッション内の実行履歴（成功/失敗/タイムアウト/スキップ） |
-| システム設定（SCR-008） | `src/settings/appSettings.ts` | AI キー・バックエンド接続（既定「このサイト経由（/api プロキシ）」・カスタム URL 保存/解除・接続テスト）・既定値・データ全削除（すべて localStorage） |
+| 取得ログ（SCR-007） | `src/store.tsx` | セッション内の実行履歴（成功/失敗/タイムアウト/スキップ/未実施/視覚確認のみ） |
+| システム設定（SCR-008） | `src/settings/appSettings.ts` `src/settings/aiSettings.ts` | AI 設定状態（サーバー側キー管理）・バックエンド接続（既定「このサイト経由（/api プロキシ）」・カスタム URL 保存/解除・接続テスト）・既定値・データ全削除（AI キー以外は localStorage） |
 | ダッシュボード（SCR-000） | `src/data/caseStore.ts` | 調査案件一覧・KPI・実データ/ダミー区別・JSON 取込/出力 |
 
 ### 5.2 バックエンドモジュール（現行: KSJ 空間検索補助）
 
 | モジュール | 実装 | 内容 |
 |---|---|---|
-| API 本体 | `backend/app/main.py` | FastAPI。`/healthz` `/api/v1/ping` `/api/v1/nearby` の 3 エンドポイント |
+| API 本体 | `backend/app/main.py` | FastAPI。`/livez` `/readyz`（DB 異常時 503）`/api/v1/ping` `/api/v1/nearby`・AI ブローカー（`/api/v1/ai/status` `/api/v1/ai/memo`） |
 | 設定 | `backend/app/settings.py` | `OCSRC_` プレフィックス環境変数（DSN・CORS allowlist 等） |
 | DB アクセス | `backend/app/db.py` | asyncpg 接続プール、DB 到達性チェック（ドライバ未導入でも起動可能） |
 | KSJ 処理 | `backend/app/ksj.py` | GeoJSON パース・検証（WGS84 範囲外は拒否）、スキーマ、`ST_DWithin` 近傍検索 |
@@ -335,7 +336,7 @@ Open-Civil-Site-Risk-Checker/
 
 9. AI 調査メモ生成（SCR-004）
    - テンプレート生成（src/risk/memo.ts）
-   - 任意: Anthropic API による生成（SCR-008 保存キー・禁止表現チェック・免責必須化）
+   - 任意: サーバー側 AI ブローカー（/api/v1/ai/memo）による生成（禁止表現チェック・免責必須化）
 
 10. レポート出力（SCR-005）
    - Markdown / CSV（公開区分つき）
@@ -366,7 +367,7 @@ interface AdapterResult {
 
 | 契約上のルール | 内容 |
 |---|---|
-| 失敗の誠実表示 | 取得失敗・タイムアウト・未連携は `failed` / `skipped` として返し、「該当なし」と混同しない |
+| 失敗の誠実表示 | 取得失敗・タイムアウトは `failed`、未連携・未実装・対象外は `skipped` / `not_attempted`、タイル目視のみは `visual_only` として返し、「該当なし」と混同しない（実通信なしの HTTP コードを記録しない） |
 | 出典必須 | `Finding.evidence[]` に出典（attribution）・取得日時・整備年度を必ず付与する |
 | 部分結果 | アダプタ単位で独立して失敗でき、他カテゴリの表示を妨げない（NFR-101） |
 
@@ -376,7 +377,9 @@ interface AdapterResult {
 |---|---|
 | success | 取得成功（0 件の「該当なし」を含む） |
 | failed | API 失敗・タイムアウト・DB 未整備（503） |
-| skipped | 未連携（xROAD の規約同意前等）・対象カテゴリ未選択によるスキップ |
+| skipped | 対象カテゴリ未選択・実装前ソース（PLATEAU / xROAD 等）によるスキップ |
+| not_attempted | 実リクエストなし（未実装・規約未同意） |
+| visual_only | タイル重ね合わせ等の目視確認のみ（実取得の成否を検証していない） |
 
 ---
 
@@ -579,13 +582,17 @@ api_request_logs
 
 ### 10.1 現行実装 API（バックエンド FastAPI）
 
-バックエンドは KSJ 空間検索補助に限定した**読み取り専用（GET のみ）・無認証**の 3 エンドポイントを提供する（無認証の設計判断は §15.2 参照）。
+バックエンドは KSJ 空間検索補助と AI ブローカーを提供する。既存の検索系は**読み取り専用（GET のみ）・無認証**、AI ブローカーは `POST /api/v1/ai/memo` のみボディ付きリクエストを許容する（無認証の設計判断は §15.2 参照）。
 
 | Method | Path | 概要 |
 |---|---|---|
-| GET | `/healthz` | liveness + DB 到達性（`ok` / `error` / `not_configured` / `unavailable`） |
+| GET | `/livez` | liveness（プロセス生存のみ・DB 非依存） |
+| GET | `/readyz` | readiness（DB 到達性。異常時は 503） |
+| GET | `/healthz` | `/readyz` の後方互換エイリアス（異常時は 503） |
 | GET | `/api/v1/ping` | API 疎通確認 |
 | GET | `/api/v1/nearby?lat=&lon=&radius_m=` | 取込済み KSJ（河川・施設）の近傍検索。距離昇順・出典・整備年度つき |
+| GET | `/api/v1/ai/status` | AI 設定状態（configured / model。キーは返さない） |
+| POST | `/api/v1/ai/memo` | AI メモ生成ブローカー（キーはサーバー側のみ） |
 
 #### GET `/api/v1/nearby`
 
@@ -616,7 +623,7 @@ api_request_logs
 
 - DB 未設定・未到達時は **503** を返す（空配列を返さない）。フロントは「該当なし」と「取得失敗」を区別表示できる（FR-304 / NFR-504）
 - SPA からの呼び出しは**既定で相対パス（same-origin）**であり、SPA 配信オリジン（`ocsrc-web`）の `/api/*` プロキシを経由して 127.0.0.1 バインドの API へ到達する（Issue #57）。SCR-008 のカスタム URL またはビルド時 `VITE_OCSRC_BACKEND_URL` を設定した場合のみ、その URL へ直結する
-- SCR-008 の接続テストは、既定（same-origin）ではプロキシ特例の `/api/healthz`、カスタム URL 設定時は `{URL}/healthz` を呼び、DB 到達性（`db: ok`）まで確認する
+- SCR-008 の接続テストは、既定（same-origin）ではプロキシ特例の `/api/readyz`、カスタム URL 設定時は `{URL}/readyz` を呼び、DB 到達性（`db: ok`）まで確認する
 
 #### CORS（`OCSRC_CORS_ORIGINS`）
 
@@ -746,7 +753,7 @@ def classify_priority(findings: list[Finding], data_quality: DataQuality) -> str
 
 ## 12. AI調査メモ仕様
 
-> 現行実装はフロントエンド（`frontend/src/risk/memo.ts`）にある。テンプレート生成を基本とし、SCR-008 に保存した Anthropic API キーがある場合のみブラウザから Anthropic API を直接呼び出して生成する（キーは利用者自身の `localStorage` のみに保存）。
+> 現行実装はフロントエンド（`frontend/src/risk/memo.ts`・`aiMemo.ts`）にあり、テンプレート生成を基本とする。AI 生成はサーバー側ブローカー（`backend/app/ai.py`・`POST /api/v1/ai/memo`）を経由し、Anthropic API キーはサーバー環境変数（`OCSRC_ANTHROPIC_API_KEY`）のみで管理する（外部評価 Phase 0）。ブラウザから Anthropic API への直接送信・キー保存は行わない。
 
 ### 12.1 AIメモ生成入力
 
@@ -956,7 +963,7 @@ site-risk-check_{YYYYMMDD_HHMM}_{location_slug}.md
 | 対策 | 実装箇所 | 内容 |
 |---|---|---|
 | セキュリティヘッダ | `frontend/server.mjs` | 全レスポンスに CSP（外部オリジン許可リスト方式）/ `X-Content-Type-Options: nosniff` / `X-Frame-Options: DENY` / `Referrer-Policy` を付与 |
-| same-origin プロキシ | `frontend/server.mjs` | `/api/*` を `OCSRC_BACKEND_ORIGIN`（環境変数固定・SSRF 防止）へ中継。GET/HEAD のみ許可、パス正規化後も `/api` 配下に留まることを再検証 |
+| same-origin プロキシ | `frontend/server.mjs` | `/api/*` を `OCSRC_BACKEND_ORIGIN`（環境変数固定・SSRF 防止）へ中継。GET/HEAD を基本とし、AI ブローカー（`/api/v1/ai/*`）のみ POST を許可（64KB 上限）。パス正規化後も `/api` 配下に留まることを再検証 |
 | API の非公開バインド | `scripts/install-systemd-api.sh` | FastAPI は 127.0.0.1 バインドで LAN へ直接露出しない（多層防御）。SPA からは same-origin プロキシ経由 |
 | CORS 既定無効 | `backend/app/main.py` | `OCSRC_CORS_ORIGINS` 明示 allowlist のみ（開発用オプトイン）。ワイルドカードは起動時拒否、GET のみ・credentials なし |
 | 入力検証 | `backend/app/main.py` / フロント各画面 | lat/lon/radius_m の範囲検証（FastAPI Query 制約）、WGS84 範囲外の取込拒否 |
@@ -964,7 +971,7 @@ site-risk-check_{YYYYMMDD_HHMM}_{location_slug}.md
 | DB 資格情報の分離 | `/etc/ocsrc/api.env`（root:root, 600） | リポジトリ外で管理。`infra/.env` はコミット対象外 |
 | 依存関係スキャン | `.github/workflows/ci.yml` / `.github/dependabot.yml` | CI security ジョブ（`npm audit --audit-level=high` / `pip-audit`）+ Dependabot 週次（npm / pip / github-actions） |
 | CI サプライチェーン対策 | `.github/workflows/ci.yml` | Actions の SHA ピン留め、`persist-credentials: false`、`permissions: contents: read` |
-| AI API キーの扱い | SCR-008（`frontend/src/settings/`） | 利用者自身のブラウザ `localStorage` のみに保存。サーバ・リポジトリには置かない |
+| AI API キーの扱い | サーバー側（`/etc/ocsrc/api.env` の `OCSRC_ANTHROPIC_API_KEY`） | ブラウザ・localStorage・リポジトリには置かない。ブラウザは自社ブローカー経由のみ（外部評価 Phase 0） |
 
 ### 15.2 運用境界（設計判断の明文化・v1.1）
 
@@ -1002,7 +1009,7 @@ site-risk-check_{YYYYMMDD_HHMM}_{location_slug}.md
 
 **公開実態（2026-07-31 現在）**: 上表の要件 1・2 は **Cloudflare Tunnel（`ocsrc-tunnel`）+ Cloudflare Access** で充足して公開中である。エッジで TLS 終端と認証を行い、`frontend/server.mjs` が Access JWT（`Cf-Access-Jwt-Assertion`）を JWKS で検証する。未認証アクセスは Access ログインへ 302 誘導される。要件 3（明示的なレート制限ルール）は未設定の残課題。要件 4 は本番 DB の Neon 移行に伴い、接続文字列を `/etc/ocsrc/api.env`（root:root, 600）で管理する。ポート 8700 の WAN 直接到達不可は維持している（Tunnel は outbound 接続のため受信ポート開放なし）。
 
-> 補足: SCR-008 の AI API キーは `localStorage` 保存のため、共有端末・不特定利用者での運用ではキーを保存しない運用とする。
+> 補足: 外部評価 Phase 0 以降、AI API キーはブラウザ・localStorage に保存しない。サーバー側の `OCSRC_ANTHROPIC_API_KEY` のみで管理するため、共有端末でのキー漏えいリスクは解消される。
 
 #### 15.2.4 本番 DB パスワードの強制 override（必須）
 
@@ -1240,12 +1247,12 @@ OCSRC_DB_PASSWORD=<強パスワードへ必ず変更>   # .env.example の dev_o
 | サービス | 形態 | 確認コマンド |
 |---|---|---|
 | ocsrc-web | systemd | `systemctl status ocsrc-web` / `journalctl -u ocsrc-web -f` |
-| ocsrc-api | systemd | `systemctl status ocsrc-api` / `curl http://127.0.0.1:8000/healthz` |
+| ocsrc-api | systemd | `systemctl status ocsrc-api` / `curl http://127.0.0.1:8000/livez`・`curl http://127.0.0.1:8000/readyz` |
 | ocsrc-db | docker compose | `docker compose ps`（infra/） |
 
 ### 22.2 日次運用
 
-1. ヘルスチェック（`/healthz` の `db: ok` 確認、SCR-006 接続テスト）
+1. ヘルスチェック（`/readyz` の `db: ok`（HTTP 200）確認、SCR-006 接続テスト）
 2. エラーログ確認（journald）
 3. レート制限発生状況確認（SCR-007 取得ログ）
 

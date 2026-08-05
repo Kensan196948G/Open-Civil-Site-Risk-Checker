@@ -50,6 +50,11 @@ jobs:
       - name: Smoke tests (esbuild runner / 環境非依存の二重検証)
         run: npm run test:smoke
 
+      # 実プロセスを起動する HTTP サーバ統合テスト（JWT・プロキシ・セキュリティヘッダ）。
+      # 外部評価 Phase 0: これまで CI 未組込で回帰を見逃すリスクがあったため必須化する。
+      - name: Server integration tests (node server.mjs)
+        run: npm run test:server
+
       - name: Build
         run: npm run build
 

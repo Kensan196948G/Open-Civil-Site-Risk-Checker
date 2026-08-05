@@ -15,6 +15,7 @@ export function Footer() {
     >
       <span style={{ fontSize: 10, color: 'var(--chrome-text-4)', fontFamily: "'IBM Plex Mono', monospace" }}>OCSRC v1.0</span>
       <span style={{ fontSize: 10, color: 'var(--chrome-text-4)' }}>公開データに基づく初期調査支援 — 施工可否・安全性を断定しません</span>
+      <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 8px', borderRadius: 9, background: 'var(--warn-bg)', color: 'var(--warn-text-2)', border: '1px solid var(--warn-border)' }}>参考用途のみ</span>
       <div style={{ flex: 1 }} />
       <span className="ocsrc-footer-attr" style={{ fontSize: 10, color: 'var(--chrome-text-4)' }}>
         出典：国土地理院 / OpenStreetMap / Open-Meteo / ハザードマップポータル

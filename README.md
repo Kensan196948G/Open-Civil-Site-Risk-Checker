@@ -146,11 +146,11 @@ docker compose ps                         # Docker の場合
 | SCR-001 地点入力         | 住所 / 緯度経度・検索半径（100m〜3km）・確認カテゴリ選択、入力検証                                                                                                                                                                                                                                                                  |
 | SCR-002 リスク判定       | 地図（地理院タイル＋実ジオメトリ）、確認優先度サマリー、カテゴリ別結果一覧、結果クリア→地点入力へ戻る                                                                                                                                                                                                                              |
 | SCR-003 リスク詳細       | 根拠データ・出典・取得日時・距離・注意事項・コメント欄（右ドロワー）                                                                                                                                                                                                                                                                |
-| SCR-004 AI調査メモ       | 断定表現を避けた調査メモを自動生成・編集・再生成。**AI生成（Anthropic Claude・SCR-008 の保存キー利用）**に対応：テンプレートを土台に生成し、禁止表現チェック + 免責文必須化を通す                                                                                                                                                   |
+| SCR-004 AI調査メモ       | 断定表現を避けた調査メモを自動生成・編集・再生成。**AI生成（Anthropic Claude・サーバー側ブローカー経由、ブラウザに API キーを保持しない）**に対応：テンプレートを土台に生成し、禁止表現チェック + 免責文必須化を通す                                                                                                                                                   |
 | SCR-005 レポート出力     | Markdown / CSV 出力（公開区分つき、UTF-8 BOM 付き CSV）                                                                                                                                                                                                                                                                             |
 | SCR-006 データソース管理 | 接続状態・利用条件の台帳、接続テスト（実疎通）                                                                                                                                                                                                                                                                                      |
 | SCR-007 取得ログ         | 実行履歴（成功 / 失敗 / タイムアウト / スキップを区別）                                                                                                                                                                                                                                                                             |
-| SCR-008 システム設定     | AI設定（**Anthropic（Claude）専用**・APIキー入力/クリア/接続テスト/保存）+ **バックエンド接続（KSJ連携）**（既定は「このサイト経由（/api プロキシ）」・カスタム URL の保存/解除・接続テスト。ビルド不要で即時反映）+ **地点確認の既定値**（既定検索半径・既定カテゴリ）+ **ローカルデータ管理**（全削除・二段階確認）+ アプリ情報。**すべてブラウザの localStorage のみに保存** |
+| SCR-008 システム設定     | AI設定（**Anthropic（Claude）専用・サーバー側キー管理**。設定状態表示/接続テスト。ブラウザにキーを保存しない）+ **バックエンド接続（KSJ連携）**（既定は「このサイト経由（/api プロキシ）」・カスタム URL の保存/解除・接続テスト。ビルド不要で即時反映）+ **地点確認の既定値**（既定検索半径・既定カテゴリ）+ **ローカルデータ管理**（全削除・二段階確認）+ アプリ情報。**AI キー以外の設定はブラウザの localStorage に保存** |
 
 ### 🔌 連携している公開データソース（ブラウザ直接呼び出し）
 
@@ -163,10 +163,10 @@ docker compose ps                         # Docker の場合
 | ハザードマップポータル    | 洪水浸水想定・土砂災害の重ね合わせタイル         | ✅ 実連携（視覚確認向け）                                     |
 | 国土数値情報 (KSJ)        | 河川（ローカルDB / PostGIS 空間検索。施設 `P02` はスキーマ・取込CLI対応済みだが未投入 — 施設は Overpass が実運用でカバー） | ✅ 実連携（既定: same-origin `/api` プロキシ経由・Phase 2）   |
 | 気象庁 警報・注意報       | 都道府県（気象庁発表単位）の警報・注意報発表状況 | ✅ 実連携（Phase 3・認証不要・CORS開放）                      |
-| PLATEAU                   | 3D都市モデル                                     | ⏳ タイムアウト再現（取得失敗の扱いを実証）                   |
+| PLATEAU                   | 3D都市モデル                                     | ⏸ 未実装（実リクエストなし・疑似ログを記録しない）            |
 | xROAD                     | 道路交通量                                       | ⏸ 未連携（利用規約同意が必要）                                |
 
-> ハザードの重なり判定はクライアント側では行わず、タイル重ね合わせによる**視覚確認**として表示します（出典明示・断定回避）。KSJ はバックエンド停止・DB 未整備時に「取得失敗」、PLATEAU / xROAD は「未連携」として誠実に区別表示します（要件 FR-503 / NFR-504）。
+> ハザードの重なり判定はクライアント側では行わず、タイル重ね合わせによる**視覚確認**として表示します（出典明示・断定回避・実タイル取得の成否は検証しないため HTTP コードを記録しない）。KSJ はバックエンド停止・DB 未整備時に「取得失敗」、PLATEAU / xROAD は「未実装・未連携（実リクエストなし）」として誠実に区別表示します（要件 FR-503 / NFR-504・外部評価 Phase 0）。
 >
 > **気象庁 警報・注意報連携（Phase 3・Issue #22）**: 地点の都道府県を Nominatim 逆ジオコーディングで特定し、`https://www.jma.go.jp/bosai/warning/data/warning/{都道府県コード}.json` を直接取得します（バックエンド不要）。表示文は気象庁自身が作成した `headlineText` をそのまま採用し、アプリ側で警報名を合成しません。**北海道・鹿児島県・沖縄県は地域ごとに気象台が分かれ単一コードを持たないため、人口の多い代表地域（札幌／鹿児島県本土／沖縄本島）の発表状況を表示し、その旨を確認結果の注意事項に明記**します。
 
@@ -247,7 +247,7 @@ flowchart LR
 
     subgraph HOST["🖥️ Linux ホスト（systemd 常駐 / IP は DHCP 自動割当）"]
         W["ocsrc-web（server.mjs）<br/>0.0.0.0:8700<br/>静的配信 + セキュリティヘッダ + <br/>Tunnel 経由 Access JWT 検証・失敗レート制限"]
-        A["ocsrc-api（FastAPI）<br/>127.0.0.1:8000（LAN 非公開）<br/>/healthz・/api/v1/ping・/api/v1/nearby"]
+        A["ocsrc-api（FastAPI）<br/>127.0.0.1:8000（LAN 非公開）<br/>/livez・/readyz・/api/v1/ping・/api/v1/nearby<br/>/api/v1/ai/status・/api/v1/ai/memo"]
     end
 
     subgraph DB["🗄️ 空間 DB（OCSRC_DATABASE_URL でどちらか一方を選択）"]
@@ -260,7 +260,7 @@ flowchart LR
         E1["Nominatim / Overpass<br/>ジオコーディング・地物"]
         E3["Open-Meteo / 地理院<br/>気象・タイル・標高"]
         E5["ハザードマップ / 気象庁<br/>浸水想定・警報"]
-        E7["Anthropic API<br/>AI 調査メモ（任意）"]
+        E7["Anthropic API<br/>AI 調査メモ（サーバー側ブローカー経由・任意）"]
     end
 
     B -->|"② HTTPS（公開・要認証）"| CF
@@ -279,7 +279,7 @@ flowchart LR
 
 | コンポーネント | 役割 | 備考 |
 | -------------- | ---- | ---- |
-| SPA（ブラウザ） | 取得・判定・メモ・出力のすべて | 利用者データは `localStorage` のみ（サーバ側に保存しない） |
+| SPA（ブラウザ） | 取得・判定・メモ・出力のすべて | 利用者データは `localStorage` のみ（サーバ側に保存しない）。AI API キーはサーバー側のみ |
 | `frontend/server.mjs`（ocsrc-web） | 静的配信 / セキュリティヘッダ / `/api/*` プロキシ / Access JWT 検証 | 依存ゼロ Node。転送先は環境変数固定（SSRF 防止）。公開時は Cloudflare Access（Issue #70） |
 | `backend/`（ocsrc-api） | KSJ 空間検索 API（読み取り専用 3 エンドポイント） | 127.0.0.1 バインド。SPA は**既定で same-origin `/api` プロキシ経由**で接続（Issue #57） |
 | PostGIS / Neon | KSJ 取込データの近傍検索（`ST_DWithin`） | `python -m app.ingest` で取込（冪等）。本番は Neon（マネージド）を推奨 |
@@ -376,7 +376,7 @@ frontend/src/
 
 ## 🐍 バックエンド（KSJ 空間検索・Phase 2 稼働中）
 
-`backend/` の FastAPI バックエンドは、国土数値情報（KSJ）のローカル DB 化（PostgreSQL + PostGIS）と空間検索 API を提供します。エンドポイントは**読み取り専用の 3 つ**（`/healthz` / `/api/v1/ping` / `/api/v1/nearby`）です。
+`backend/` の FastAPI バックエンドは、国土数値情報（KSJ）のローカル DB 化（PostgreSQL + PostGIS）と空間検索 API を提供します。主なエンドポイントは **liveness `/livez`・readiness `/readyz`（DB 異常時 503）**、`/api/v1/ping`、`/api/v1/nearby`、AI ブローカー（`/api/v1/ai/status`・`/api/v1/ai/memo`）です。
 
 開発時（Docker で DB + backend を起動）:
 
@@ -384,13 +384,14 @@ frontend/src/
 cd infra
 cp .env.example .env                          # DB パスワード等（コミット禁止・本番は強パスワード必須）
 docker compose --profile phase2 up -d --build # db(PostGIS) + backend を起動
-curl http://127.0.0.1:8000/healthz            # → {"status":"ok","db":"ok",...}
+curl http://127.0.0.1:8000/livez              # → {"status":"ok","version":"0.2.0",...}
+curl http://127.0.0.1:8000/readyz             # → {"status":"ok","db":"ok",...}（DB 異常時は 503）
 ```
 
 - 既定の `docker compose up`（フロント配信のみ）には**影響しません**（profile 分離）
 - 🚀 **本番デプロイ（systemd）**: `scripts/install-systemd-api.sh` で `ocsrc-api.service` を常駐化します（venv 自動構築・**127.0.0.1 バインド**・`ocsrc-web` へのプロキシ先自動注入・DB 資格情報は `/etc/ocsrc/api.env` で管理）。手順の正本は [`docs/deploy-backend.md`](docs/deploy-backend.md)
 - 🗺️ **KSJ 空間検索（Phase 2-3/2-4 実装済み）**: `python -m app.ingest` で国土数値情報（GeoJSON）を PostGIS へ取込み、`GET /api/v1/nearby?lat=&lon=&radius_m=` で近傍の河川・施設を距離つきで返します（取込手順は [`backend/data/README.md`](backend/data/README.md)）。**実データでの動作検証済み**: NII Geoshape 経由で荒川水系（日本橋川・隅田川等 2,937件、CC BY 4.0）を取込み、霞が関周辺の検索で実取得できることを確認
-- 🔌 **バックエンド接続先は既定で「このサイト経由（same-origin `/api` プロキシ）」です（Issue #57）**: 追加設定なしで、LAN 上の別端末のブラウザからも配信オリジン（`:8700`）の `/api/*` 経由で 127.0.0.1 バインドの API へ到達します。優先順位は ① **SCR-008 のカスタム URL**（localStorage 保存・ビルド不要で即時反映） > ② ビルド時 `VITE_OCSRC_BACKEND_URL`（例 `http://127.0.0.1:8000`） > ③ **未設定 = same-origin 既定（相対 `/api`）**。バックエンド停止・DB 未整備時は「取得失敗」として誠実に表示します（「該当なし」と区別・NFR-504）。SCR-008 の接続テストは、既定時はプロキシ特例の `/api/healthz`、カスタム URL 設定時は `{URL}/healthz` で DB 到達性まで確認します
+- 🔌 **バックエンド接続先は既定で「このサイト経由（same-origin `/api` プロキシ）」です（Issue #57）**: 追加設定なしで、LAN 上の別端末のブラウザからも配信オリジン（`:8700`）の `/api/*` 経由で 127.0.0.1 バインドの API へ到達します。優先順位は ① **SCR-008 のカスタム URL**（localStorage 保存・ビルド不要で即時反映） > ② ビルド時 `VITE_OCSRC_BACKEND_URL`（例 `http://127.0.0.1:8000`） > ③ **未設定 = same-origin 既定（相対 `/api`）**。バックエンド停止・DB 未整備時は「取得失敗」として誠実に表示します（「該当なし」と区別・NFR-504）。SCR-008 の接続テストは、既定時はプロキシ特例の `/api/readyz`、カスタム URL 設定時は `{URL}/readyz` で DB 到達性まで確認します
 - 詳細は [`backend/README.md`](backend/README.md) を参照
 
 ---

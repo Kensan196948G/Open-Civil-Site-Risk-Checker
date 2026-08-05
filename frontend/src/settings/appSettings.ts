@@ -90,26 +90,26 @@ export function interpretBackendTest(
   return { ok: false, message: `バックエンドには接続できましたが、DB に問題があります（db=${db ?? '不明'}）。` };
 }
 
-/** 接続テスト用の healthz URL（pure）。
- *  - base 空（same-origin 既定）: 配信サーバのプロキシ特例 `/api/healthz` を叩く。
+/** 接続テスト用の readiness URL（pure）。DB 異常時は 503 を返す /readyz を使う。
+ *  - base 空（same-origin 既定）: 配信サーバのプロキシ特例 `/api/readyz` を叩く。
  *    静的サーバ自身の text 応答 `/healthz` に当たって誤判定するのを防ぐ。
  *  - base が配信オリジン自身: 同上（プロキシ経由でバックエンドの健全性を見る）。
- *  - それ以外（直結 URL）: 従来どおり `${base}/healthz`。 */
-export function backendHealthzUrl(base: string, pageOrigin?: string): string {
+ *  - それ以外（直結 URL）: 従来どおり `${base}/readyz`。 */
+export function backendReadyUrl(base: string, pageOrigin?: string): string {
   const trimmed = base.trim().replace(/\/+$/, '');
-  if (!trimmed) return '/api/healthz';
+  if (!trimmed) return '/api/readyz';
   try {
-    if (pageOrigin && new URL(trimmed).origin === pageOrigin) return '/api/healthz';
+    if (pageOrigin && new URL(trimmed).origin === pageOrigin) return '/api/readyz';
   } catch {
     /* URL として解釈できない base は直結扱いのまま（fetch 側でエラーになる） */
   }
-  return `${trimmed}/healthz`;
+  return `${trimmed}/readyz`;
 }
 
-/** バックエンドの healthz を確認する（DB到達性まで報告）。url='' は same-origin 既定。 */
+/** バックエンドの readiness を確認する（DB到達性まで報告）。url='' は same-origin 既定。 */
 export async function testBackendConnection(url: string): Promise<BackendTestVerdict> {
   const pageOrigin = typeof location !== 'undefined' ? location.origin : undefined;
-  const out = await fetchJson<BackendHealthResponse>(backendHealthzUrl(url, pageOrigin), { timeout: 8000 });
+  const out = await fetchJson<BackendHealthResponse>(backendReadyUrl(url, pageOrigin), { timeout: 10000 });
   return interpretBackendTest(out);
 }
 
@@ -168,12 +168,12 @@ export function clearAnalysisDefaults(): void {
 export const ALL_LOCAL_STORAGE_KEYS = [
   'ocsrc-cases',
   'ocsrc-theme',
-  'ocsrc-ai-settings',
+  'ocsrc-ai-settings', // 旧形式の残骸（削除対象として保持）
   BACKEND_URL_KEY,
   ANALYSIS_DEFAULTS_KEY,
 ] as const;
 
-/** アプリのローカルデータを全削除する（案件・テーマ・AI設定・バックエンド設定・既定値）。 */
+/** アプリのローカルデータを全削除する（案件・テーマ・旧AI設定・バックエンド設定・既定値）。 */
 export function resetAllLocalData(): boolean {
   try {
     ALL_LOCAL_STORAGE_KEYS.forEach((k) => localStorage.removeItem(k));

@@ -61,7 +61,7 @@ export function AnalysisScreen() {
   const shown = categoryFilter === 'all' ? allDec : allDec.filter((f) => f.category === categoryFilter);
   const hasMissing = findings.some((f) => f.category === 'data_quality' || f.status === 'failed' || f.status === 'no_data');
   const dataQualityNote = hasMissing
-    ? '一部データソースで取得失敗・未連携があります（PLATEAU / xROAD 等）。優先度Dの項目は判断材料が不足しています。'
+    ? '一部データソースは未実装・未連携です（PLATEAU / xROAD 等。実リクエストは未実施）。優先度Dの項目は判断材料が不足しています。'
     : '主要データソースの取得に成功しました。各結果の取得日時・出典・更新日をご確認ください。';
 
   const summaryCards = GRADES.map((g) => ({
