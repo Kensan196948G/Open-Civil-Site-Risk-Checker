@@ -313,7 +313,7 @@
 | NFR-102 | データ取得失敗時は、失敗理由を画面に表示する |
 | NFR-103 | API接続状態を管理画面で確認できる |
 
-> ✅ 運用面の死活監視として、本番ホストで `ocsrc-watchdog.timer`（5 分間隔）が systemd 3 サービス・web/api healthz（DB 到達性含む）・公開 URL エッジ応答を監視し、異常時はラベル `watchdog` の GitHub Issue を自動起票・全回復で自動クローズする（PR #110、手順は `docs/deploy-backend.md` §5）。
+> ✅ 運用面の死活監視として、本番ホストで `ocsrc-watchdog.timer`（5 分間隔）が systemd 3 サービス・web healthz・api readiness（`/readyz`・DB 到達性含む・再試行つき）・公開 URL エッジ応答を監視し、異常時はラベル `watchdog` の GitHub Issue を**インシデント集約（1 障害 = 1 Issue・コメント 30 分抑制・連続 2 回 OK でクローズ）**で起票する（PR #110・外部評価 Phase 0 改修、手順は `docs/deploy-backend.md` §5）。
 
 ### 11.3 セキュリティ
 

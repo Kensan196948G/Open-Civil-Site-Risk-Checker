@@ -63,7 +63,7 @@ PORT=8010 scripts/install-systemd-api.sh   # ポート明示
 
 ### DB パスワードの設定（初回必須）
 
-生成直後の `/etc/ocsrc/api.env` の DSN はプレースホルダ `CHANGE_ME_STRONG_PASSWORD` のため、そのままでは DB へ接続できない（healthz の `db` が `error` になる）:
+生成直後の `/etc/ocsrc/api.env` の DSN はプレースホルダ `CHANGE_ME_STRONG_PASSWORD` のため、そのままでは DB へ接続できない（readyz の `db` が `error` になり 503 を返す）:
 
 ```bash
 sudoedit /etc/ocsrc/api.env    # CHANGE_ME_STRONG_PASSWORD を実パスワードへ置換
@@ -73,16 +73,22 @@ sudo systemctl restart ocsrc-api
 ## ✅ ヘルス確認
 
 ```bash
-curl http://127.0.0.1:8000/healthz
-# → {"status":"ok","db":"ok","version":"0.2.0"}
+curl http://127.0.0.1:8000/livez
+# → {"status":"ok","version":"0.2.0",...}
+curl http://127.0.0.1:8000/readyz
+# → {"status":"ok","db":"ok","version":"0.2.0"}（DB 異常時は HTTP 503）
 ```
 
 | `db` の値 | 意味 | 対処 |
 |---|---|---|
-| `ok` | DB 接続成功 | — |
+| `ok` | DB 接続成功（200） | — |
 | `error` | 接続失敗（パスワード不一致・DB 未起動・ポート違い） | `/etc/ocsrc/api.env` の DSN と `docker compose ps` を確認 |
-| `not_configured` | `OCSRC_DATABASE_URL` 未設定 | `EnvironmentFile` の読込を確認 |
+| `not_configured` | `OCSRC_DATABASE_URL` 未設定（503） | `EnvironmentFile` の読込を確認 |
 | `unavailable` | asyncpg 未導入 | venv を再構築（インストーラ再実行） |
+
+> 外部評価 Phase 0: プロセス生存のみを確認する `/livez` と、DB 到達性まで確認する
+> `/readyz` を分離した。旧 `/healthz` は `/readyz` の後方互換エイリアス（異常時 503）。
+> 監視・watchdog は `/readyz` を使用する。
 
 API 疎通・空間検索の確認:
 
@@ -141,7 +147,7 @@ docker exec -it ocsrc-db psql -U app -d site_risk_checker \
 
 1. `infra/.env` の `OCSRC_DB_PASSWORD` を更新（次回コンテナ再作成との整合のため）
 2. `/etc/ocsrc/api.env` の DSN を更新 → `sudo systemctl restart ocsrc-api`
-3. `curl http://127.0.0.1:8000/healthz` で `"db":"ok"` を確認
+3. `curl http://127.0.0.1:8000/readyz` で `"db":"ok"`（HTTP 200）を確認
 
 ## ⚠️ トラブルシュート
 
@@ -192,7 +198,7 @@ OCSRC_APP_ENV=production
 OCSRC_DATABASE_URL=${OCSRC_DATABASE_URL}
 EOF
 sudo systemctl restart ocsrc-api
-curl -s http://127.0.0.1:8000/healthz   # → {"status":"ok","db":"ok",...}
+curl -s http://127.0.0.1:8000/readyz   # → {"status":"ok","db":"ok",...}
 
 # 6. 環境変数から DSN を消す（任意）
 unset OCSRC_DATABASE_URL
@@ -245,7 +251,7 @@ bash scripts/install-systemd.sh
 | 有効 JWT を要求（多層防御） | origin で `Cf-Access-Jwt-Assertion` を署名・aud・iss・exp 検証。無効/欠如は **403** |
 | 503 で拒否 | Tunnel 経由かつ Access 未設定（fail-safe） |
 | 429 で拒否 | 同一 IP から 60 秒に 10 回検証失敗（レート制限） |
-| 認証なしで通す（origin側の意図） | `/healthz` の完全一致のみ（死活監視用）。`server.mjs` の `checkTunnelAuth` は `/healthz` を除外済み |
+| 認証なしで通す（origin側の意図） | `/healthz` の完全一致のみ（死活監視用）。`server.mjs` の `checkTunnelAuth` は `/healthz` を除外済み。内部監視は `/livez`・`/readyz`（`/api/livez`・`/api/readyz` としてプロキシ） |
 
 > ⚠️ **既知のギャップ（Issue #94・本書更新時点で未解決）**: 上表の `/healthz` 例外は **origin（`server.mjs`）側のロジックのみ**。Cloudflare Access の **エッジ層**では `riskchecker.mirai-dx-platform.com` 全体を保護する Access アプリが `/healthz` にも適用されるため、実際には未認証アクセスがエッジで 302（Access ログインへのリダイレクト）される（2026-07-14 に `curl` で確認）。外形監視（UptimeRobot 等）で `/healthz` を使う場合は、`riskchecker.mirai-dx-platform.com/healthz` 専用の Access アプリケーションを作成し `bypass` ポリシーを設定する必要がある。手順は Issue #94 のコメントを参照。
 
@@ -301,11 +307,18 @@ Monitor フェーズで CTO が Cloudflare API（読み取り専用）から確�
 Cloudflare Alerting・外形監視（Issue #94）が未設定でも通知を成立させるための、ホスト内蔵の監視。
 `scripts/ocsrc-watchdog.sh` が systemd timer（5 分間隔）で次を確認し、**異常時は GitHub Issue（ラベル `watchdog`）を自動起票**する。GitHub の watch 通知（メール/モバイル）がそのままアラートになる。
 
+外部評価 Phase 0（2026-08-05）からは**インシデント集約方式**:
+
+- 1 障害 = 1 Issue。`/var/lib/ocsrc-watchdog/state` に状態を保持し、DB フラップのような回復・再発を繰り返しても新 Issue を乱立させない
+- 継続異常コメントは既定 30 分間隔に抑制（`OCSRC_WATCHDOG_COMMENT_INTERVAL`）
+- api チェックは `/readyz` を使用し、Neon serverless の cold start を吸収する再試行（既定 10 秒後・1 回）を実施（`OCSRC_WATCHDOG_RETRY_DELAY`）
+- 回復は**連続 2 回の OK**（既定 `OCSRC_WATCHDOG_RECOVERY_OK_CHECKS`）を確認してから Issue をクローズ
+
 | チェック | 内容 |
 |---|---|
 | systemd | `ocsrc-web` / `ocsrc-api` / `ocsrc-tunnel` が `active` |
 | web | `127.0.0.1:8700/healthz` が 200 |
-| api + DB | `127.0.0.1:8000/healthz` が 200 かつ `"db":"ok"`（Neon 到達性込み） |
+| api + DB | `127.0.0.1:8000/readyz` が 200 かつ `"db":"ok"`（Neon 到達性込み・再試行つき） |
 | edge | 公開 URL `/healthz` が 200/302（DNS・TLS・エッジ経路の死活。302 = Access 正常） |
 
 ```bash
@@ -315,10 +328,30 @@ journalctl -u ocsrc-watchdog.service -n 20  # 直近の判定ログ
 bash scripts/uninstall-systemd-watchdog.sh  # 撤去（rollback）
 ```
 
-- 異常が継続しても Issue は乱立せず、既存の open Issue へコメント追記される（1 障害 = 1 Issue）
-- 全項目回復を検知すると回復コメントを付けて自動クローズする（障害の開始/終了が Issue に証跡として残る）
+- 異常が継続しても Issue は乱立せず、既存の open Issue へ抑制間隔を守ってコメント追記される（1 障害 = 1 Issue）
+- 連続 2 回の全項目回復を検知すると回復コメントを付けて自動クローズする（障害の開始/終了が Issue に証跡として残る）
 - 通知には実行ユーザーの `gh` CLI 認証を使用する（secret の新規保存は不要）。`gh auth status` が通ることが前提
 - **限界**: ① エッジ 302 は Access がTunnel より手前で応答するため Tunnel 死活を含まない（Tunnel は systemd active で担保）。② ホスト自体の電源断・ネット断は自己検知できない（Cloudflare 側 Alerting または外形監視の併用を推奨）
+
+## 💾 バックアップ・リストア
+
+Neon の 24 時間 PITR に加え、独立した論理バックアップ（`scripts/backup-neon.sh`）と
+復元演習手順を [`backup-restore.md`](./backup-restore.md) に追加した（外部評価 Phase 0）。
+
+## 🤖 AI 調査メモ（サーバー側ブローカー）
+
+Anthropic API キーはブラウザに保存せず、`/etc/ocsrc/api.env` のサーバー環境変数のみで管理する
+（外部評価 Phase 0・Issue #235 相当のキー漏えい対策）。
+
+```bash
+sudoedit /etc/ocsrc/api.env   # 以下を追記
+# OCSRC_ANTHROPIC_API_KEY=sk-ant-...（実値はコミット・ログに出力しない）
+# OCSRC_ANTHROPIC_MODEL=claude-sonnet-5
+sudo systemctl restart ocsrc-api
+```
+
+ブラウザは `GET /api/v1/ai/status`（設定状態）と `POST /api/v1/ai/memo`（生成）を
+同一オリジンの `/api` プロキシ経由で呼ぶ。キーはサーバーからブラウザへ一切送られない。
 
 ## 🚚 main マージ後の本番反映（重要な注意点）
 

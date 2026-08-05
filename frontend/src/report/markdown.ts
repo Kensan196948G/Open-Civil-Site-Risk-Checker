@@ -28,6 +28,7 @@ export function buildReportMd(ctx: ReportContext): string {
   L.push(`| 検索半径 | ${radiusLabel(location.radius || 500)} |`);
   L.push(`| 実行日時 | ${fetchedAt} |`);
   L.push(`| 公開区分 | ${visibility === 'internal' ? '社外秘 / 社内限定' : '社外可'} |`, '');
+  L.push('> 本資料は**参考情報**です。正式な承認資料・発注者提出資料としては使用できません。公的資料と現地確認による再確認が必要です。', '');
 
   L.push('## 2. 確認優先度サマリー', '');
   L.push('| 優先度 | 件数 |');
@@ -64,6 +65,7 @@ export function buildReportMd(ctx: ReportContext): string {
 
   L.push('## 7. 注意事項', '');
   L.push('本資料は公開データに基づく初期調査支援資料であり、施工可否、設計判断、法令適合性、安全性を断定するものではありません。');
+  L.push('利用範囲は参考情報（初期調査の入口）に限定され、承認・稟議・発注者説明の根拠資料には使用できません。');
 
   return L.join('\n');
 }

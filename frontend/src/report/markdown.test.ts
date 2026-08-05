@@ -33,6 +33,13 @@ describe('buildReportMd', () => {
     expect(md).toContain('法令適合性');
   });
 
+  it('参考用途限定ラベルを含む（外部評価 Phase 0）', () => {
+    const md = buildReportMd(ctx());
+    expect(md).toContain('参考情報');
+    expect(md).toContain('承認資料・発注者提出資料としては使用できません');
+    expect(md).toContain('初期調査の入口');
+  });
+
   it('公開区分ラベルを visibility で切り替える', () => {
     expect(buildReportMd(ctx({ visibility: 'internal' }))).toContain('社外秘 / 社内限定');
     expect(buildReportMd(ctx({ visibility: 'public' }))).toContain('社外可');

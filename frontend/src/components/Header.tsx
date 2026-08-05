@@ -38,7 +38,10 @@ export function Header() {
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-        <span style={{ fontSize: 16, fontWeight: 600 }}>{title}</span>
+        <span style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+          {title}
+          <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 8, background: 'var(--warn-bg)', color: 'var(--warn-text-2)', border: '1px solid var(--warn-border)' }}>参考用途のみ</span>
+        </span>
         <span className="ocsrc-header-subtitle" style={{ fontSize: 11, color: 'var(--chrome-text-3)', fontWeight: 400 }}>{sub}</span>
       </div>
       <div style={{ flex: 1 }} />

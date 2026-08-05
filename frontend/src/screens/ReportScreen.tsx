@@ -59,6 +59,10 @@ export function ReportScreen() {
           <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-005</div>
           <h1 style={{ margin: '3px 0 18px', fontSize: 20, fontWeight: 700 }}>レポート出力</h1>
 
+          <div style={{ padding: '9px 12px', marginBottom: 18, background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', borderRadius: 7, fontSize: 11, lineHeight: 1.7, color: 'var(--warn-text-2)' }}>
+            ⚠ 本レポートは<strong>参考情報（初期調査の入口）</strong>です。承認資料・発注者提出資料としては使用できません。公的資料と現地確認による再確認が必要です。
+          </div>
+
           <div style={fieldLabel}>出力形式</div>
           <div style={{ display: 'flex', gap: 7, marginBottom: 20 }}>
             <button onClick={() => setFmt('md')} style={cssToStyle(fmtBase + (reportFormat === 'md' ? 'var(--accent);background:var(--accent);color:#fff' : 'var(--border);background:var(--surface);color:var(--text-2)'))}>Markdown</button>
