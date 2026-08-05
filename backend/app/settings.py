@@ -20,7 +20,8 @@ class Settings(BaseSettings):
     app_env: str = "development"
     # Plain PostgreSQL DSN, e.g. postgresql://app:***@db:5432/site_risk_checker
     database_url: str | None = None
-    db_check_timeout_seconds: float = 3.0
+    # Neon の serverless cold start（数秒）を許容する値に引き上げる（外部評価 Phase 0）。
+    db_check_timeout_seconds: float = 8.0
     # Comma-separated allowlist of browser origins for CORS, e.g.
     # "http://localhost:5173". Empty (default) disables CORS entirely;
     # production stays same-origin behind the reverse proxy (Issue #35).
@@ -38,6 +39,13 @@ class Settings(BaseSettings):
     )
     nominatim_min_interval_seconds: float = 1.0
     nominatim_timeout_seconds: float = 8.0
+
+    # AI 調査メモ（Anthropic）のサーバー側ブローカー設定。
+    # キーはサーバー環境変数のみで保持し、ブラウザへ配布・保存しない（外部評価 Phase 0）。
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-sonnet-5"
+    anthropic_timeout_seconds: float = 90.0
+    anthropic_max_prompt_chars: int = 20_000
 
     @property
     def cors_origin_list(self) -> list[str]:

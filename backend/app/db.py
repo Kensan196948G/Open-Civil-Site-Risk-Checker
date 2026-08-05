@@ -19,12 +19,28 @@ async def check_database(database_url: str, timeout: float = 3.0) -> str:
     except ImportError:
         return "unavailable"
 
-    try:
-        conn = await asyncio.wait_for(asyncpg.connect(dsn=database_url), timeout=timeout)
+    # 既存プールがあれば warm connection で確認（Neon cold start の誤検知を減らす）。
+    pool = _pools.get(database_url)
+    if pool is not None:
         try:
-            await conn.execute("SELECT 1")
-        finally:
-            await conn.close()
+            async with asyncio.timeout(timeout):
+                conn = await pool.acquire()
+                try:
+                    await conn.execute("SELECT 1")
+                finally:
+                    await pool.release(conn)
+            return "ok"
+        except Exception:
+            # プール内接続が失効している場合は新規接続で再確認（cold start 対策）。
+            pass
+
+    try:
+        async with asyncio.timeout(timeout):
+            conn = await asyncpg.connect(dsn=database_url)
+            try:
+                await conn.execute("SELECT 1")
+            finally:
+                await conn.close()
         return "ok"
     except Exception:
         # Connection refused, auth failure, timeout, bad DSN — the health

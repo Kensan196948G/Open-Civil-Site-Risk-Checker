@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../store';
 import { memoSectionsFromText } from '../risk/memo';
 import { generateAiMemo } from '../risk/aiMemo';
-import { canSave, loadAiSettings } from '../settings/aiSettings';
+import { fetchAiServerStatus, type AiServerStatus } from '../settings/aiSettings';
 
 // SCR-004 AI調査メモ。閲覧 / 編集を切り替え、テンプレート再生成と
-// AI 生成（SCR-008 で保存した Anthropic キーを利用）ができる（要件 FR-401〜405）。
+// AI 生成（サーバー側ブローカー経由・ブラウザにキーを保持しない）ができる（要件 FR-401〜405）。
 export function MemoScreen() {
   const { state, go, toggleMemoEdit, onMemoInput, regenMemo, memoTextOrDefault } = useApp();
   const { ranOnce, memoEditing } = state;
@@ -14,15 +14,25 @@ export function MemoScreen() {
   const [aiNotice, setAiNotice] = useState<{ ok: boolean; message: string } | null>(null);
   // null: まだ AI 生成を実行していない（"チェック済" と区別する）。[]: 実行済みで禁止表現ゼロ件。
   const [aiWarnings, setAiWarnings] = useState<string[] | null>(null);
+  const [aiStatus, setAiStatus] = useState<AiServerStatus | null>(null);
 
-  const aiSettings = useMemo(() => loadAiSettings(), []);
-  const aiConfigured = canSave(aiSettings.apiKey);
+  useEffect(() => {
+    let alive = true;
+    void fetchAiServerStatus().then((s) => {
+      if (alive) setAiStatus(s);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const aiConfigured = aiStatus?.configured === true;
 
   const onAiGenerate = () => {
     if (!aiConfigured || generating || !state.location) return;
     setGenerating(true);
     setAiNotice(null);
-    void generateAiMemo(aiSettings, state.location, state.findings).then((res) => {
+    void generateAiMemo(state.location, state.findings).then((res) => {
       if (res.ok && res.text) {
         onMemoInput(res.text);
         setAiWarnings(res.warnings);
@@ -77,7 +87,7 @@ export function MemoScreen() {
               {generating ? 'AI 生成中…' : '🤖 AI生成（Claude）'}
             </button>
           ) : (
-            <button onClick={() => go('settings')} style={editBtn} title="システム設定で Anthropic API キーを保存すると AI 生成が使えます">
+            <button onClick={() => go('settings')} style={editBtn} title="AI はサーバー側で設定します（ブラウザにキーを保存しません）">
               AI設定へ
             </button>
           )}

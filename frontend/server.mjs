@@ -71,8 +71,8 @@ const CSP = [
   "img-src 'self' data: https://cyberjapandata.gsi.go.jp https://disaportaldata.gsi.go.jp",
   // fetch 先: 'self'（/api 同一オリジンプロキシ）/ 127.0.0.1:8000（同一マシンでのバックエンド直結既定値）/
   // Nominatim（ジオコーディング）/ Open-Meteo（降水・標高）/ GSI 標高 API / Overpass（OSM）/
-  // 気象庁（警報・注意報）/ Anthropic（AI 調査メモ）。
-  "connect-src 'self' http://127.0.0.1:8000 https://nominatim.openstreetmap.org https://api.open-meteo.com https://cyberjapandata2.gsi.go.jp https://overpass-api.de https://www.jma.go.jp https://api.anthropic.com",
+  // 気象庁（警報・注意報）。Anthropic はサーバー側ブローカー経由のためブラウザ直結は不要（外部評価 Phase 0）。
+  "connect-src 'self' http://127.0.0.1:8000 https://nominatim.openstreetmap.org https://api.open-meteo.com https://cyberjapandata2.gsi.go.jp https://overpass-api.de https://www.jma.go.jp",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -358,9 +358,9 @@ function sendProxyError(res, status, error, detail) {
   res.end(JSON.stringify({ error, detail }));
 }
 
-/** /api/* をバックエンドへ中継する（GET/HEAD のみ・パス／クエリ保持）。
- *  運用特例: /api/healthz はバックエンドの /healthz へ書き換え、プロキシ越しに
- *  API の健全性（DB 到達性含む）を確認できるようにする。 */
+/** /api/* をバックエンドへ中継する（GET/HEAD を基本とし、/api/v1/ai/* のみ POST 可）。
+ *  運用特例: /api/healthz → /healthz、/api/livez → /livez、/api/readyz → /readyz へ
+ *  書き換え、プロキシ越しに API の健全性（DB 到達性含む）を確認できるようにする。 */
 function proxyApi(req, res) {
   let target;
   try {
@@ -384,26 +384,70 @@ function proxyApi(req, res) {
     sendProxyError(res, 400, 'bad_request', 'proxy path must stay under /api/');
     return;
   }
-  if (target.pathname === '/api/healthz') target.pathname = '/healthz';
+  const healthRewrite = {
+    '/api/healthz': '/healthz',
+    '/api/livez': '/livez',
+    '/api/readyz': '/readyz',
+  };
+  if (healthRewrite[target.pathname]) target.pathname = healthRewrite[target.pathname];
+
+  // AI ブローカー（POST /api/v1/ai/*）のみボディ付きリクエストを許容する。
+  const isAiPost = req.method === 'POST' && (decodedPath === '/api/v1/ai' || decodedPath.startsWith('/api/v1/ai/'));
+  if (req.method === 'POST' && !isAiPost) {
+    sendProxyError(res, 405, 'method_not_allowed', 'POST is only allowed for /api/v1/ai/*');
+    return;
+  }
 
   const mod = target.protocol === 'https:' ? https : http;
-  const upstream = mod.request(
-    target,
-    { method: req.method, headers: pickHeaders(req.headers, DROP_REQUEST_HEADERS), timeout: PROXY_TIMEOUT_MS },
-    (up) => {
-      res.writeHead(up.statusCode || 502, pickHeaders(up.headers, DROP_RESPONSE_HEADERS));
-      up.pipe(res);
-    },
-  );
-  // アイドルタイムアウトは destroy でエラー経路（502）へ集約する。
-  upstream.on('timeout', () => upstream.destroy(new Error(`backend timeout (${PROXY_TIMEOUT_MS}ms)`)));
-  upstream.on('error', (err) => {
-    console.error('[ocsrc-web] proxy error:', err.message);
-    sendProxyError(res, 502, 'bad_gateway', `backend unreachable (${BACKEND_ORIGIN.origin})`);
-  });
-  // クライアント切断時は上流リクエストも打ち切る。
-  res.on('close', () => upstream.destroy());
-  upstream.end(); // GET/HEAD のみ許可しているため body は転送しない。
+  const doForward = (headers) => {
+    const upstream = mod.request(
+      target,
+      { method: req.method, headers, timeout: PROXY_TIMEOUT_MS },
+      (up) => {
+        res.writeHead(up.statusCode || 502, pickHeaders(up.headers, DROP_RESPONSE_HEADERS));
+        up.pipe(res);
+      },
+    );
+    // アイドルタイムアウトは destroy でエラー経路（502）へ集約する。
+    upstream.on('timeout', () => upstream.destroy(new Error(`backend timeout (${PROXY_TIMEOUT_MS}ms)`)));
+    upstream.on('error', (err) => {
+      console.error('[ocsrc-web] proxy error:', err.message);
+      sendProxyError(res, 502, 'bad_gateway', `backend unreachable (${BACKEND_ORIGIN.origin})`);
+    });
+    // クライアント切断時は上流リクエストも打ち切る。
+    res.on('close', () => upstream.destroy());
+    return upstream;
+  };
+
+  if (req.method === 'POST') {
+    // ボディは 64KB 上限（AI プロンプト用途の最小限）。content-type のみ保持し、
+    // 資格情報系ヘッダは従来どおり除去する。
+    const chunks = [];
+    let size = 0;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > 65536) {
+        req.destroy();
+        if (!res.headersSent) sendProxyError(res, 413, 'payload_too_large', 'request body exceeds 64KB');
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      const body = Buffer.concat(chunks);
+      const headers = pickHeaders(req.headers, DROP_REQUEST_HEADERS);
+      const contentType = req.headers['content-type'];
+      if (typeof contentType === 'string') headers['content-type'] = contentType;
+      headers['content-length'] = String(body.length);
+      doForward(headers).end(body);
+    });
+    req.on('error', () => {
+      if (!res.headersSent) sendProxyError(res, 400, 'bad_request', 'failed to read request body');
+    });
+    return;
+  }
+
+  doForward(pickHeaders(req.headers, DROP_REQUEST_HEADERS)).end(); // GET/HEAD
 }
 
 /** SPA フォールバック（index.html）を stat 付きで返す。 */
@@ -443,13 +487,15 @@ const server = http.createServer(async (req, res) => {
     // 公開経路（Cloudflare Tunnel）の認証ゲート。メソッド判定より先に評価し、
     // 未認証クライアントには許可メソッド等の情報も返さない。
     if (!(await checkTunnelAuth(req, res))) return;
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
+    // AI ブローカー（/api/v1/ai/* の POST）のみボディ付きリクエストを許容する。
+    const rawPath = (req.url || '/').split('?')[0];
+    const isAiPost = req.method === 'POST' && (rawPath === '/api/v1/ai' || rawPath.startsWith('/api/v1/ai/'));
+    if (req.method !== 'GET' && req.method !== 'HEAD' && !isAiPost) {
       res.writeHead(405, { Allow: 'GET, HEAD' });
       res.end('Method Not Allowed');
       return;
     }
     // /api 名前空間はバックエンドへ中継し、静的解決（SPA fallback）には流さない。
-    const rawPath = (req.url || '/').split('?')[0];
     if (rawPath === '/api' || rawPath.startsWith('/api/')) {
       proxyApi(req, res);
       return;

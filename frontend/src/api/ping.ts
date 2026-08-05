@@ -1,6 +1,6 @@
 import { fetchJson, nowHMS } from './http';
 import { ksjBaseUrl } from './ksj';
-import { backendHealthzUrl } from '../settings/appSettings';
+import { backendReadyUrl } from '../settings/appSettings';
 import type { SourceKey, SourceStatus } from '../types';
 
 // データソース接続テスト（要件 FR-603）。
@@ -61,16 +61,16 @@ export async function pingSource(key: SourceKey): Promise<PingResult> {
       return good ? ok() : fail();
     }
     case 'ksj': {
-      // Phase 2: healthz で DB 到達性まで確認する。既定（base=''）は配信オリジンの
-      // /api/healthz（プロキシ特例）、カスタム URL 設定時は ${base}/healthz を叩く。
+      // Phase 2: readiness（/readyz）で DB 到達性まで確認する。既定（base=''）は配信オリジンの
+      // /api/readyz（プロキシ特例）、カスタム URL 設定時は ${base}/readyz を叩く。
       const base = ksjBaseUrl();
       const pageOrigin = typeof location !== 'undefined' ? location.origin : undefined;
-      const r = await fetchJson<{ db?: string }>(backendHealthzUrl(base, pageOrigin), { timeout: 8000 });
+      const r = await fetchJson<{ db?: string }>(backendReadyUrl(base, pageOrigin), { timeout: 10000 });
       return r.ok && r.data?.db === 'ok' ? ok() : fail();
     }
     case 'plateau':
-      // 規約上は接続可能。MVP では疎通成功扱い（実データ取得は別途）。
-      return ok();
+      // アダプタ未実装のため実疎通を行わない（疑似成功を記録しない。外部評価 Phase 0）。
+      return skip();
     case 'xroad':
       return skip();
     case 'jma_warning': {

@@ -3,7 +3,7 @@ import {
   ALL_LOCAL_STORAGE_KEYS,
   BACKEND_URL_KEY,
   FALLBACK_DEFAULTS,
-  backendHealthzUrl,
+  backendReadyUrl,
   canSaveAnalysisDefaults,
   interpretBackendTest,
   isValidBackendUrl,
@@ -24,28 +24,28 @@ describe('isValidBackendUrl', () => {
   });
 });
 
-describe('backendHealthzUrl（接続テストの分岐、Issue #57）', () => {
-  it('base 空（same-origin 既定）はプロキシ特例 /api/healthz を叩く', () => {
-    expect(backendHealthzUrl('')).toBe('/api/healthz');
-    expect(backendHealthzUrl('   ')).toBe('/api/healthz');
+describe('backendReadyUrl（接続テストの分岐、Issue #57 / 外部評価 Phase 0）', () => {
+  it('base 空（same-origin 既定）はプロキシ特例 /api/readyz を叩く', () => {
+    expect(backendReadyUrl('')).toBe('/api/readyz');
+    expect(backendReadyUrl('   ')).toBe('/api/readyz');
   });
 
-  it('カスタム URL（直結）は従来どおり ${base}/healthz（末尾スラッシュ除去）', () => {
-    expect(backendHealthzUrl('http://127.0.0.1:8000')).toBe('http://127.0.0.1:8000/healthz');
-    expect(backendHealthzUrl('http://127.0.0.1:8000///')).toBe('http://127.0.0.1:8000/healthz');
+  it('カスタム URL（直結）は従来どおり ${base}/readyz（末尾スラッシュ除去）', () => {
+    expect(backendReadyUrl('http://127.0.0.1:8000')).toBe('http://127.0.0.1:8000/readyz');
+    expect(backendReadyUrl('http://127.0.0.1:8000///')).toBe('http://127.0.0.1:8000/readyz');
   });
 
   it('配信オリジン自身を指定した場合もプロキシ特例へ寄せる（静的サーバの text /healthz 誤判定防止）', () => {
-    expect(backendHealthzUrl('http://192.168.0.5:8700', 'http://192.168.0.5:8700')).toBe('/api/healthz');
-    expect(backendHealthzUrl('http://192.168.0.5:8700/', 'http://192.168.0.5:8700')).toBe('/api/healthz');
+    expect(backendReadyUrl('http://192.168.0.5:8700', 'http://192.168.0.5:8700')).toBe('/api/readyz');
+    expect(backendReadyUrl('http://192.168.0.5:8700/', 'http://192.168.0.5:8700')).toBe('/api/readyz');
   });
 
-  it('配信オリジンと異なる直結 URL は ${base}/healthz のまま', () => {
-    expect(backendHealthzUrl('http://192.168.0.5:8000', 'http://192.168.0.5:8700')).toBe('http://192.168.0.5:8000/healthz');
+  it('配信オリジンと異なる直結 URL は ${base}/readyz のまま', () => {
+    expect(backendReadyUrl('http://192.168.0.5:8000', 'http://192.168.0.5:8700')).toBe('http://192.168.0.5:8000/readyz');
   });
 
   it('URL として解釈できない base は例外にせず直結扱い', () => {
-    expect(backendHealthzUrl('not a url', 'http://x:8700')).toBe('not a url/healthz');
+    expect(backendReadyUrl('not a url', 'http://x:8700')).toBe('not a url/readyz');
   });
 });
 

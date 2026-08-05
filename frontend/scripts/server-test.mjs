@@ -140,14 +140,24 @@ await fs.mkdir(join(distTmp, 'assets'), { recursive: true });
 await fs.writeFile(join(distTmp, 'index.html'), '<!doctype html><title>ocsrc-test</title>ok');
 await fs.writeFile(join(distTmp, 'assets', 'app.js'), 'console.log("asset")');
 
-// mini-backend: 受信内容を echo し、/healthz は JSON、/api/slow は無応答（タイムアウト誘発）。
+// mini-backend: 受信内容を echo し、/livez /readyz /healthz は JSON、/api/slow は無応答（タイムアウト誘発）。
 const backend = http.createServer((req, res) => {
-  if (req.url === '/healthz') {
+  if (req.url === '/livez' || req.url === '/readyz' || req.url === '/healthz') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', db: 'ok', version: 'test', seenPath: req.url }));
     return;
   }
   if (req.url.startsWith('/api/slow')) return; // never respond
+  // AI ブローカー模擬: ボディ付き POST が正しく中継されることを検証する。
+  if (req.url === '/api/v1/ai/memo') {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ seenPath: req.url, method: req.method, body: Buffer.concat(chunks).toString('utf8'), headers: req.headers }));
+    });
+    return;
+  }
   // あえて web 層と衝突するセキュリティヘッダを返し、上流優先にならない（item 6）ことを検証する。
   // 受信ヘッダを echo し、bodyless 中継で Content-Length/Content-Type が剥がれる（item 7）ことを検証する。
   res.writeHead(200, {
@@ -238,8 +248,28 @@ try {
   const apiHzBody = JSON.parse(apiHz.body);
   check('/api/healthz rewritten to backend /healthz', apiHz.status === 200 && apiHzBody.seenPath === '/healthz', `body=${apiHz.body.slice(0, 80)}`);
 
+  const apiLive = await request(webUpPort, '/api/livez');
+  const apiLiveBody = JSON.parse(apiLive.body);
+  check('/api/livez rewritten to backend /livez', apiLive.status === 200 && apiLiveBody.seenPath === '/livez', `body=${apiLive.body.slice(0, 80)}`);
+
+  const apiReady = await request(webUpPort, '/api/readyz');
+  const apiReadyBody = JSON.parse(apiReady.body);
+  check('/api/readyz rewritten to backend /readyz', apiReady.status === 200 && apiReadyBody.seenPath === '/readyz', `body=${apiReady.body.slice(0, 80)}`);
+
   const postApi = await request(webUpPort, '/api/v1/ping', { method: 'POST' });
   check('POST /api/* is 405', postApi.status === 405);
+
+  const aiPost = await request(webUpPort, '/api/v1/ai/memo', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt: 'テスト' }),
+  });
+  const aiPostBody = JSON.parse(aiPost.body);
+  check(
+    'POST /api/v1/ai/memo relays body + content-type',
+    aiPost.status === 200 && aiPostBody.method === 'POST' && aiPostBody.body === '{"prompt":"テスト"}' && aiPostBody.headers['content-type'] === 'application/json',
+    `status=${aiPost.status} body=${aiPost.body.slice(0, 120)}`,
+  );
 
   // ---- 2b. /api プロキシ（ヘッダ精製: Issue #43 items 6/7） ----
   console.log('▶ /api proxy (header hygiene)');
