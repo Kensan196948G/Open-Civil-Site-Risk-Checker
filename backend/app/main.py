@@ -13,6 +13,7 @@ Endpoints:
 """
 
 import asyncio
+import logging
 import time
 from collections import deque
 from contextlib import asynccontextmanager
@@ -31,6 +32,7 @@ from .ksj import query_nearby
 from .settings import Settings, get_settings
 
 API_VERSION = "0.2.0"
+logger = logging.getLogger("ocsrc.api")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -85,24 +87,37 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         process from a backend whose database is temporarily unavailable
         (external evaluation Phase 0).
         """
-        db_status = await _db_status(settings)
+        db_status, db_ms, db_error = await _db_status(settings)
         if db_status != "ok":
+            logger.warning("readiness: db=%s error=%s check_ms=%s", db_status, db_error, db_ms)
             raise HTTPException(
                 status_code=503,
-                detail={"status": "error", "db": db_status, "version": API_VERSION},
+                detail={
+                    "status": "error",
+                    "db": db_status,
+                    "db_error": db_error,
+                    "db_check_ms": db_ms,
+                    "version": API_VERSION,
+                },
             )
-        return {"status": "ok", "db": db_status, "version": API_VERSION}
+        return {"status": "ok", "db": db_status, "db_check_ms": db_ms, "version": API_VERSION}
 
     @app.get("/healthz")
     async def healthz(settings: Annotated[Settings, Depends(get_settings)]) -> dict:
         """Legacy alias of /readyz (kept for external monitors; DB error => 503)."""
-        db_status = await _db_status(settings)
+        db_status, db_ms, db_error = await _db_status(settings)
         if db_status != "ok":
             raise HTTPException(
                 status_code=503,
-                detail={"status": "error", "db": db_status, "version": API_VERSION},
+                detail={
+                    "status": "error",
+                    "db": db_status,
+                    "db_error": db_error,
+                    "db_check_ms": db_ms,
+                    "version": API_VERSION,
+                },
             )
-        return {"status": "ok", "db": db_status, "version": API_VERSION}
+        return {"status": "ok", "db": db_status, "db_check_ms": db_ms, "version": API_VERSION}
 
     @app.get("/api/v1/ping")
     async def ping(settings: Annotated[Settings, Depends(get_settings)]) -> dict:
@@ -216,9 +231,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-async def _db_status(settings: Settings) -> str:
+async def _db_status(settings: Settings) -> tuple[str, float, str | None]:
     if settings.database_url is None:
-        return "not_configured"
+        return "not_configured", 0.0, None
     return await check_database(
         settings.database_url, timeout=settings.db_check_timeout_seconds
     )

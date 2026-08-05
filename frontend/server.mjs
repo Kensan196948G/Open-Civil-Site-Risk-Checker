@@ -86,15 +86,16 @@ const SECURITY_HEADERS = {
   'Referrer-Policy': 'strict-origin-when-cross-origin',
 };
 
-// ---- Cloudflare Access（Zero Trust）による認証（Issue #70・要件 §11.3.1） ----
-// Tunnel 判定は cf-connecting-ip ヘッダの有無。cloudflared は必ず付与する一方、
-// LAN 内クライアントが偽装付与しても「認証が余計に要求される」方向にしか働かず、
-// 認証バイパスには使えない（fail-secure）。LAN 直アクセスの挙動は従来どおり。
-//
+// ---- Cloudflare Access（Zero Trust）による認証（Issue #70・#240） ----
+// ACCESS_ENABLED（チームドメイン + AUD 設定）時は、Tunnel 経由・LAN 直アクセスの
+// 両方で Access JWT を必須化する（外部評価 #240: LAN 直アクセス無認証の解消）。
 // 認証は共有パスワードを持たず、Cloudflare Access がエッジで発行する JWT
 // （Cf-Access-Jwt-Assertion）を検証する。誰を許可するかは Access アプリのポリシー
-// （メール / OTP / IdP）で管理する。エッジで未認証は弾かれるため通常 origin には
-// 有効 JWT 付きリクエストしか届かないが、多層防御として origin でも JWT を検証する。
+// （メール / OTP / IdP。Entra ID 等も IdP として接続可能）で管理する。
+// LAN クライアントは公開 URL 経由で Access セッションを取得してから利用する。
+// /healthz のみ監視用に認証なしで通す（秘匿情報を含まない）。
+// ACCESS_ENABLED が未設定（開発モード）の場合は LAN 直アクセスを許可する。
+//
 const ACCESS_TEAM_DOMAIN = (process.env.OCSRC_ACCESS_TEAM_DOMAIN || '')
   .replace(/^https?:\/\//, '')
   .replace(/\/+$/, '');
@@ -296,10 +297,9 @@ async function verifyAccessJwt(token) {
 }
 
 /** Tunnel 経由リクエストの認証ゲート。true = 続行可、false = 応答送出済み。
- *  /healthz のみ除外（秘匿情報を含まず、公開経路の死活監視に使うため）。 */
+ *  /healthz のみ除外（秘匿情報を含まず、公開経路の死活監視に使うため）。
+ *  ACCESS_ENABLED 時は LAN 直アクセスにも JWT を要求する（#240）。 */
 async function checkTunnelAuth(req, res) {
-  const connectingIp = req.headers['cf-connecting-ip'];
-  if (connectingIp === undefined) return true; // LAN 直アクセス
   // healthz 除外は実ハンドラ（req.url === '/healthz' の完全一致）と条件を揃える。
   // query を剥がして判定すると /healthz?x が「除外されるが healthz ハンドラには
   // 一致せず SPA fallback へ流れる」経路になり、未認証で index.html が漏れる。
@@ -311,10 +311,14 @@ async function checkTunnelAuth(req, res) {
     return false;
   };
   if (!ACCESS_ENABLED) {
-    // Access 未設定のまま公開経路から到達した場合は塞ぐ（設定漏れ事故の防止）。
-    return deny(503, { 'Content-Type': 'text/plain; charset=utf-8' }, 'access control is not configured');
+    // Access 未設定（開発モード）: Tunnel 経由は設定漏れ事故防止のため塞ぎ、
+    // LAN 直アクセスは開発用途として許可する。
+    if (req.headers['cf-connecting-ip'] !== undefined) {
+      return deny(503, { 'Content-Type': 'text/plain; charset=utf-8' }, 'access control is not configured');
+    }
+    return true;
   }
-  const ip = String(connectingIp);
+  const ip = String(req.headers['cf-connecting-ip'] || req.socket.remoteAddress || 'unknown');
   if (authRateLimited(ip)) {
     return deny(429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '60' }, 'too many failed authorization attempts');
   }

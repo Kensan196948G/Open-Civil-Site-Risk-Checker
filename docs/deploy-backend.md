@@ -246,18 +246,18 @@ bash scripts/install-systemd.sh
 
 | 挙動 | 条件 |
 |---|---|
-| 認証なしで通す | LAN 直アクセス（`cf-connecting-ip` ヘッダなし） |
 | Access ログインを要求 | Tunnel 経由（エッジで未認証は Access ログイン画面へ） |
-| 有効 JWT を要求（多層防御） | origin で `Cf-Access-Jwt-Assertion` を署名・aud・iss・exp 検証。無効/欠如は **403** |
+| 有効 JWT を要求（多層防御） | **Tunnel 経由・LAN 直アクセスの両方**で origin が `Cf-Access-Jwt-Assertion` を署名・aud・iss・exp 検証。無効/欠如は **403**（外部評価 #240 対応） |
 | 503 で拒否 | Tunnel 経由かつ Access 未設定（fail-safe） |
 | 429 で拒否 | 同一 IP から 60 秒に 10 回検証失敗（レート制限） |
 | 認証なしで通す（origin側の意図） | `/healthz` の完全一致のみ（死活監視用）。`server.mjs` の `checkTunnelAuth` は `/healthz` を除外済み。内部監視は `/livez`・`/readyz`（`/api/livez`・`/api/readyz` としてプロキシ） |
+| 開発モードのみ LAN 直アクセス可 | `OCSRC_ACCESS_TEAM_DOMAIN` / `OCSRC_ACCESS_AUD` 未設定時（Access 未設定） |
 
 > ⚠️ **既知のギャップ（Issue #94・本書更新時点で未解決）**: 上表の `/healthz` 例外は **origin（`server.mjs`）側のロジックのみ**。Cloudflare Access の **エッジ層**では `riskchecker.mirai-dx-platform.com` 全体を保護する Access アプリが `/healthz` にも適用されるため、実際には未認証アクセスがエッジで 302（Access ログインへのリダイレクト）される（2026-07-14 に `curl` で確認）。外形監視（UptimeRobot 等）で `/healthz` を使う場合は、`riskchecker.mirai-dx-platform.com/healthz` 専用の Access アプリケーションを作成し `bypass` ポリシーを設定する必要がある。手順は Issue #94 のコメントを参照。
 
 > アクセス許可の追加・削除（誰を入れるか）は **Access アプリのポリシー**をダッシュボードで編集するだけで即反映されます。パスワードの再配布は不要です。
 >
-> **🔒 ネットワーク境界（重要・多層防御）**: origin の JWT 検証は「Tunnel 経由（Cloudflare が付与する `cf-connecting-ip` あり）」のリクエストにのみ効きます。`server.mjs` は `0.0.0.0:8700` で待ち受けるため、**信頼できないネットワークから 8700 に直接到達できると `cf-connecting-ip` なし＝認証なしで通ってしまいます**。Cloudflare Tunnel はアウトバウンド専用でインバウンドのポート開放を必要としないので、**8700 を WAN へ port-forward しないこと**。インターネットからの到達は必ず Tunnel（＝エッジ Access）だけに限定し、8700 は LAN 内のみ到達可能に保ってください（本番ホストが NAT 配下のプライベート IP であることが前提）。
+> **🔒 ネットワーク境界（重要・多層防御・外部評価 #240 対応済み）**: `OCSRC_ACCESS_TEAM_DOMAIN` / `OCSRC_ACCESS_AUD` が設定されている本番では、`server.mjs` は **LAN 直アクセス（`cf-connecting-ip` なし）にも JWT を要求**します。LAN 利用者は公開 URL（`https://riskchecker.mirai-dx-platform.com/`）経由で Access セッションを取得し、同一セッション（JWT）を利用します。Access の IdP に Entra ID 等を接続すれば個人 ID（メール等）が JWT に含まれ、利用者識別が可能です。`/healthz` のみ監視用に認証なしです。`0.0.0.0:8700` への直接到達を WAN へ port-forward しないこと（Tunnel はアウトバウンド専用）。
 
 ### 2. Tunnel の作成と常駐化
 
@@ -348,6 +348,13 @@ sudoedit /etc/ocsrc/api.env   # 以下を追記
 # OCSRC_ANTHROPIC_API_KEY=sk-ant-...（実値はコミット・ログに出力しない）
 # OCSRC_ANTHROPIC_MODEL=claude-sonnet-5
 sudo systemctl restart ocsrc-api
+```
+
+推奨は専用スクリプト（キーを画面・ログに出さない）:
+
+```bash
+sudo scripts/configure-ai-key.sh          # キーを read -s で受け取り、設定・再起動・status 確認
+sudo scripts/configure-ai-key.sh --test   # 最小の生成テストも実行（課金あり）
 ```
 
 ブラウザは `GET /api/v1/ai/status`（設定状態）と `POST /api/v1/ai/memo`（生成）を
