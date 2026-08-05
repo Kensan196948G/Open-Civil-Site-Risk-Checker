@@ -73,16 +73,22 @@ interface BackendHealthResponse {
   status?: string;
   db?: string;
   version?: string;
+  /** FastAPI HTTPException の 503 ペイロード（detail 配下に db が入る）。 */
+  detail?: { status?: string; db?: string; version?: string };
 }
 
 /** healthz 応答 → 判定メッセージ（pure）。DB 未設定は「接続はできた」扱いで区別する。 */
 export function interpretBackendTest(
   out: Pick<FetchOutcome<BackendHealthResponse>, 'ok' | 'data' | 'error'>,
 ): BackendTestVerdict {
-  if (!out.ok || !out.data) {
+  if (!out.data) {
     return { ok: false, message: `接続できませんでした（${out.error}）。URL とバックエンドの起動状態を確認してください。` };
   }
-  const db = out.data.db;
+  // /readyz の 503 は detail 配下に db が入るため、両方を展開して判定する。
+  const db = out.data.db ?? out.data.detail?.db;
+  if (db === undefined) {
+    return { ok: false, message: `接続できませんでした（${out.error}）。URL とバックエンドの起動状態を確認してください。` };
+  }
   if (db === 'ok') return { ok: true, message: `接続成功（DB到達性: ok、version ${out.data.version ?? '—'}）` };
   if (db === 'not_configured') {
     return { ok: true, message: 'バックエンドに接続できました（DB 未設定のため KSJ 検索は利用できません）。' };
@@ -109,7 +115,7 @@ export function backendReadyUrl(base: string, pageOrigin?: string): string {
 /** バックエンドの readiness を確認する（DB到達性まで報告）。url='' は same-origin 既定。 */
 export async function testBackendConnection(url: string): Promise<BackendTestVerdict> {
   const pageOrigin = typeof location !== 'undefined' ? location.origin : undefined;
-  const out = await fetchJson<BackendHealthResponse>(backendReadyUrl(url, pageOrigin), { timeout: 10000 });
+  const out = await fetchJson<BackendHealthResponse>(backendReadyUrl(url, pageOrigin), { timeout: 10000, errorBody: true });
   return interpretBackendTest(out);
 }
 

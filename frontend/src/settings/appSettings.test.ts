@@ -61,6 +61,14 @@ describe('interpretBackendTest', () => {
     expect(interpretBackendTest({ ok: true, data: { db: 'error' }, error: '—' }).ok).toBe(false);
     expect(interpretBackendTest({ ok: false, data: null, error: 'ネットワークエラー' }).ok).toBe(false);
   });
+
+  it('readyz の 503 detail ペイロードを展開して判定する（CodeRabbit #241 指摘対応）', () => {
+    const nc = interpretBackendTest({ ok: false, data: { detail: { db: 'not_configured' } }, error: 'HTTP 503' });
+    expect(nc.ok).toBe(true);
+    expect(nc.message).toContain('DB 未設定');
+    expect(interpretBackendTest({ ok: false, data: { detail: { db: 'error' } }, error: 'HTTP 503' }).ok).toBe(false);
+    expect(interpretBackendTest({ ok: false, data: { detail: { db: 'unavailable' } }, error: 'HTTP 503' }).ok).toBe(false);
+  });
 });
 
 describe('parseAnalysisDefaults', () => {

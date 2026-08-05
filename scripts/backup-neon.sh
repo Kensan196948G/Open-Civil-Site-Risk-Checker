@@ -12,6 +12,8 @@
 #   OCSRC_BACKUP_DIR     保存先ディレクトリ（既定 /var/backups/ocsrc）
 #   OCSRC_BACKUP_RETENTION_DAYS 保持日数（既定 30）
 set -euo pipefail
+# ダンプは DB の全データを含むため、作成物のアクセス権を明示的に制限する（CodeRabbit #241 指摘対応）。
+umask 077
 
 ENV_FILE="${OCSRC_API_ENV_FILE:-/etc/ocsrc/api.env}"
 BACKUP_DIR="${OCSRC_BACKUP_DIR:-/var/backups/ocsrc}"
@@ -38,12 +40,19 @@ if ! command -v pg_dump >/dev/null 2>&1; then
   exit 1
 fi
 
-mkdir -p "${BACKUP_DIR}"
+install -d -m 700 -- "${BACKUP_DIR}"
 stamp="$(date +%Y%m%d-%H%M%S)"
 out="${BACKUP_DIR}/ocsrc-${stamp}.dump"
+tmp_out="${out}.tmp.$$"
+tmp_sha="${out}.sha256.tmp.$$"
 
-pg_dump --no-owner --no-privileges --format=custom "${OCSRC_DATABASE_URL}" > "${out}"
-sha256sum "${out}" > "${out}.sha256"
+# 失敗したダンプを最終ファイル名で残さない（一時ファイルへ出力し、両方成功後に公開）。
+trap 'rm -f "${tmp_out}" "${tmp_sha}"' EXIT
+pg_dump --no-owner --no-privileges --format=custom "${OCSRC_DATABASE_URL}" > "${tmp_out}"
+sha256sum "${tmp_out}" > "${tmp_sha}"
+mv -f "${tmp_out}" "${out}"
+mv -f "${tmp_sha}" "${out}.sha256"
+trap - EXIT
 
 echo "[backup-neon] saved ${out} ($(du -h "${out}" | cut -f1))"
 echo "[backup-neon] sha256: $(awk '{print $1}' "${out}.sha256")"

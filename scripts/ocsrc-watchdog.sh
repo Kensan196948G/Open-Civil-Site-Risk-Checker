@@ -194,9 +194,13 @@ if [[ ${#failures[@]} -eq 0 ]]; then
       log "回復確定（${CONSECUTIVE_OK} 回連続 OK）"
     fi
     if [[ "${DRY_RUN}" != "1" && -n "${ISSUE_NUMBER}" ]]; then
-      gh issue close "${ISSUE_NUMBER}" -R "${REPO}" \
-        --comment "✅ **回復検知（${now}）**: ${FAILURE_COUNT} 回の失敗後に全チェックが正常へ復帰しました。$(printf '%s\n' '' '```' "${results[@]}" '```')" \
-        || log "WARN: Issue クローズに失敗（gh 認証・ネットワークを確認）"
+      if ! gh issue close "${ISSUE_NUMBER}" -R "${REPO}" \
+        --comment "✅ **回復検知（${now}）**: ${FAILURE_COUNT} 回の失敗後に全チェックが正常へ復帰しました。$(printf '%s\n' '' '```' "${results[@]}" '```')"; then
+        # クローズ失敗時はインシデント状態を保持し、次回の正常チェックで再試行する。
+        log "ERROR: Issue クローズに失敗（gh 認証・ネットワークを確認）。インシデント状態を保持します"
+        save_state
+        exit 1
+      fi
     fi
     ACTIVE=0
     ISSUE_NUMBER=""

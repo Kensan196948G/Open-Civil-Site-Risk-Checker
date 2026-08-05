@@ -114,6 +114,44 @@ const AUTH_FAIL_LIMIT = 10;
 const AUTH_FAIL_MAX_ENTRIES = 1000;
 const authFailures = new Map();
 
+// AI ブローカー（POST /api/v1/ai/*）の利用量制御: IP 別・固定窓（60 秒・20 回）。
+// コストの発生する外部 AI 呼び出しの踏み台・乱用を防ぐ（LAN 直アクセスも対象）。
+const AI_POST_WINDOW_MS = 60_000;
+const AI_POST_LIMIT = 20;
+const AI_POST_MAX_ENTRIES = 1000;
+const aiPostCalls = new Map();
+
+function aiRateLimited(ip) {
+  const entry = aiPostCalls.get(ip);
+  if (!entry) return false;
+  if (Date.now() - entry.windowStart > AI_POST_WINDOW_MS) {
+    aiPostCalls.delete(ip);
+    return false;
+  }
+  return entry.count >= AI_POST_LIMIT;
+}
+
+function recordAiPost(ip) {
+  const now = Date.now();
+  const entry = aiPostCalls.get(ip);
+  if (entry && now - entry.windowStart <= AI_POST_WINDOW_MS) {
+    entry.count += 1;
+    return;
+  }
+  if (!aiPostCalls.has(ip) && aiPostCalls.size >= AI_POST_MAX_ENTRIES) {
+    let oldestKey;
+    let oldestStart = Infinity;
+    for (const [key, value] of aiPostCalls) {
+      if (value.windowStart < oldestStart) {
+        oldestStart = value.windowStart;
+        oldestKey = key;
+      }
+    }
+    if (oldestKey !== undefined) aiPostCalls.delete(oldestKey);
+  }
+  aiPostCalls.set(ip, { count: 1, windowStart: now });
+}
+
 function authRateLimited(ip) {
   const entry = authFailures.get(ip);
   if (!entry) return false;
@@ -307,6 +345,9 @@ if (BACKEND_ORIGIN.protocol !== 'http:' && BACKEND_ORIGIN.protocol !== 'https:')
   throw new Error(`OCSRC_BACKEND_ORIGIN must be http(s), got: ${BACKEND_ORIGIN.href}`);
 }
 const PROXY_TIMEOUT_MS = Number(process.env.OCSRC_PROXY_TIMEOUT_MS) || 10_000;
+// AI ブローカーは上流（Anthropic）の応答が最大 90 秒かかり得るため、専用の長い
+// アイドルタイムアウトを使う（CodeRabbit #241 指摘対応）。
+const AI_PROXY_TIMEOUT_MS = Number(process.env.OCSRC_AI_PROXY_TIMEOUT_MS) || 95_000;
 // hop-by-hop ヘッダ（RFC 9110 §7.6.1）+ host。中継せず接続ごとに付け直す。
 const DROP_HEADERS = new Set([
   'connection',
@@ -397,19 +438,25 @@ function proxyApi(req, res) {
     sendProxyError(res, 405, 'method_not_allowed', 'POST is only allowed for /api/v1/ai/*');
     return;
   }
+  if (isAiPost && aiRateLimited(req.socket.remoteAddress || 'unknown')) {
+    sendProxyError(res, 429, 'too_many_ai_requests', 'AI request rate limit exceeded');
+    return;
+  }
+  if (isAiPost) recordAiPost(req.socket.remoteAddress || 'unknown');
 
   const mod = target.protocol === 'https:' ? https : http;
+  const upstreamTimeout = isAiPost ? AI_PROXY_TIMEOUT_MS : PROXY_TIMEOUT_MS;
   const doForward = (headers) => {
     const upstream = mod.request(
       target,
-      { method: req.method, headers, timeout: PROXY_TIMEOUT_MS },
+      { method: req.method, headers, timeout: upstreamTimeout },
       (up) => {
         res.writeHead(up.statusCode || 502, pickHeaders(up.headers, DROP_RESPONSE_HEADERS));
         up.pipe(res);
       },
     );
     // アイドルタイムアウトは destroy でエラー経路（502）へ集約する。
-    upstream.on('timeout', () => upstream.destroy(new Error(`backend timeout (${PROXY_TIMEOUT_MS}ms)`)));
+    upstream.on('timeout', () => upstream.destroy(new Error(`backend timeout (${upstreamTimeout}ms)`)));
     upstream.on('error', (err) => {
       console.error('[ocsrc-web] proxy error:', err.message);
       sendProxyError(res, 502, 'bad_gateway', `backend unreachable (${BACKEND_ORIGIN.origin})`);
@@ -421,12 +468,24 @@ function proxyApi(req, res) {
 
   if (req.method === 'POST') {
     // ボディは 64KB 上限（AI プロンプト用途の最小限）。content-type のみ保持し、
-    // 資格情報系ヘッダは従来どおり除去する。
+    // 資格情報系ヘッダは従来どおり除去する。低速 chunked POST による接続占有を
+    // 防ぐため、ボディ受信にもアイドルタイムアウトを設定する（CodeRabbit #241 指摘対応）。
     const chunks = [];
     let size = 0;
+    let receiveDone = false;
+    const receiveTimer = setTimeout(() => {
+      receiveDone = true;
+      if (!res.headersSent) {
+        sendProxyError(res, 408, 'request_timeout', 'request body receive timed out');
+      }
+      req.destroy();
+    }, PROXY_TIMEOUT_MS);
     req.on('data', (c) => {
+      if (receiveDone) return;
       size += c.length;
       if (size > 65536) {
+        receiveDone = true;
+        clearTimeout(receiveTimer);
         req.destroy();
         if (!res.headersSent) sendProxyError(res, 413, 'payload_too_large', 'request body exceeds 64KB');
         return;
@@ -434,6 +493,8 @@ function proxyApi(req, res) {
       chunks.push(c);
     });
     req.on('end', () => {
+      if (receiveDone) return;
+      clearTimeout(receiveTimer);
       const body = Buffer.concat(chunks);
       const headers = pickHeaders(req.headers, DROP_REQUEST_HEADERS);
       const contentType = req.headers['content-type'];
@@ -442,6 +503,8 @@ function proxyApi(req, res) {
       doForward(headers).end(body);
     });
     req.on('error', () => {
+      if (receiveDone) return;
+      clearTimeout(receiveTimer);
       if (!res.headersSent) sendProxyError(res, 400, 'bad_request', 'failed to read request body');
     });
     return;

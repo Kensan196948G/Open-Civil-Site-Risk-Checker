@@ -12,6 +12,9 @@ Endpoints:
   POST /api/v1/ai/memo       — AI memo broker (Anthropic key stays server-side)
 """
 
+import asyncio
+import time
+from collections import deque
 from contextlib import asynccontextmanager
 from typing import Annotated
 
@@ -40,6 +43,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     allowed unless configured. Wildcards are rejected at startup.
     """
     cfg = settings if settings is not None else get_settings()
+    # AI ブローカーの利用量制御（プロセス内・単純な固定窓 + 同時実行上限）。
+    ai_semaphore = asyncio.Semaphore(cfg.anthropic_max_concurrency)
+    ai_call_times: deque[float] = deque()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -47,6 +53,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await close_pools()
 
     app = FastAPI(title="Open Civil Site Risk Checker API", version=API_VERSION, lifespan=lifespan)
+    # テストや監視から現在の上限状態を確認できるようにする（利用量制御の検証用）。
+    app.state.ai_semaphore = ai_semaphore
+    app.state.ai_call_times = ai_call_times
 
     cors_origins = cfg.cors_origin_list
     if cors_origins:
@@ -172,17 +181,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings: Annotated[Settings, Depends(get_settings)],
     ) -> dict:
         """AI 調査メモ生成ブローカー。キーはサーバー環境変数のみで管理する。"""
+        # レート制限（固定窓・プロセス内）。AI 未設定でもスパムは拒否する。
+        now = time.monotonic()
+        window = settings.anthropic_rate_limit_window_seconds
+        while ai_call_times and now - ai_call_times[0] > window:
+            ai_call_times.popleft()
+        if len(ai_call_times) >= settings.anthropic_rate_limit_per_window:
+            rate_message = "AI 利用量の上限に達しました。時間をおいて再試行してください。"
+            return JSONResponse(
+                status_code=429,
+                content={"ok": False, "error": rate_message},
+            )
+        if ai_semaphore.locked():
+            concurrency_message = "AI 生成の同時実行数が上限です。時間をおいて再試行してください。"
+            return JSONResponse(
+                status_code=429,
+                content={"ok": False, "error": concurrency_message},
+            )
         if not settings.anthropic_api_key:
             message = "AI はサーバー側で未設定です（OCSRC_ANTHROPIC_API_KEY 未設定）"
             return JSONResponse(
                 status_code=503,
                 content={"ok": False, "error": message},
             )
-        try:
-            text = await call_anthropic(settings, req.prompt)
-        except AiUpstreamError as exc:
-            status = exc.status if exc.status in (401, 429, 502, 503) else 502
-            return JSONResponse(status_code=status, content={"ok": False, "error": exc.message})
+        async with ai_semaphore:
+            ai_call_times.append(now)
+            try:
+                text = await call_anthropic(settings, req.prompt)
+            except AiUpstreamError as exc:
+                status = exc.status if exc.status in (401, 429, 502, 503) else 502
+                return JSONResponse(status_code=status, content={"ok": False, "error": exc.message})
         return {"ok": True, "text": text, "model": settings.anthropic_model}
 
     return app
