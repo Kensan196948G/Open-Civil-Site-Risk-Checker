@@ -170,7 +170,7 @@ fi
 for r in "${results[@]}"; do log "${r}"; done
 
 issue_body() {
-  local kind="$1" title="$2"
+  local kind="$1"
   printf '%s\n' "## ${kind}（${now}）" "" '```' "${results[@]}" '```' "" \
     "## 経過" \
     "- 初回検知: ${FIRST_SEEN:-（今回）}" \
@@ -188,7 +188,11 @@ issue_body() {
 if [[ ${#failures[@]} -eq 0 ]]; then
   CONSECUTIVE_OK=$((CONSECUTIVE_OK + 1))
   if [[ "${ACTIVE}" == "1" && "${CONSECUTIVE_OK}" -ge "${RECOVERY_OK_CHECKS}" ]]; then
-    log "回復確定（${CONSECUTIVE_OK} 回連続 OK）-> Issue #${ISSUE_NUMBER} をクローズ"
+    if [[ -n "${ISSUE_NUMBER}" ]]; then
+      log "回復確定（${CONSECUTIVE_OK} 回連続 OK）-> Issue #${ISSUE_NUMBER} をクローズ"
+    else
+      log "回復確定（${CONSECUTIVE_OK} 回連続 OK）"
+    fi
     if [[ "${DRY_RUN}" != "1" && -n "${ISSUE_NUMBER}" ]]; then
       gh issue close "${ISSUE_NUMBER}" -R "${REPO}" \
         --comment "✅ **回復検知（${now}）**: ${FAILURE_COUNT} 回の失敗後に全チェックが正常へ復帰しました。$(printf '%s\n' '' '```' "${results[@]}" '```')" \
