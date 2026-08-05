@@ -2,8 +2,6 @@
 
 import asyncio
 
-import httpx
-import pytest
 from fastapi.testclient import TestClient
 
 from app.ai import AiUpstreamError
@@ -96,12 +94,10 @@ def test_ai_memo_rate_limits_excess_calls(monkeypatch) -> None:
     assert "上限" in res.json()["error"]
 
 
-@pytest.mark.asyncio
-async def test_ai_memo_rejects_when_concurrency_full(monkeypatch) -> None:
+def test_ai_memo_rejects_when_concurrency_full(monkeypatch) -> None:
     from app import main as main_module
 
     async def slow_call(settings, prompt: str) -> str:
-        await asyncio.sleep(0.3)
         return "memo"
 
     monkeypatch.setattr(main_module, "call_anthropic", slow_call)
@@ -119,14 +115,11 @@ async def test_ai_memo_rejects_when_concurrency_full(monkeypatch) -> None:
         anthropic_max_concurrency=1,
         anthropic_rate_limit_per_window=100,
     )
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        # 同時実行上限を占有した状態で呼び出すと 429 で即拒否されること。
-        await app.state.ai_semaphore.acquire()
-        try:
-            res = await client.post("/api/v1/ai/memo", json={"prompt": "x"})
-        finally:
-            app.state.ai_semaphore.release()
+    # 同時実行上限を占有した状態を再現し、429 で即拒否されることを検証する。
+    # （CI は pytest-asyncio 非搭載のため、Semaphore.locked を差し替える同期方式）
+    monkeypatch.setattr(asyncio.Semaphore, "locked", lambda self: True)
+    client = TestClient(app)
+    res = client.post("/api/v1/ai/memo", json={"prompt": "x"})
 
     assert res.status_code == 429
     assert "同時実行数" in res.json()["error"]
