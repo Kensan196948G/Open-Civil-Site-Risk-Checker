@@ -3,6 +3,29 @@
    属性で適用され、構造色（背景・境界・文字・クローム）を変数化している。
    意味色（確認優先度 A〜D 等）は JS のテーマ別パレットで解決する。 */
 
+/* キーボード利用者向けスキップリンク: 通常は画面外、フォーカス時に表示。 */
+.ocsrc-skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 2000;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform 0.15s ease;
+}
+
+.ocsrc-skip-link:focus-visible {
+  transform: translateY(0);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 :root {
   --bg: #eef1f5;
   --surface: #ffffff;

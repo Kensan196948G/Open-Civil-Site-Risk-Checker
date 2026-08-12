@@ -423,6 +423,11 @@ curl http://127.0.0.1:8000/readyz             # → {"status":"ok","db":"ok",...
 
 ---
 
+## 📊 外部評価・改善台帳（2026-08-12）
+
+- 改善前評価（18 項目採点・強み/弱み・競合比較・代替率）: [docs/evaluation/2026-08-12-baseline.md](docs/evaluation/2026-08-12-baseline.md)
+- 改善台帳・検証証跡・再評価・ロードマップ: [docs/evaluation/2026-08-12-improvements.md](docs/evaluation/2026-08-12-improvements.md)
+
 ## 🔭 今後の拡張（要件 §18 / 詳細仕様準拠）
 
 | フェーズ | 状況 | 内容                                                                                                                                  |
