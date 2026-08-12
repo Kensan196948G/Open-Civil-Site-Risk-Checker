@@ -58,3 +58,9 @@ def test_healthz_is_legacy_alias_of_readyz() -> None:
     res = client.get("/healthz")
     assert res.status_code == 503
     assert res.json()["detail"]["db"] == "not_configured"
+
+
+def test_db_check_timeout_default_tolerates_neon_cold_start() -> None:
+    """readyz の既定タイムアウトは Neon cold start を吸収できる値に保つ（Issue #238）。"""
+    settings = Settings(_env_file=None)
+    assert settings.db_check_timeout_seconds >= 20.0
