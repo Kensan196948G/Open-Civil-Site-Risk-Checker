@@ -22,6 +22,7 @@
 | 9 | nanoid 3.3.18 更新で npm audit high 解消＋LAN 認証実態へ文書同期 | PR #258 / `fix/ci-security-nanoid-lockfile-doc-sync`（Draft） | CI 3 ジョブ green・CodeRabbit skipped（Draft） |
 | 10 | Neon cold start の一時 503 で watchdog が誤起票しないよう緩和（#238） | PR #259 / `fix/db-coldstart-watchdog-238`（Draft） | CI 3 ジョブ green（nanoid 修正も同一ブランチへ反映） |
 | 11 | 本評価対応: AI 監査・サーバー側制約・a11y・評価書 | PR #260 / `feat/eval-2026-08-12-ai-audit-a11y`（Draft） | CI 3 ジョブ green |
+| 12 | ai_audit ログのハンドラ付与（本番スモークで検出した破棄問題の修正） | PR #261 / `fix/ai-audit-logging-260` | CI 3 ジョブ green |
 
 ## 2. 検証証跡（2026-08-12 実測）
 
@@ -39,8 +40,10 @@
 | pip-audit | 0 vulnerabilities | requirements.txt / requirements-dev.txt |
 | CI（main 最新） | success | 2026-08-05 実行 |
 | PR #258 / #259 / #260 CI | 各 3 ジョブ success | frontend/backend/security・2026-08-12 |
+| PR #261 CI | 3 ジョブ success | 2026-08-12 |
 | secret スキャン | 実値なし | テスト fixture のみ（`sk-ant-test` 等） |
-| 本番実挙動（SubAgent 確認） | LAN 直 403 / 公開 URL 302 / healthz 200 / readyz db ok | 2026-08-12 |
+| 本番実挙動（マージ後・再起動後） | LAN 直 403 / 公開 URL 302 / healthz 200 / readyz db ok / AI 200（warnings:[]・免責文あり） | 2026-08-12 21:28 JST |
+| 本番監査ログ | `ai_audit` が journal に出力（user/prompt_chars/model/status/duration_ms/warnings・本文非記録） | 2026-08-12 21:28:51 JST |
 
 ## 3. 改善後スコア（同一基準・暫定）
 
