@@ -210,7 +210,7 @@ unset OCSRC_DATABASE_URL
 
 ## 🌐 インターネット公開（Cloudflare Tunnel + Cloudflare Access）
 
-LAN 内利用は認証不要のままで、**インターネット公開時のみ** Cloudflare Tunnel（TLS 終端）＋ **Cloudflare Access**（ID ベース認証・Issue #70）を通します。共有パスワードは持たず、誰を許可するかは Access アプリのポリシー（メール / OTP / IdP）で管理します。要件 §11.3.1（TLS + 認証 + レート制限）を満たす構成です。
+本番（Access 設定時）は LAN 直アクセスにも Access JWT を要求し（外部評価 #240 対応）、**インターネット公開時**は Cloudflare Tunnel（TLS 終端）＋ **Cloudflare Access**（ID ベース認証・Issue #70）を通します。共有パスワードは持たず、誰を許可するかは Access アプリのポリシー（メール / OTP / IdP）で管理します。要件 §11.3.1（TLS + 認証 + レート制限）を満たす構成です。
 
 ```mermaid
 flowchart LR
@@ -257,7 +257,7 @@ bash scripts/install-systemd.sh
 
 > アクセス許可の追加・削除（誰を入れるか）は **Access アプリのポリシー**をダッシュボードで編集するだけで即反映されます。パスワードの再配布は不要です。
 >
-> **🔒 ネットワーク境界（重要・多層防御・外部評価 #240 対応済み）**: `OCSRC_ACCESS_TEAM_DOMAIN` / `OCSRC_ACCESS_AUD` が設定されている本番では、`server.mjs` は **LAN 直アクセス（`cf-connecting-ip` なし）にも JWT を要求**します。LAN 利用者は公開 URL（`https://riskchecker.mirai-dx-platform.com/`）経由で Access セッションを取得し、同一セッション（JWT）を利用します。Access の IdP に Entra ID 等を接続すれば個人 ID（メール等）が JWT に含まれ、利用者識別が可能です。`/healthz` のみ監視用に認証なしです。`0.0.0.0:8700` への直接到達を WAN へ port-forward しないこと（Tunnel はアウトバウンド専用）。
+> **🔒 ネットワーク境界（重要・多層防御・外部評価 #240 対応済み）**: `OCSRC_ACCESS_TEAM_DOMAIN` / `OCSRC_ACCESS_AUD` が設定されている本番では、`server.mjs` は **LAN 直アクセス（`cf-connecting-ip` なし）にも JWT を要求**します。通常のブラウザ利用は公開 URL（`https://riskchecker.mirai-dx-platform.com/`）経由の Access セッションに集約され、LAN 直アクセスは JWT を付与できる監視・スクリプト用途に限定されます。Access の IdP に Entra ID 等を接続すれば個人 ID（メール等）が JWT に含まれ、利用者識別が可能です。`/healthz` のみ監視用に認証なしです。`0.0.0.0:8700` への直接到達を WAN へ port-forward しないこと（Tunnel はアウトバウンド専用）。
 
 ### 2. Tunnel の作成と常駐化
 

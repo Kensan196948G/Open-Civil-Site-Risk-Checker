@@ -44,11 +44,11 @@ npm run test:smoke   # スモークテスト（esbuild ランナー / 制約環�
 | 種別                       | URL                                    | 認証 |
 | -------------------------- | -------------------------------------- | ---- |
 | 🌐 インターネット公開       | `https://riskchecker.mirai-dx-platform.com/` | Cloudflare Access（ID ベース・OTP/メール） |
-| LAN（自動割当 IP・現在値） | `http://192.168.0.185:8700/`           | なし（信頼 LAN） |
-| ローカル                   | `http://127.0.0.1:8700/`               | なし |
+| LAN（自動割当 IP・現在値） | `http://192.168.0.185:8700/`           | Cloudflare Access JWT（本番設定時・外部評価 #240） |
+| ローカル                   | `http://127.0.0.1:8700/`               | Cloudflare Access JWT（本番設定時・外部評価 #240） |
 | ヘルスチェック             | `http://127.0.0.1:8700/healthz` → `ok` | なし（LAN/ローカルのみ。インターネット経由は Issue #94 対応まで Access 保護下） |
 
-> **インターネット公開**（`riskchecker.mirai-dx-platform.com`）は Cloudflare Tunnel（TLS 終端）+ Cloudflare Access（ID ベース認証・Issue #70）で保護しています。LAN 内は認証なしで直接利用できます（信頼 LAN モデル）。公開の詳細手順・セキュリティ境界は [`docs/deploy-backend.md`](docs/deploy-backend.md) を参照。
+> **インターネット公開**（`riskchecker.mirai-dx-platform.com`）は Cloudflare Tunnel（TLS 終端）+ Cloudflare Access（ID ベース認証・Issue #70）で保護しています。本番（`OCSRC_ACCESS_TEAM_DOMAIN` / `OCSRC_ACCESS_AUD` 設定時）は `/healthz` を除き **LAN 直アクセスにも Access JWT を要求**し、未認証は 403 を返します（外部評価 #240 対応）。通常のブラウザ利用は公開 URL 経由の Access セッションに集約されます。Access 未設定の開発モードのみ、LAN 直アクセスを認証なしで許可します。公開の詳細手順・セキュリティ境界は [`docs/deploy-backend.md`](docs/deploy-backend.md) を参照。
 >
 > LAN の IP は DHCP 割当のため環境や再起動のタイミングで変わり得ます。固定 IP をコードや設定に書き込む必要はありません（`server.mjs` は `HOST=0.0.0.0` で全インタフェース待受のため、どの IP が割り当たっても自動的に到達可能）。現在値を確認したい場合は `scripts/install-systemd.sh` の実行結果（`LAN: http://<IP>:<PORT>/` 行）、または `hostname -I` / `ip route get 1.1.1.1` を使用してください。
 
@@ -80,7 +80,7 @@ systemctl status ocsrc-web ocsrc-api ocsrc-tunnel   # web(:8700) / api(127.0.0.1
 
 | サービス | 役割 | バインド/経路 |
 | --- | --- | --- |
-| `ocsrc-web` | SPA 配信 + セキュリティヘッダ + `/api` プロキシ + Cloudflare Access JWT 検証（server.mjs・Tunnel 経由のみ） | `0.0.0.0:8700` |
+| `ocsrc-web` | SPA 配信 + セキュリティヘッダ + `/api` プロキシ + Cloudflare Access JWT 検証（server.mjs・Tunnel / LAN 直の両方） | `0.0.0.0:8700` |
 | `ocsrc-api` | KSJ 空間検索 API（FastAPI） | `127.0.0.1:8000`（LAN 非公開） |
 | `ocsrc-tunnel` | Cloudflare Tunnel（TLS 終端は Cloudflare） | アウトバウンドのみ |
 
@@ -232,7 +232,7 @@ DOM 非依存の純粋関数を中心に検証します。とくに**「断定�
 
 本アプリは**フロントエンド中心の SPA** です。リスク判定・AI 調査メモ・レポート生成はすべてブラウザ内の TypeScript で実行し、外部公開 API はブラウザが直接 fetch します。バックエンド（FastAPI + PostGIS）は国土数値情報（KSJ）の空間検索補助に限定され、`server.mjs` の **`/api/*` same-origin プロキシ**経由で到達します（API 自体は 127.0.0.1 バインドで LAN へ直接露出しません）。
 
-アクセス経路は 2 つあります。**① LAN 内**は認証なしで直接（従来どおり）、**② インターネット公開**は Cloudflare Tunnel（TLS 終端）→ Cloudflare Access（エッジ認証 + origin JWT 検証・Issue #70）を通ります。DB は**ローカル PostGIS** と **Neon（マネージド PostGIS）**のどちらかを `OCSRC_DATABASE_URL` で選択します。
+アクセス経路は 2 つあります。**① LAN 内**は `:8700` へ直接 HTTP で到達しますが、本番では Cloudflare Access JWT を要求します（外部評価 #240 対応。`/healthz` のみ例外）。**② インターネット公開**は Cloudflare Tunnel（TLS 終端）→ Cloudflare Access（エッジ認証 + origin JWT 検証・Issue #70）を通ります。DB は**ローカル PostGIS** と **Neon（マネージド PostGIS）**のどちらかを `OCSRC_DATABASE_URL` で選択します。
 
 ```mermaid
 flowchart LR
@@ -266,7 +266,7 @@ flowchart LR
     B -->|"② HTTPS（公開・要認証）"| CF
     CF <-->|"Tunnel"| TN
     TN --> W
-    B -->|"① HTTP :8700（LAN・認証なし）"| W
+    B -->|"① HTTP :8700（LAN・JWT 必須・/healthz は例外）"| W
     W -->|"/api/* same-origin プロキシ<br/>（GET/HEAD のみ・Authorization 非転送）"| A
     A -->|"OCSRC_DATABASE_URL"| DS
     DS -.->|ローカル| D1
@@ -415,7 +415,7 @@ curl http://127.0.0.1:8000/readyz             # → {"status":"ok","db":"ok",...
 
 | 設計判断 | 内容 |
 | -------- | ---- |
-| 🔓 **LAN 内は無認証（設計判断）** | バックエンド API が扱うのは**国土交通省の公共オープンデータのみ**（個人情報なし・GET のみ・データ変更手段なし）。信頼できる LAN 内（家庭内・社内閉域）からの直接アクセスには認証を課していません |
+| 🔓 **LAN 直アクセスも Access JWT 必須（本番設定時・外部評価 #240 対応）** | バックエンド API が扱うのは**国土交通省の公共オープンデータのみ**（個人情報なし・GET のみ・データ変更手段なし）ですが、本番（`OCSRC_ACCESS_TEAM_DOMAIN` / `OCSRC_ACCESS_AUD` 設定時）は `/healthz` を除く全経路で Access JWT を検証します（403）。開発モード（Access 未設定）のみ認証なしで直接アクセスできます |
 | 🌐 **インターネット公開は Cloudflare Tunnel + Access（導入済み・稼働中）** | `https://riskchecker.mirai-dx-platform.com/` として一般公開中です。Cloudflare Edge で **TLS 終端 + Access 認証（ID ベース）+ レート制限**を行い、origin（`server.mjs`）側でも JWT を多層検証します。手順・現状の稼働状況は [`docs/deploy-backend.md`](docs/deploy-backend.md#-インターネット公開cloudflare-tunnel--cloudflare-access) を参照 |
 | 🔑 **本番 DB** | ローカル PostGIS の場合は `infra/.env.example` の `dev_only_password`（**開発専用**）から `OCSRC_DB_PASSWORD` 強パスワードへ **override 必須**。本番は **Neon（マネージド PostGIS）** に切替済み（構成・監視は [`docs/neon-database.md`](docs/neon-database.md)、切替手順は [`docs/deploy-backend.md`](docs/deploy-backend.md)） |
 
