@@ -312,6 +312,8 @@ Cloudflare Alerting・外形監視（Issue #94）が未設定でも通知を成�
 - 1 障害 = 1 Issue。`/var/lib/ocsrc-watchdog/state` に状態を保持し、DB フラップのような回復・再発を繰り返しても新 Issue を乱立させない
 - 継続異常コメントは既定 30 分間隔に抑制（`OCSRC_WATCHDOG_COMMENT_INTERVAL`）
 - api チェックは `/readyz` を使用し、Neon serverless の cold start を吸収する再試行（既定 10 秒後・1 回）を実施（`OCSRC_WATCHDOG_RETRY_DELAY`）
+- API の DB チェックタイムアウトは既定 20 秒（`OCSRC_DB_CHECK_TIMEOUT_SECONDS`）。watchdog 側 curl は 30 秒（`-m 30`）で、cold start 中でも応答を待つ（Issue #238 再発防止）
+- DB のみの一時障害（`api/readyz` のみ失敗）は連続 2 回（既定 `OCSRC_WATCHDOG_ALERT_AFTER_FAILURES`）失敗するまで起票しない。5 分間隔の 1〜2 回分の 503（Neon cold start）で Issue を乱立させないための事前確認であり、systemd / edge 等の恒常障害は従来どおり即時起票する
 - 回復は**連続 2 回の OK**（既定 `OCSRC_WATCHDOG_RECOVERY_OK_CHECKS`）を確認してから Issue をクローズ
 
 | チェック | 内容 |
