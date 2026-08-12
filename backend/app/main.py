@@ -43,6 +43,26 @@ API_VERSION = "0.2.0"
 logger = logging.getLogger("ocsrc.api")
 
 
+def _ensure_audit_logger() -> None:
+    """Attach a console handler to the audit logger.
+
+    uvicorn only configures handlers for its own loggers (uvicorn.*), so
+    INFO records from ``ocsrc.api`` would otherwise be silently dropped in
+    production even though access logs are visible (2026-08-12 smoke test).
+    Audit lines (ai_audit) must reach journald/stderr; prompt content is
+    never logged by callers.
+    """
+    if logger.handlers:
+        return
+    logger.setLevel(logging.INFO)
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    logger.addHandler(handler)
+
+
+_ensure_audit_logger()
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Build the FastAPI app.
 
