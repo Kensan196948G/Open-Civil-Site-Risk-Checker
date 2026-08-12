@@ -13,17 +13,25 @@ Endpoints:
 """
 
 import asyncio
+import json
 import logging
 import time
 from collections import deque
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .ai import AiMemoRequest, AiUpstreamError, call_anthropic
+from .ai import (
+    AiMemoRequest,
+    AiUpstreamError,
+    call_anthropic,
+    ensure_disclaimer,
+    find_forbidden_expressions,
+)
 from .db import check_database, close_pools, get_pool
 from .geocode import GeocodeUnavailableError
 from .geocode import reverse as geocode_reverse
@@ -193,9 +201,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/v1/ai/memo")
     async def ai_memo(
         req: AiMemoRequest,
+        request: Request,
         settings: Annotated[Settings, Depends(get_settings)],
     ) -> dict:
         """AI 調査メモ生成ブローカー。キーはサーバー環境変数のみで管理する。"""
+        # 監査用のユーザー識別子。web 層（server.mjs）が Cloudflare Access JWT を検証した
+        # 後に付与する内部ヘッダのみを信用する（クライアント直送分は web 層で除去される）。
+        # 未設定時（LAN 開発モード等）は anonymous として記録する。
+        user = (request.headers.get("x-ocsrc-user") or "").strip()[:128] or "anonymous"
+        started = time.monotonic()
+        audit = {
+            "event": "ai_memo",
+            "user": user,
+            "prompt_chars": len(req.prompt),
+            "model": settings.anthropic_model,
+            "ts": datetime.now(UTC).isoformat(),
+        }
+
         # レート制限（固定窓・プロセス内）。AI 未設定でもスパムは拒否する。
         now = time.monotonic()
         window = settings.anthropic_rate_limit_window_seconds
@@ -203,18 +225,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ai_call_times.popleft()
         if len(ai_call_times) >= settings.anthropic_rate_limit_per_window:
             rate_message = "AI 利用量の上限に達しました。時間をおいて再試行してください。"
+            _log_ai_audit(audit, status="rate_limited", status_code=429)
             return JSONResponse(
                 status_code=429,
                 content={"ok": False, "error": rate_message},
             )
         if ai_semaphore.locked():
             concurrency_message = "AI 生成の同時実行数が上限です。時間をおいて再試行してください。"
+            _log_ai_audit(audit, status="concurrency_limited", status_code=429)
             return JSONResponse(
                 status_code=429,
                 content={"ok": False, "error": concurrency_message},
             )
         if not settings.anthropic_api_key:
             message = "AI はサーバー側で未設定です（OCSRC_ANTHROPIC_API_KEY 未設定）"
+            _log_ai_audit(audit, status="not_configured", status_code=503)
             return JSONResponse(
                 status_code=503,
                 content={"ok": False, "error": message},
@@ -225,8 +250,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 text = await call_anthropic(settings, req.prompt)
             except AiUpstreamError as exc:
                 status = exc.status if exc.status in (401, 429, 502, 503) else 502
+                _log_ai_audit(
+                    audit,
+                    status="upstream_error",
+                    status_code=status,
+                    duration_ms=_elapsed_ms(started),
+                )
                 return JSONResponse(status_code=status, content={"ok": False, "error": exc.message})
-        return {"ok": True, "text": text, "model": settings.anthropic_model}
+        text = ensure_disclaimer(text)
+        warnings = find_forbidden_expressions(text)
+        _log_ai_audit(
+            audit,
+            status="ok",
+            status_code=200,
+            duration_ms=_elapsed_ms(started),
+            warnings=len(warnings),
+        )
+        return {
+            "ok": True,
+            "text": text,
+            "model": settings.anthropic_model,
+            "warnings": warnings,
+        }
 
     return app
 
@@ -237,6 +282,33 @@ async def _db_status(settings: Settings) -> tuple[str, float, str | None]:
     return await check_database(
         settings.database_url, timeout=settings.db_check_timeout_seconds
     )
+
+
+def _elapsed_ms(started: float) -> int:
+    return int((time.monotonic() - started) * 1000)
+
+
+def _log_ai_audit(
+    audit: dict,
+    *,
+    status: str,
+    status_code: int,
+    duration_ms: int | None = None,
+    warnings: int | None = None,
+) -> None:
+    """Emit a structured AI usage audit entry (prompt content is never logged)."""
+    entry = dict(audit)
+    entry.update(
+        {
+            "status": status,
+            "status_code": status_code,
+        }
+    )
+    if duration_ms is not None:
+        entry["duration_ms"] = duration_ms
+    if warnings is not None:
+        entry["warnings"] = warnings
+    logger.info("ai_audit %s", json.dumps(entry, ensure_ascii=False))
 
 
 app = create_app()

@@ -24,6 +24,26 @@ ruff check .                   # Lint
 | GET | `/healthz` | `/readyz` の後方互換エイリアス（異常時は 503） |
 | GET | `/api/v1/ping` | API 疎通確認 |
 | GET | `/api/v1/nearby?lat=&lon=&radius_m=` | 取込済み KSJ（河川・施設）の近傍検索。距離昇順・出典/整備年度つき。DB 未整備時は 503（「該当なし」と「取得失敗」を区別、NFR-504） |
+| GET | `/api/v1/geocode?q=` | Nominatim `/search` プロキシ（ブラウザから同一オリジンで利用。1 req/sec をプロセス単位で遵守） |
+| GET | `/api/v1/reverse-geocode?lat=&lon=` | Nominatim `/reverse` プロキシ |
+| GET | `/api/v1/ai/status` | AI ブローカー設定状態（`configured` / `model` のみ。API キーは返さない） |
+| POST | `/api/v1/ai/memo` | AI 調査メモ生成ブローカー。キーはサーバー側のみ。プロンプト本文は監査ログへ出力しない |
+
+### AI ブローカー（Anthropic）
+
+ブラウザは Anthropic API キーを保持・送信せず、本 API を経由する。設定変数は次のとおり（値はサーバー環境変数のみ・コミット禁止）。
+
+| 変数 | 既定値 | 説明 |
+|---|---|---|
+| `OCSRC_ANTHROPIC_API_KEY` | なし | Anthropic API キー（`configure-ai-key.sh` で設定推奨） |
+| `OCSRC_ANTHROPIC_MODEL` | `claude-sonnet-5` | 利用モデル |
+| `OCSRC_ANTHROPIC_TIMEOUT_SECONDS` | `90.0` | 上流 API のタイムアウト |
+| `OCSRC_ANTHROPIC_MAX_PROMPT_CHARS` | `20000` | プロンプト最大長（Pydantic 検証） |
+| `OCSRC_ANTHROPIC_RATE_LIMIT_PER_WINDOW` | `10` | 固定窓あたりの最大呼出数 |
+| `OCSRC_ANTHROPIC_RATE_LIMIT_WINDOW_SECONDS` | `60.0` | レート制限窓（秒） |
+| `OCSRC_ANTHROPIC_MAX_CONCURRENCY` | `2` | 同時実行上限 |
+
+応答にはサーバー側で免責文の付与・断定表現の検出（`warnings`）が入り、利用は監査ログ（`ai_audit`）へ記録される。監査ログは `X-OCSRC-User`（web 層が Access JWT 検証後に付与する内部ヘッダ）でユーザーを識別し、プロンプト本文は記録しない。
 
 ## KSJ データ取込
 
