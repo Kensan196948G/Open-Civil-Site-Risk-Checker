@@ -41,7 +41,7 @@ OCSRC_DATABASE_URL=postgresql://app:***@127.0.0.1:5432/site_risk_checker \
 |---|---|---|
 | `OCSRC_APP_ENV` | `development` | 実行環境名 |
 | `OCSRC_DATABASE_URL` | なし | PostgreSQL DSN（例: `postgresql://app:***@db:5432/site_risk_checker`）。未設定なら DB チェックをスキップ |
-| `OCSRC_DB_CHECK_TIMEOUT_SECONDS` | `8.0` | readiness の DB チェックタイムアウト（Neon cold start を許容） |
+| `OCSRC_DB_CHECK_TIMEOUT_SECONDS` | `20.0` | readiness の DB チェックタイムアウト（Neon autosuspend 後の cold start を許容・Issue #238） |
 
 ## Docker（PostGIS つき）
 
