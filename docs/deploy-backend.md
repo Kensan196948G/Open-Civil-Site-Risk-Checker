@@ -210,7 +210,7 @@ unset OCSRC_DATABASE_URL
 
 ## 🌐 インターネット公開（Cloudflare Tunnel + Cloudflare Access）
 
-LAN 内利用は認証不要のままで、**インターネット公開時のみ** Cloudflare Tunnel（TLS 終端）＋ **Cloudflare Access**（ID ベース認証・Issue #70）を通します。共有パスワードは持たず、誰を許可するかは Access アプリのポリシー（メール / OTP / IdP）で管理します。要件 §11.3.1（TLS + 認証 + レート制限）を満たす構成です。
+本番（Access 設定時）は LAN 直アクセスにも Access JWT を要求し（外部評価 #240 対応）、**インターネット公開時**は Cloudflare Tunnel（TLS 終端）＋ **Cloudflare Access**（ID ベース認証・Issue #70）を通します。共有パスワードは持たず、誰を許可するかは Access アプリのポリシー（メール / OTP / IdP）で管理します。要件 §11.3.1（TLS + 認証 + レート制限）を満たす構成です。
 
 ```mermaid
 flowchart LR
@@ -257,7 +257,7 @@ bash scripts/install-systemd.sh
 
 > アクセス許可の追加・削除（誰を入れるか）は **Access アプリのポリシー**をダッシュボードで編集するだけで即反映されます。パスワードの再配布は不要です。
 >
-> **🔒 ネットワーク境界（重要・多層防御・外部評価 #240 対応済み）**: `OCSRC_ACCESS_TEAM_DOMAIN` / `OCSRC_ACCESS_AUD` が設定されている本番では、`server.mjs` は **LAN 直アクセス（`cf-connecting-ip` なし）にも JWT を要求**します。LAN 利用者は公開 URL（`https://riskchecker.mirai-dx-platform.com/`）経由で Access セッションを取得し、同一セッション（JWT）を利用します。Access の IdP に Entra ID 等を接続すれば個人 ID（メール等）が JWT に含まれ、利用者識別が可能です。`/healthz` のみ監視用に認証なしです。`0.0.0.0:8700` への直接到達を WAN へ port-forward しないこと（Tunnel はアウトバウンド専用）。
+> **🔒 ネットワーク境界（重要・多層防御・外部評価 #240 対応済み）**: `OCSRC_ACCESS_TEAM_DOMAIN` / `OCSRC_ACCESS_AUD` が設定されている本番では、`server.mjs` は **LAN 直アクセス（`cf-connecting-ip` なし）にも JWT を要求**します。通常のブラウザ利用は公開 URL（`https://riskchecker.mirai-dx-platform.com/`）経由の Access セッションに集約され、LAN 直アクセスは JWT を付与できる監視・スクリプト用途に限定されます。Access の IdP に Entra ID 等を接続すれば個人 ID（メール等）が JWT に含まれ、利用者識別が可能です。`/healthz` のみ監視用に認証なしです。`0.0.0.0:8700` への直接到達を WAN へ port-forward しないこと（Tunnel はアウトバウンド専用）。
 
 ### 2. Tunnel の作成と常駐化
 
@@ -312,6 +312,8 @@ Cloudflare Alerting・外形監視（Issue #94）が未設定でも通知を成�
 - 1 障害 = 1 Issue。`/var/lib/ocsrc-watchdog/state` に状態を保持し、DB フラップのような回復・再発を繰り返しても新 Issue を乱立させない
 - 継続異常コメントは既定 30 分間隔に抑制（`OCSRC_WATCHDOG_COMMENT_INTERVAL`）
 - api チェックは `/readyz` を使用し、Neon serverless の cold start を吸収する再試行（既定 10 秒後・1 回）を実施（`OCSRC_WATCHDOG_RETRY_DELAY`）
+- API の DB チェックタイムアウトは既定 20 秒（`OCSRC_DB_CHECK_TIMEOUT_SECONDS`）。watchdog 側 curl は 30 秒（`-m 30`）で、cold start 中でも応答を待つ（Issue #238 再発防止）
+- DB のみの一時障害（`api/readyz` のみ失敗）は連続 2 回（既定 `OCSRC_WATCHDOG_ALERT_AFTER_FAILURES`）失敗するまで起票しない。5 分間隔の 1〜2 回分の 503（Neon cold start）で Issue を乱立させないための事前確認であり、systemd / edge 等の恒常障害は従来どおり即時起票する
 - 回復は**連続 2 回の OK**（既定 `OCSRC_WATCHDOG_RECOVERY_OK_CHECKS`）を確認してから Issue をクローズ
 
 | チェック | 内容 |
