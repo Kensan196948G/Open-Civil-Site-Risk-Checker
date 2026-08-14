@@ -2,10 +2,12 @@ import { useMemo } from 'react';
 import { useApp } from '../store';
 import { buildReportMd } from '../report/markdown';
 import { buildReportCsv } from '../report/csv';
+import { buildPackHtml, openPackForPrint } from '../report/pack';
 import { cssToStyle } from '../cssToStyle';
 
 // SCR-005 レポート出力。Markdown / CSV を選び、公開区分を設定して出力（要件 FR-306 / §14）。
-const REPORT_SECTIONS = ['調査条件', '確認優先度サマリー', 'カテゴリ別確認結果', 'AI調査メモ', '取得できなかった情報', '参照データ・出典', '注意事項'];
+// Issue #113: 調査パック（A4 印刷向け HTML・出典一覧・チェックリスト・免責文・承認欄）。
+const REPORT_SECTIONS = ['調査条件', '確認優先度サマリー', 'カテゴリ別確認結果', 'AI調査メモ', '取得できなかった情報', '参照データ・出典', '注意事項', '確認チェックリスト / 承認欄'];// Issue #113
 
 export function ReportScreen() {
   const { state, go, setFmt, setVis } = useApp();
@@ -78,6 +80,23 @@ export function ReportScreen() {
             <button onClick={() => setVis('public')} style={cssToStyle(visBase + (reportVisibility === 'public' ? 'var(--accent);background:var(--accent-soft)' : 'var(--border-3);background:var(--surface)'))}>
               <span style={{ fontWeight: 700 }}>社外可</span>
               <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>公開可能な情報のみで構成</span>
+            </button>
+          </div>
+
+          <div style={fieldLabel}>調査パック（Issue #113）</div>
+          <div style={{ padding: '11px 12px', background: 'var(--surface-3)', borderRadius: 7, marginBottom: 20 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.7, marginBottom: 10 }}>
+              A4 印刷向けレポート（出典一覧・確認チェックリスト・免責文・承認欄）を新しいウィンドウで開き、ブラウザの印刷（PDF 保存）で出力します。
+            </div>
+            <button
+              onClick={() => {
+                if (!location) return;
+                const html = buildPackHtml({ location, findings, sources, visibility: reportVisibility, fetchedAt });
+                openPackForPrint(html);
+              }}
+              style={{ width: '100%', padding: 12, background: 'var(--surface)', color: 'var(--accent)', border: '1.5px solid var(--accent-border)', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+            >
+              🖨 調査パックを開く（A4 印刷 / PDF）
             </button>
           </div>
 
