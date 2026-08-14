@@ -78,18 +78,32 @@ async def record_ai_usage(
     )
 
 
-def estimate_cost_usd(prompt_chars: int, completion_chars: int) -> float:
-    """概算費用（USD）。トークン ≈ 文字数/4 の近似（表示側で「概算」明記）。"""
+def estimate_cost_usd(
+    prompt_chars: int,
+    completion_chars: int,
+    input_rate: float = EST_INPUT_USD_PER_1M_TOKENS,
+    output_rate: float = EST_OUTPUT_USD_PER_1M_TOKENS,
+) -> float:
+    """概算費用（USD）。トークン ≈ 文字数/4 の近似（表示側で「概算」明記）。
+
+    単価は環境変数 OCSRC_AI_COST_INPUT_USD / OCSRC_AI_COST_OUTPUT_USD
+    （settings.ai_cost_*）で調整できる（コード変更不要・評価書 #20 の残課題対応）。
+    """
     input_tokens = prompt_chars / CHARS_PER_TOKEN
     output_tokens = completion_chars / CHARS_PER_TOKEN
     return round(
-        input_tokens / 1_000_000 * EST_INPUT_USD_PER_1M_TOKENS
-        + output_tokens / 1_000_000 * EST_OUTPUT_USD_PER_1M_TOKENS,
+        input_tokens / 1_000_000 * input_rate + output_tokens / 1_000_000 * output_rate,
         4,
     )
 
 
-async def summarize_ai_usage(conn: Any, *, days: int = 30) -> dict:
+async def summarize_ai_usage(
+    conn: Any,
+    *,
+    days: int = 30,
+    input_rate: float = EST_INPUT_USD_PER_1M_TOKENS,
+    output_rate: float = EST_OUTPUT_USD_PER_1M_TOKENS,
+) -> dict:
     """直近 days 日の利用実績サマリー（合計・日別・ユーザー別・概算費用）。
 
     「該当なし」と「取得失敗」の区別（NFR-504）のため、集計が 0 件でも
@@ -152,7 +166,12 @@ async def summarize_ai_usage(conn: Any, *, days: int = 30) -> dict:
             "completion_chars": completion_chars,
             "duration_ms": int(totals["duration_ms"] or 0),
             "warnings": int(totals["warnings"] or 0),
-            "estimated_cost_usd": estimate_cost_usd(prompt_chars, completion_chars),
+            "estimated_cost_usd": estimate_cost_usd(
+                prompt_chars,
+                completion_chars,
+                input_rate=input_rate,
+                output_rate=output_rate,
+            ),
         },
         "daily": [
             {

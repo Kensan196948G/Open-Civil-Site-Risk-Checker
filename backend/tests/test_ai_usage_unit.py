@@ -33,6 +33,18 @@ def test_estimate_cost_usd_output_heavier_than_input() -> None:
     assert estimate_cost_usd(0, 4000) > estimate_cost_usd(4000, 0)
 
 
+def test_estimate_cost_usd_custom_rates() -> None:
+    # 単価は環境変数（settings.ai_cost_*）で調整できる（コード変更不要）。
+    # 入力 4000 文字 = 1000 トークン・出力 1000 文字 = 250 トークン。
+    # カスタム単価（入力 1.0 / 出力 10.0）: 0.001M*1 + 0.00025M*10 = 0.0035
+    assert estimate_cost_usd(4000, 1000, input_rate=1.0, output_rate=10.0) == pytest.approx(
+        0.0035, abs=1e-4
+    )
+    # 既定単価（3.0 / 15.0）とは異なる。
+    custom = estimate_cost_usd(4000, 1000, input_rate=1.0, output_rate=10.0)
+    assert custom != estimate_cost_usd(4000, 1000)
+
+
 def test_schema_sql_is_additive_and_idempotent() -> None:
     assert "CREATE TABLE IF NOT EXISTS ai_usage" in AI_USAGE_SCHEMA_SQL
     # プロンプト本文を保存するカラムを持たない（監査方針: 本文非記録）。

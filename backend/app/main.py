@@ -427,7 +427,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             pool = await get_pool(settings.database_url)
             async with pool.acquire() as conn:
                 await ensure_ai_usage_schema(conn)
-                return await summarize_ai_usage(conn, days=days)
+                return await summarize_ai_usage(
+                    conn,
+                    days=days,
+                    input_rate=settings.ai_cost_input_usd_per_1m_tokens,
+                    output_rate=settings.ai_cost_output_usd_per_1m_tokens,
+                )
         except HTTPException:
             raise
         except Exception as exc:  # driver missing, connection refused, bad schema
