@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     case_editor_users: str = ""
     case_auditor_users: str = ""
 
+    # データソース台帳のサーバ側永続化（Issue #174）。本番は既定で無効（false）。
+    # 有効時のみ data_sources / data_source_refreshes テーブルを作成し、
+    # GET /api/v1/data-sources が応答する。無効時は 503（本番無影響）。
+    data_source_store_enabled: bool = False
+
     @property
     def cors_origin_list(self) -> list[str]:
         """cors_origins parsed into origins.

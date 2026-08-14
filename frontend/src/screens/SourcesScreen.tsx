@@ -1,11 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../store';
 import { getPrio } from '../data/constants';
+import { fetchDataSources, isDataSourceStoreEnabled, serverDataSourceToLedger } from '../api/dataSources';
+import type { DataSourceRefresh, ServerDataSource } from '../api/dataSources';
 import type { SourceLedgerEntry } from '../types';
 
 // SCR-006 データソース管理。接続状態・利用条件を管理し、接続テストを実行する（要件 FR-601〜604）。
 // Issue #174（データ鮮度・ライセンス台帳）: 行クリックで元データ更新日・利用条件メモ・
-// 再取込履歴を表示する。鮮度（取得日・更新日）と利用条件（ライセンス・出典義務）を一元管理する。
+// 再取込履歴を表示する。サーバー台帳（OCSRC_DATA_SOURCE_STORE_ENABLED）が有効な場合は
+// サーバーの data_sources / data_source_refreshes を表示し、無効・未到達時は
+// 既存の静的台帳（data/sources.ts）へフォールバックする。
 const COLS = '2fr 1.2fr 0.8fr 1fr 0.7fr 1.1fr 1fr 0.9fr';
 
 export function SourcesScreen() {
@@ -13,6 +17,37 @@ export function SourcesScreen() {
   const { sources, theme } = state;
   const PRIO = getPrio(theme);
   const [openKey, setOpenKey] = useState<SourceLedgerEntry['key'] | null>(null);
+  // サーバー台帳（Issue #174）。API 有効時に読み込む。
+  const [serverSources, setServerSources] = useState<SourceLedgerEntry[] | null>(null);
+  const [serverRefreshes, setServerRefreshes] = useState<Record<string, DataSourceRefresh[]>>({});
+  const [serverEnabled, setServerEnabled] = useState<boolean | null>(null);
+
+  // データソース台帳 API の有効性を起動時に検出（有効ならサーバーデータで置き換え）。
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const ok = await isDataSourceStoreEnabled();
+        if (cancelled) return;
+        setServerEnabled(ok);
+        if (ok) {
+          const res = await fetchDataSources();
+          if (cancelled) return;
+          setServerSources(res.items.map((s: ServerDataSource) => serverDataSourceToLedger(s, s.fetched_at || '—')));
+          setServerRefreshes(res.refreshes ?? {});
+        }
+      } catch {
+        if (cancelled) return;
+        setServerEnabled(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 表示台帳: サーバー有効ならサーバー台帳、それ以外は既存の静的台帳。
+  const displaySources = useMemo(() => serverSources ?? sources, [serverSources, sources]);
 
   const statColor = (stat: string) => (stat === 'success' ? 'var(--ok-text)' : stat === 'failed' ? 'var(--err-text)' : 'var(--text-3)');
   const statLabel = (stat: string) => (stat === 'success' ? '接続成功' : stat === 'failed' ? '接続失敗' : '未連携/無効');
@@ -36,11 +71,17 @@ export function SourcesScreen() {
           <span>最終取得</span>
           <span style={{ textAlign: 'right' }}>操作</span>
         </div>
-        {sources.map((s) => {
+        {displaySources.map((s) => {
           const sc = s._testing ? 'var(--warn-text)' : statColor(s.stat);
           const sl = s._testing ? 'テスト中…' : statLabel(s.stat);
           const rankColor = PRIO[s.rank]?.color ?? 'var(--text-2)';
           const open = openKey === s.key;
+          // 再取込履歴: サーバー台帳（API）由来 + 静的台帳（フロント）由来を統合。
+          const serverHistory = serverRefreshes[s.key] ?? [];
+          const refreshHistory = [
+            ...serverHistory.map((h) => ({ at: h.at.slice(0, 10), note: h.note })),
+            ...(s.refreshHistory ?? []),
+          ];
           return (
             <div key={s.key}>
               <div
@@ -97,8 +138,8 @@ export function SourcesScreen() {
                     <span>{s.usageNote || '—（未記載）'}</span>
                     <span style={{ fontWeight: 700, color: 'var(--text-3)', whiteSpace: 'nowrap', verticalAlign: 'top' }}>再取込履歴</span>
                     <span>
-                      {s.refreshHistory && s.refreshHistory.length > 0 ? (
-                        s.refreshHistory.map((h, i) => (
+                      {refreshHistory.length > 0 ? (
+                        refreshHistory.map((h, i) => (
                           <div key={i} style={{ lineHeight: 1.7 }}>
                             <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, color: 'var(--text-3)' }}>{h.at}</span>
                             {' — '}{h.note}
@@ -110,7 +151,9 @@ export function SourcesScreen() {
                     </span>
                   </div>
                   <div style={{ marginTop: 8, fontSize: 10.5, color: 'var(--text-4)' }}>
-                    鮮度・利用条件はデモ用の架空値です（Issue #174）。実データの再取込・ライセンス確認後に更新します。
+                    {serverEnabled === true
+                      ? 'サーバー台帳（data_sources / data_source_refreshes）から表示しています（Issue #174）。'
+                      : '鮮度・利用条件はデモ用の架空値です（Issue #174）。実データの再取込・ライセンス確認後に更新します。'}
                   </div>
                 </div>
               )}

@@ -25,6 +25,7 @@ ruff check .                   # Lint
 | GET | `/api/v1/ping` | API 疎通確認 |
 | GET | `/api/v1/nearby?lat=&lon=&radius_m=` | 取込済み KSJ（河川・施設）の近傍検索。距離昇順・出典/整備年度つき。DB 未整備時は 503（「該当なし」と「取得失敗」を区別、NFR-504） |
 | GET | `/api/v1/hazard-assess?lat=&lon=&radius_m=` | ハザード区域判定（Issue #112）。浸水想定（A31）・土砂災害警戒（A33）相当のポリゴン（dataset=`hazard`）に対して `ST_Contains` の区域内判定と `ST_Distance` の最寄り距離を返す。データ欠落地域は空リスト（該当なし）、DB 未到達は 503 |
+| GET | `/api/v1/data-sources` | データソース台帳（Issue #174・サーバ側永続化）。`data_sources` / `data_source_refreshes` テーブルから各ソースのメタ情報と再取込履歴を返す。feature flag `OCSRC_DATA_SOURCE_STORE_ENABLED`（既定 false）有効時のみ応答 |
 | GET | `/api/v1/geocode?q=` | Nominatim `/search` プロキシ（ブラウザから同一オリジンで利用。1 req/sec をプロセス単位で遵守） |
 | GET | `/api/v1/reverse-geocode?lat=&lon=` | Nominatim `/reverse` プロキシ |
 | GET | `/api/v1/ai/status` | AI ブローカー設定状態（`configured` / `model` のみ。API キーは返さない） |
@@ -80,6 +81,21 @@ OCSRC_CASE_ADMIN_USERS=admin@example.com \
 OCSRC_CASE_EDITOR_USERS=editor@example.com \
   uvicorn app.main:app
 ```
+
+## データソース台帳（Issue #174・サーバ側永続化）
+
+`data_sources`（各ソースのメタ情報: 名称・提供元・ライセンス・元データ更新日・利用条件メモ・最終取得日時）と
+`data_source_refreshes`（再取込履歴・追記型）を PostgreSQL に永続化する。**feature flag
+`OCSRC_DATA_SOURCE_STORE_ENABLED`（既定 `false`）が有効な場合のみ応答**し、無効時は 503
+（本番無影響のまま preview/dev で検証できる）。
+
+- **API**: `GET /api/v1/data-sources` — 台帳一覧 + 再取込履歴（ソースごとに集約）
+- **seed**: `python -m app.seed_demo_cases --with-sources` でデモ用の架空台帳（7ソース）と再取込履歴を投入（冪等・実在情報なし）
+- **スキーマ**: `app/data_sources.py` の `DATA_SOURCE_SCHEMA_SQL` が冪等作成（既存テーブルに非干渉）
+
+| 変数 | 既定値 | 説明 |
+|---|---|---|
+| `OCSRC_DATA_SOURCE_STORE_ENABLED` | `false` | データソース台帳 API の有効化（本番は既定のまま維持推奨） |
 
 ## KSJ データ取込
 
