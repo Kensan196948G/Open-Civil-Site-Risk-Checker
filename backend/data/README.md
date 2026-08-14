@@ -54,15 +54,42 @@ OCSRC_DATABASE_URL=postgresql://app:***@127.0.0.1:5432/site_risk_checker \
 
 - テスト・開発用の**合成サンプル**（実データではない）: `sample/sample-hazards.geojson`
   （霞が関周辺に架空の浸水想定・土砂災害警戒ポリゴン3件）
-- 実データは国交省ハザードマップポータル等から A31/A33 を取得し、公式 KSJ と同様に
+- 実データは国土数値情報ダウンロードサービスから A31/A33 を取得し、公式 KSJ と同様に
   `--dataset hazard` で取込（利用規約・出典表記の確認が必須）
+
+### 実データの取得手順（A31 浸水想定区域 / A33 土砂災害警戒区域）
+
+1. **国土数値情報ダウンロードサービス**（<https://nlftp.mlit.go.jp/ksj/>）から対象データを取得
+   - 浸水想定区域（A31）: 水系・年度ごとの zip を選択（配布形式は Shapefile/GML）
+   - 土砂災害警戒区域（A33）: 都道府県・年度ごとの zip を選択
+   - **利用規約を必ず確認**（データセット・年度ごとに商用/非商用が個別指定される）
+   - 出典表記例: 「出典：国土数値情報（浸水想定区域データ）（国土交通省）」
+2. GML → GeoJSON へ変換（EPSG:4326・WGS84 必須）:
+
+```bash
+ogr2ogr -f GeoJSON -t_srs EPSG:4326 -lco RFC7946=YES \
+  data/processed/flood-a31.geojson data/raw/A31-XX_GML/A31-XX.shp
+```
+
+> **注意**: 取込前に原本の SHA-256・配布 URL・取得 HTTP ヘッダ・ライセンス版を
+> `docs/data-license-ledger.md` に記録すること（既存取込分は証跡未保存のため再配布対象外・
+> 次回取込から証跡保存が必須・外部評価 Phase 0 指摘対応）。
+
+3. 取込（同一 dataset + source の再実行は洗い替えで冪等）:
 
 ```bash
 cd backend
 OCSRC_DATABASE_URL=postgresql://app:***@127.0.0.1:5432/site_risk_checker \
-  python -m app.ingest data/raw/flood-a31.geojson \
+  python -m app.ingest data/processed/flood-a31.geojson \
   --dataset hazard \
-  --source "国土数値情報（浸水想定区域）…出典表記" \
-  --source-updated "基準年" \
+  --source "国土数値情報（浸水想定区域データ）（国土交通省）" \
+  --source-updated "基準年（例: 2021年度）" \
   --name-key 名称
 ```
+
+4. 取込後に `/api/v1/hazard-assess` で区域内判定を確認（合成サンプルで動作検証済み）。
+
+> **ライセンス調査結果（2026-08-14・web 検索）**: 国土数値情報は公式ダウンロードサービスのみが
+> 配布元（NII Geoshape は河川・行政区域中心で A31/A33 の直接配布は確認できず）。A31/A33 は
+> Shapefile/GML のため GML→GeoJSON 変換が必要。利用条件はデータセット別（商用/非商用の
+> 個別指定あり）のため、取得時に公式ページで最新版を確認すること。
