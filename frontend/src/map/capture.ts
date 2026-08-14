@@ -137,3 +137,11 @@ export function buildCaptureCaption(opts: {
   const excludedTxt = opts.excludedLabels.length > 0 ? ` / 除外: ${opts.excludedLabels.join(' / ')}（利用条件確認が必要）` : '';
   return parts.join(' / ') + excludedTxt;
 }
+
+/** ISO 8601 日時をローカル時刻 'YYYY-MM-DD HH:MM:SS' に整形する（表示用・JST 等の環境時刻）。 */
+export function formatLocalStamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}

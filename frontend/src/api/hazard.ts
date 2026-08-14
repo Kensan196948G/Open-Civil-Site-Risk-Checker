@@ -75,12 +75,22 @@ export function hazardAssessmentFinding(
   const parts: string[] = [];
   if (flood.length) parts.push(`浸水想定区域 ${flood.length} 件`);
   if (landslide.length) parts.push(`土砂災害警戒区域 ${landslide.length} 件`);
+  // 区域名・想定水深等の属性をサマリーへ列挙し、区域内判定の根拠を一覧で示す（評価書 #9）。
+  const allInside = [...flood, ...landslide];
+  const listed = allInside
+    .slice(0, 3)
+    .map((i) => {
+      const s = String(i.attrs?.scenario ?? '').trim();
+      return s ? `${i.name}（${s}）` : i.name;
+    })
+    .join('、');
+  const listTail = allInside.length > 3 ? ' ほか' : '';
   return {
     id: 'haz-auto-inside',
     category: 'hazard',
     priority,
     title: 'ハザード区域内判定（区域内に対象あり）',
-    summary: `地点は取得したハザード区域ポリゴンに含まれます（${parts.join('・')}）。`,
+    summary: `地点は取得したハザード区域ポリゴンに含まれます（${parts.join('・')}）。該当区域: ${listed}${listTail}。`,
     status: 'found',
     distance_m: 0,
     caution:

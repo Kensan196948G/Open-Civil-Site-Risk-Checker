@@ -11,6 +11,7 @@ import {
   HILLSHADE_TILE_LAYER,
   TILE_SIZE,
   buildCaptureCaption,
+  formatLocalStamp,
   metersPerPixel,
   projectLatLng,
   tileUrl,
@@ -109,6 +110,23 @@ describe('buildCaptureCaption（帰属キャプション）', () => {
       capturedAt: '2026-08-15T10:00:00.000Z',
     });
     expect(cap).toContain('除外: 洪水浸水想定 / 土砂災害（利用条件確認が必要）');
+  });
+});
+
+describe('formatLocalStamp（取得日時のローカル表記）', () => {
+  it('ISO 日時を YYYY-MM-DD HH:MM:SS 形式に整形する', () => {
+    const s = formatLocalStamp('2026-08-15T04:00:00.000Z');
+    // smoke shim 互換のため toMatch は使わず、長さと区切り位置で検証する。
+    expect(s).toHaveLength(19);
+    expect(s[4]).toBe('-');
+    expect(s[7]).toBe('-');
+    expect(s[10]).toBe(' ');
+    expect(s[13]).toBe(':');
+    expect(s[16]).toBe(':');
+  });
+
+  it('無効な日時は入力値をそのまま返す', () => {
+    expect(formatLocalStamp('not-a-date')).toBe('not-a-date');
   });
 });
 
