@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useApp } from '../store';
 import { FALLBACK_LOGS } from '../data/fixtures';
 import { EMPTY_LOG_FILTER, LOG_STATUS_OPTIONS, filterLogs, isLogFilterActive } from '../report/logFilter';
+import { buildLogsCsv } from '../report/logCsv';
 import type { LogEntry } from '../types';
 
 // SCR-007 取得ログ。レート制限・認証エラー・タイムアウトを区別して記録（要件 FR-503 / FR-604）。
@@ -28,6 +29,21 @@ export function LogsScreen() {
   const logs: LogEntry[] = state.logs.length ? state.logs : FALLBACK_LOGS;
   const [filter, setFilter] = useState(EMPTY_LOG_FILTER);
   const filtered = useMemo(() => filterLogs(logs, filter), [logs, filter]);
+
+  // 絞り込み結果を CSV でダウンロード（UTF-8 BOM 付き・Excel の文字化け防止）。
+  const onExportCsv = () => {
+    const blob = new Blob(['\uFEFF' + buildLogsCsv(filtered)], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ocsrc-logs_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      a.remove();
+    }, 200);
+  };
 
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'auto', padding: '26px 28px 50px' }}>
@@ -72,6 +88,13 @@ export function LogsScreen() {
           {filtered.length} / {logs.length} 件
         </span>
         <span style={{ flex: 1 }} />
+        <button
+          onClick={onExportCsv}
+          title="絞り込み結果を CSV でダウンロード（UTF-8 BOM 付き）"
+          style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11.5, border: '1px solid var(--accent-border)', background: 'var(--surface)', color: 'var(--accent)', cursor: 'pointer', fontWeight: 600 }}
+        >
+          ↓ CSV
+        </button>
         {isLogFilterActive(filter) && (
           <button
             onClick={() => setFilter(EMPTY_LOG_FILTER)}
