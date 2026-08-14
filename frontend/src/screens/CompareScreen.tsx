@@ -6,6 +6,7 @@ import { isCaseStoreEnabled, listCases, serverCaseToRecord } from '../api/cases'
 import {
   COMPARE_CATEGORIES,
   buildCompareCsv,
+  buildCompareHtml,
   buildCompareMd,
   cellDetail,
   cellMeta,
@@ -13,6 +14,7 @@ import {
   toCompareRow,
   type CompareRow,
 } from '../report/compare';
+import { openPackForPrint } from '../report/pack';
 import { CATEGORY_LABEL } from '../data/constants';
 import type { CaseRecord } from '../types';
 
@@ -154,6 +156,16 @@ export function CompareScreen() {
           <span style={{ flex: 1 }} />
           <button onClick={() => onExport('md')} style={miniBtn} title="Markdown でエクスポート">↓ Markdown</button>
           <button onClick={() => onExport('csv')} style={miniBtn} title="CSV でエクスポート（UTF-8 BOM 付き）">↓ CSV</button>
+          <button
+            onClick={() => {
+              const target = rows.length ? rows : COMPARE_DEMO_ROWS;
+              openPackForPrint(buildCompareHtml(target, new Date().toISOString().slice(0, 19).replace('T', ' ')));
+            }}
+            style={miniBtn}
+            title="比較表を A4 で印刷 / PDF 化（#175）"
+          >
+            🖨 印刷 / PDF
+          </button>
         </div>
         {rows.length === 0 ? (
           <div style={{ padding: '26px 18px', textAlign: 'center', fontSize: 12.5, color: 'var(--text-3)', lineHeight: 1.8 }}>
