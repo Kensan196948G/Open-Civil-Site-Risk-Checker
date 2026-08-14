@@ -296,6 +296,22 @@ async function verifyAccessJwt(token) {
   }
 }
 
+/** Access JWT の payload から監査用ユーザー識別子を取り出す（署名検証後のみ呼ぶ）。
+ *  email 優先、無ければ sub（Access の個人識別子）を使う。 */
+function accessIdentity(token) {
+  if (typeof token !== 'string' || token === '') return '';
+  const parts = token.split('.');
+  if (parts.length !== 3) return '';
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    const email = typeof payload.email === 'string' ? payload.email.trim() : '';
+    const sub = typeof payload.sub === 'string' ? payload.sub.trim() : '';
+    return (email || sub).slice(0, 128);
+  } catch {
+    return '';
+  }
+}
+
 /** Tunnel 経由リクエストの認証ゲート。true = 続行可、false = 応答送出済み。
  *  /healthz のみ除外（秘匿情報を含まず、公開経路の死活監視に使うため）。
  *  ACCESS_ENABLED 時は LAN 直アクセスにも JWT を要求する（#240）。 */
@@ -324,8 +340,14 @@ async function checkTunnelAuth(req, res) {
   }
   // Cloudflare Access がエッジで付与する JWT を検証する。通常は未認証がエッジで
   // 弾かれるため有効 JWT が届くが、多層防御として origin でも必須にする。
-  const result = await verifyAccessJwt(req.headers['cf-access-jwt-assertion']);
-  if (result === 'valid') return true;
+  const token = req.headers['cf-access-jwt-assertion'];
+  const result = await verifyAccessJwt(token);
+  if (result === 'valid') {
+    // 監査・利用者別制御のための識別子を、バックエンドへ内部ヘッダで伝える。
+    // クライアント直送の x-ocsrc-user は DROP_REQUEST_HEADERS で除去済みのため偽装不可。
+    req.ocsrcUser = accessIdentity(token);
+    return true;
+  }
   if (result === 'unavailable') {
     // JWKS 取得失敗（一時障害）。有効トークンかもしれないので失敗記録せず 503 で再試行を促す。
     return deny(
@@ -377,6 +399,9 @@ const DROP_REQUEST_HEADERS = new Set([
   'authorization',
   'cf-access-jwt-assertion',
   'cookie',
+  // web 層が Access JWT 検証後に内部ヘッダとして付与するため、クライアント直送は
+  // 常に除去する（監査上のユーザー識別子の偽装防止・外部評価 2026-08）。
+  'x-ocsrc-user',
 ]);
 // レスポンス方向の追加除去: web 層が全応答へ付与するセキュリティヘッダは上流の値で
 // 上書きさせない（writeHead はマージ時に自身の引数を優先するため、上流が同名ヘッダを
@@ -501,6 +526,7 @@ function proxyApi(req, res) {
       clearTimeout(receiveTimer);
       const body = Buffer.concat(chunks);
       const headers = pickHeaders(req.headers, DROP_REQUEST_HEADERS);
+      if (req.ocsrcUser) headers['x-ocsrc-user'] = req.ocsrcUser;
       const contentType = req.headers['content-type'];
       if (typeof contentType === 'string') headers['content-type'] = contentType;
       headers['content-length'] = String(body.length);
@@ -514,7 +540,9 @@ function proxyApi(req, res) {
     return;
   }
 
-  doForward(pickHeaders(req.headers, DROP_REQUEST_HEADERS)).end(); // GET/HEAD
+  const headers = pickHeaders(req.headers, DROP_REQUEST_HEADERS);
+  if (req.ocsrcUser) headers['x-ocsrc-user'] = req.ocsrcUser;
+  doForward(headers).end(); // GET/HEAD
 }
 
 /** SPA フォールバック（index.html）を stat 付きで返す。 */
