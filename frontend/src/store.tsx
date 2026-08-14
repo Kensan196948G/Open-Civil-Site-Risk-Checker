@@ -184,6 +184,8 @@ export interface AppController {
   setCaptureHazardLayers: (v: boolean) => void;
   // sources
   testSource: (key: SourceKey) => void;
+  /** 有効化されている全ソースを一括接続テストする（SCR-006）。 */
+  testAllSources: () => void;
 }
 
 function validate(form: FormState): string {
@@ -447,6 +449,12 @@ export function useAppController(): AppController {
     });
   }, []);
 
+  /** 有効化されている全ソースを一括で接続テストする（SCR-006・運用の利便性）。 */
+  const testAllSources = useCallback(() => {
+    const keys = stateRef.current.sources.filter((s) => s.enabled).map((s) => s.key);
+    keys.forEach((key) => testSource(key));
+  }, [testSource]);
+
   return useMemo(
     () => ({
       state,
@@ -481,6 +489,7 @@ export function useAppController(): AppController {
       setMapCapture,
       setCaptureHazardLayers,
       testSource,
+      testAllSources,
     }),
     [
       state,
@@ -515,6 +524,7 @@ export function useAppController(): AppController {
       setMapCapture,
       setCaptureHazardLayers,
       testSource,
+      testAllSources,
     ],
   );
 }
