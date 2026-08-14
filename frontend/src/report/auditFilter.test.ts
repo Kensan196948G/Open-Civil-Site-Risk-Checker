@@ -45,6 +45,24 @@ describe('filterAudit', () => {
     const r = filterAudit(DUMMY_AUDIT, { ...EMPTY_FILTER, actor: 'nonexistent@example.com' });
     expect(r).toEqual([]);
   });
+
+  it('開始日（dateFrom）でその日以降に絞り込む（ISO/J-SOX の監査期間）', () => {
+    const r = filterAudit(DUMMY_AUDIT, { ...EMPTY_FILTER, dateFrom: '2026-08-14' });
+    expect(r.length).toBeGreaterThan(0);
+    expect(r.every((e) => e.ts.slice(0, 10) >= '2026-08-14')).toBe(true);
+  });
+
+  it('終了日（dateTo）でその日以前に絞り込む', () => {
+    const r = filterAudit(DUMMY_AUDIT, { ...EMPTY_FILTER, dateTo: '2026-08-12' });
+    expect(r.length).toBeGreaterThan(0);
+    expect(r.every((e) => e.ts.slice(0, 10) <= '2026-08-12')).toBe(true);
+  });
+
+  it('開始日〜終了日で期間を特定し、他の条件と AND で適用される', () => {
+    const ranged = filterAudit(DUMMY_AUDIT, { ...EMPTY_FILTER, dateFrom: '2026-08-13', dateTo: '2026-08-14', action: 'case_submitted' });
+    expect(ranged.length).toBeGreaterThan(0);
+    expect(ranged.every((e) => e.action === 'case_submitted' && e.ts.slice(0, 10) >= '2026-08-13' && e.ts.slice(0, 10) <= '2026-08-14')).toBe(true);
+  });
 });
 
 describe('isFilterActive / ACTION_OPTIONS', () => {
@@ -56,6 +74,8 @@ describe('isFilterActive / ACTION_OPTIONS', () => {
     expect(isFilterActive({ ...EMPTY_FILTER, actor: 'a' })).toBe(true);
     expect(isFilterActive({ ...EMPTY_FILTER, action: 'case_created' })).toBe(true);
     expect(isFilterActive({ ...EMPTY_FILTER, keyword: 'k' })).toBe(true);
+    expect(isFilterActive({ ...EMPTY_FILTER, dateFrom: '2026-08-01' })).toBe(true);
+    expect(isFilterActive({ ...EMPTY_FILTER, dateTo: '2026-08-31' })).toBe(true);
   });
 
   it('ACTION_OPTIONS は全件表示を含む', () => {

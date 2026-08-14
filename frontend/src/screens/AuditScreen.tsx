@@ -140,6 +140,23 @@ export function AuditScreen() {
           style={{ ...inputStyle, width: 170 }}
           aria-label="キーワード検索"
         />
+        <input
+          type="date"
+          value={filter.dateFrom}
+          onChange={(e) => setFilter({ ...filter, dateFrom: e.target.value })}
+          style={{ ...inputStyle, width: 140 }}
+          aria-label="開始日（監査期間）で絞り込み"
+          title="開始日（YYYY-MM-DD）"
+        />
+        <span style={{ fontSize: 11, color: 'var(--text-3)' }}>〜</span>
+        <input
+          type="date"
+          value={filter.dateTo}
+          onChange={(e) => setFilter({ ...filter, dateTo: e.target.value })}
+          style={{ ...inputStyle, width: 140 }}
+          aria-label="終了日（監査期間）で絞り込み"
+          title="終了日（YYYY-MM-DD）"
+        />
         {active && (
           <button
             onClick={() => setFilter(EMPTY_FILTER)}
