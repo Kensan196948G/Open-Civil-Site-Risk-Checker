@@ -1,5 +1,5 @@
 import { postForm, nowHMS, nowStamp } from './http';
-import { haversine } from './geo';
+import { haversine, initialBearing, bearingLabel16 } from './geo';
 import type { AdapterResult, AnalysisInput } from './types';
 import type { Finding, Evidence, MapFeatures } from '../types';
 
@@ -50,13 +50,23 @@ function buildQuery({ lat, lon, radius }: AnalysisInput): string {
 out tags geom;`;
 }
 
-/** way の geometry または node 座標から、中心点までの最寄り距離[m]を返す。 */
-function nearestDist(el: OverpassElement, lat: number, lon: number): number {
-  if (el.geometry && el.geometry.length) {
-    return el.geometry.reduce((min, g) => Math.min(min, haversine(lat, lon, g.lat, g.lon)), Infinity);
+/** 要素の中心点までの最寄り地点 { d, lat, lon } を返す（ノード/中心/ジオメトリ最寄頂点）。 */
+export function nearestPointOf(el: OverpassElement, lat: number, lon: number): { d: number; lat: number; lon: number } | null {
+  const pts: { lat: number; lon: number }[] = [];
+  if (el.geometry && el.geometry.length) pts.push(...el.geometry);
+  if (el.center) pts.push(el.center);
+  if (el.lat != null && el.lon != null) pts.push({ lat: el.lat, lon: el.lon });
+  if (!pts.length) return null;
+  let best: { lat: number; lon: number } | null = null;
+  let bestD = Infinity;
+  for (const p of pts) {
+    const d = haversine(lat, lon, p.lat, p.lon);
+    if (d < bestD) {
+      bestD = d;
+      best = p;
+    }
   }
-  const p = el.center ?? (el.lat != null && el.lon != null ? { lat: el.lat, lon: el.lon } : null);
-  return p ? haversine(lat, lon, p.lat, p.lon) : Infinity;
+  return best ? { d: bestD, lat: best.lat, lon: best.lon } : null;
 }
 
 function pointOf(el: OverpassElement): { lat: number; lon: number } | null {
@@ -123,12 +133,17 @@ export async function fetchOverpass(input: AnalysisInput): Promise<AdapterResult
       .slice(0, 40),
   };
 
+/** 地点→最寄り地点の16方位ラベル（根拠の具体化・評価書 #10）。 */
+function bearingText(fromLat: number, fromLon: number, to: { lat: number; lon: number }): string {
+  return bearingLabel16(initialBearing(fromLat, fromLon, to.lat, to.lon));
+}
+
   const findings: Finding[] = [];
 
   // ---- 道路（要件 FR-301 / カテゴリ roads）----
   if (roads.length) {
     const nearest = roads
-      .map((r) => ({ el: r, d: nearestDist(r, lat, lon) }))
+      .map((r) => ({ el: r, ...(nearestPointOf(r, lat, lon) ?? { d: Infinity, lat, lon }) }))
       .sort((a, b) => a.d - b.d)[0];
     const nm = nearest.el.tags?.name || nearest.el.tags?.ref || '幹線道路';
     const hw = nearest.el.tags?.highway || 'road';
@@ -137,7 +152,7 @@ export async function fetchOverpass(input: AnalysisInput): Promise<AdapterResult
       category: 'roads',
       priority: 'C',
       title: '主要道路が近接',
-      summary: `検索半径内に幹線道路が${roads.length}本あります（最寄り：${nm}、約${Math.round(nearest.d)}m）。搬入経路・交通規制・占用許可の確認を推奨します。`,
+      summary: `検索半径内に幹線道路が${roads.length}本あります（最寄り：${nm}、${bearingText(lat, lon, nearest)} 約${Math.round(nearest.d)}m）。搬入経路・交通規制・占用許可の確認を推奨します。`,
       status: 'found',
       distance_m: nearest.d,
       caution: 'OSMの道路属性は地域差があります。幅員・規制は道路管理者資料で確認してください。',
@@ -162,7 +177,7 @@ export async function fetchOverpass(input: AnalysisInput): Promise<AdapterResult
   // ---- 水域（要件 カテゴリ rivers）----
   if (waters.length) {
     const nearest = waters
-      .map((w) => ({ el: w, d: nearestDist(w, lat, lon) }))
+      .map((w) => ({ el: w, ...(nearestPointOf(w, lat, lon) ?? { d: Infinity, lat, lon }) }))
       .sort((a, b) => a.d - b.d)[0];
     const wtype = nearest.el.tags?.waterway || (nearest.el.tags?.natural === 'water' ? 'water' : '水域');
     const nm = nearest.el.tags?.name || '';
@@ -171,7 +186,7 @@ export async function fetchOverpass(input: AnalysisInput): Promise<AdapterResult
       category: 'rivers',
       priority: 'B',
       title: '水路・河川・水域が検索半径内に存在',
-      summary: `検索半径内に水域が${waters.length}件あります（最寄り：${nm || wtype}、約${Math.round(nearest.d)}m）。現地条件と河川・水路管理者資料の確認を推奨します。`,
+      summary: `検索半径内に水域が${waters.length}件あります（最寄り：${nm || wtype}、${bearingText(lat, lon, nearest)} 約${Math.round(nearest.d)}m）。現地条件と河川・水路管理者資料の確認を推奨します。`,
       status: 'found',
       distance_m: nearest.d,
       caution: '公開データの整備時点と現況が異なる可能性があります。護岸・暗渠区間の有無を確認してください。',
@@ -187,7 +202,7 @@ export async function fetchOverpass(input: AnalysisInput): Promise<AdapterResult
   });
   if (sensitive.length) {
     const nearest = sensitive
-      .map((a) => ({ el: a, d: nearestDist(a, lat, lon) }))
+      .map((a) => ({ el: a, ...(nearestPointOf(a, lat, lon) ?? { d: Infinity, lat, lon }) }))
       .sort((x, y) => x.d - y.d)[0];
     const kinds = Array.from(
       new Set(
@@ -202,7 +217,7 @@ export async function fetchOverpass(input: AnalysisInput): Promise<AdapterResult
       category: 'facilities',
       priority: 'B',
       title: '官公庁・学校・病院等が近接',
-      summary: `検索半径内に配慮対象施設が${sensitive.length}件あります（${kinds}／最寄り 約${Math.round(nearest.d)}m）。騒音・振動・通学路・警備動線への配慮確認を推奨します。`,
+      summary: `検索半径内に配慮対象施設が${sensitive.length}件あります（${kinds}／最寄り ${bearingText(lat, lon, nearest)} 約${Math.round(nearest.d)}m）。騒音・振動・通学路・警備動線への配慮確認を推奨します。`,
       status: 'found',
       distance_m: nearest.d,
       caution: '施設種別はOSM属性に基づく参考情報です。用途・運用時間は現地確認が必要です。',
@@ -211,7 +226,7 @@ export async function fetchOverpass(input: AnalysisInput): Promise<AdapterResult
   }
   if (stations.length) {
     const nearest = stations
-      .map((s) => ({ el: s, d: nearestDist(s, lat, lon) }))
+      .map((s) => ({ el: s, ...(nearestPointOf(s, lat, lon) ?? { d: Infinity, lat, lon }) }))
       .sort((x, y) => x.d - y.d)[0];
     const nm = nearest.el.tags?.name || '駅';
     findings.push({
@@ -219,7 +234,7 @@ export async function fetchOverpass(input: AnalysisInput): Promise<AdapterResult
       category: 'facilities',
       priority: 'C',
       title: '鉄道駅が近接',
-      summary: `鉄道駅（${nm}）が約${Math.round(nearest.d)}mにあります。資材搬入時間帯・歩行者動線・地下構造物の確認を推奨します。`,
+      summary: `鉄道駅（${nm}）が${bearingText(lat, lon, nearest)} 約${Math.round(nearest.d)}mにあります。資材搬入時間帯・歩行者動線・地下構造物の確認を推奨します。`,
       status: 'found',
       distance_m: nearest.d,
       caution: '地下構造物の位置・深さは公開データに含まれません。施設管理者への確認が必要です。',

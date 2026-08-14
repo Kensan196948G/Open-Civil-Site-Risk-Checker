@@ -690,3 +690,33 @@ Issue #175（候補地比較）の実務利用（社内レビュー・紙配布�
 3. A31/A33 実データ取得・投入（ユーザー判断・手順整備済み）
 4. 案件台帳・データソース台帳の本番有効化判断（ユーザー判断）
 5. TS7（#109）・バックアップ復元演習・Cloudflare 側項目（ユーザー判断）
+
+## 28. 追記（2026-08-15・第21弾）: 根拠表示の強化（16方位・ハザード区域名・キャプチャ日時）
+
+### 28.1 実施内容
+
+| # | 内容 | 変更ファイル | 根拠 |
+|---|---|---|---|
+| 1 | **最寄り距離＋16方位表示**: `initialBearing`（初期方位角）・`bearingLabel16`（16方位日本語）を geo.ts に追加し、道路/水路/施設/駅の finding サマリーを「最寄り：○○、北西 約120m」形式へ昇格。`nearestPointOf` で最寄り頂点を特定 | `frontend/src/api/geo.ts`・`overpass.ts` | 評価書 #10（河川・道路・施設の距離/方位表示）・現地確認の根拠具体化 |
+| 2 | **ハザード区域内判定の区域名・想定水深をサマリーへ列挙**（最大3件・超過は「ほか」）。scenario 空は名前のみ表示 | `frontend/src/api/hazard.ts` | 評価書 #9（ハザード重なり強調表示）・区域内判定の根拠可視化 |
+| 3 | **地図キャプチャの取得日時をローカル時刻（JST 等）表記に統一**。`formatLocalStamp` を capture.ts に追加し、画像キャプション・調査パック・画面ステータスで使用（従来は UTC のまま表示される不整合を修正） | `frontend/src/map/capture.ts`・`captureMap.ts`・`screens/AnalysisScreen.tsx` | 表示整合性 |
+| 4 | テスト: geo +8・hazard +2・capture +2・overpass.test.ts 新規5件（計 +17） | `frontend/src/api/geo.test.ts`・`hazard.test.ts`・`overpass.test.ts`（新規）・`map/capture.test.ts` | 品質ゲート |
+
+### 28.2 検証
+
+| 検証 | 結果 |
+|---|---:|
+| frontend typecheck / lint | PASS |
+| frontend vitest | **184 passed**（+17） |
+| frontend smoke | **167/167 passed** |
+| frontend build | PASS |
+| ビルド成果物への反映 | dist に「該当区域:」「北北東」「最寄り」を grep 確認 |
+| 本番影響 | なし（フロントエンド + docs のみ） |
+
+### 28.3 残課題（更新）
+
+1. #238 の7日間検証満了確認（2026-08-19 頃・満了時にクローズ判断）
+2. 地図キャプチャ・本番反映後の実ブラウザ目視確認（外部タイル CORS 応答に依存）
+3. A31/A33 実データ取得・投入（ユーザー判断・手順整備済み）
+4. 案件台帳・データソース台帳の本番有効化判断（ユーザー判断）
+5. TS7（#109）・バックアップ復元演習・Cloudflare 側項目（ユーザー判断）

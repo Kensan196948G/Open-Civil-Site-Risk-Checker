@@ -26,3 +26,40 @@ export function bbox(lat: number, lon: number, radius: number): string {
   const e = lon + dLon;
   return `${s},${w},${n},${e}`;
 }
+
+/** 2点間の初期方位角[度]（0=北・時計回り・0〜360）。WGS84 楕円体の近似（球面）で十分。 */
+export function initialBearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const φ1 = toRad(lat1);
+  const φ2 = toRad(lat2);
+  const Δλ = toRad(lon2 - lon1);
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return (Math.atan2(y, x) * (180 / Math.PI) + 360) % 360;
+}
+
+/** 16方位の日本語ラベル（北を 0 として時計回り）。 */
+export const BEARING_16 = [
+  '北',
+  '北北東',
+  '北東',
+  '東北東',
+  '東',
+  '東南東',
+  '南東',
+  '南南東',
+  '南',
+  '南南西',
+  '南西',
+  '西南西',
+  '西',
+  '西北西',
+  '北西',
+  '北北西',
+] as const;
+
+/** 方位角[度]を16方位の日本語ラベルへ変換する（境界は各22.5°・丸め）。 */
+export function bearingLabel16(deg: number): string {
+  const normalized = ((deg % 360) + 360) % 360;
+  const idx = Math.round(normalized / 22.5) % 16;
+  return BEARING_16[idx];
+}

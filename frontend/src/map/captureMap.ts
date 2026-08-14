@@ -11,6 +11,7 @@ import L from 'leaflet';
 import {
   TILE_SIZE,
   buildCaptureCaption,
+  formatLocalStamp,
   metersPerPixel,
   projectLatLng,
   tileUrl,
@@ -244,7 +245,8 @@ export async function captureMap(
     baseLabel: layers.base.label,
     included: [...new Set(included)],
     excludedLabels: excluded.map((e) => e.label),
-    capturedAt,
+    // 画像キャプション・調査パック表記はローカル時刻（JST 等の環境時刻）に統一する。
+    capturedAt: formatLocalStamp(capturedAt),
   });
 
   drawCaption(ctx, caption, canvas.width, scale);

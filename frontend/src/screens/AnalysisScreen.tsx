@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import type { Map as LeafletMap } from 'leaflet';
 import { useApp } from '../store';
 import { SiteMap } from '../map/SiteMap';
-import { BASE_TILE_LAYERS, HAZARD_EXCLUSION_REASON, HAZARD_TILE_LAYERS, HILLSHADE_TILE_LAYER } from '../map/capture';
+import { BASE_TILE_LAYERS, HAZARD_EXCLUSION_REASON, HAZARD_TILE_LAYERS, HILLSHADE_TILE_LAYER, formatLocalStamp } from '../map/capture';
 import { captureMap } from '../map/captureMap';
 import { decorate } from '../decorate';
 import { countsOf, memoPreview } from '../risk/memo';
@@ -73,7 +73,7 @@ export function AnalysisScreen() {
         { scale: 2, includeHazardLayers: captureHazardLayers },
       );
       setMapCapture(result);
-      const time = result.capturedAt.slice(11, 19);
+      const time = formatLocalStamp(result.capturedAt).slice(11, 16);
       setCaptureMsg(`✓ 取得済み ${time}（調査パックへ同梱されます）`);
     } catch (e) {
       setCaptureMsg(`✗ 取得失敗: ${e instanceof Error ? e.message : '不明なエラー'}`);

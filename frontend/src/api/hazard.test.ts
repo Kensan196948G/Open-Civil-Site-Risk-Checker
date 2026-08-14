@@ -56,6 +56,27 @@ describe('hazardAssessmentFinding', () => {
     expect(f.summary.includes('絶対')).toBe(false);
   });
 
+  it('区域内判定のサマリーに区域名・想定水深（scenario）を列挙する（評価書 #9）', () => {
+    const f = hazardAssessmentFinding([floodInside, landslideInside], [], '2026-08-14 10:00:00');
+    expect(f.summary).toContain('該当区域:');
+    expect(f.summary).toContain('浸水想定区域（架空デモA）（想定最大規模（デモ））');
+    expect(f.summary).toContain('土砂災害警戒区域（架空デモB）（土砂災害警戒区域（デモ））');
+  });
+
+  it('区域名は最大3件まで列挙し、超過分は「ほか」で省略する', () => {
+    // 列挙順は flood が先（3件）→ landslide が4件目になるため、省略対象は土砂側。
+    const third: HazardItem = { ...floodInside, name: '浸水想定区域（架空デモC）', attrs: {} };
+    const fourth: HazardItem = { ...floodInside, name: '浸水想定区域（架空デモD）', attrs: { scenario: '想定最大規模（デモ）' } };
+    const f = hazardAssessmentFinding([floodInside, third, fourth, landslideInside], [], '2026-08-14 10:00:00');
+    expect(f.summary).toContain('ほか');
+    // 4件目（土砂災害警戒区域）は列挙されない（最大3件）
+    expect(f.summary.includes('土砂災害警戒区域（架空デモB）')).toBe(false);
+    // scenario が空の区域は名前のみ表示する
+    expect(f.summary).toContain('浸水想定区域（架空デモC）');
+    // 3件目（D）は列挙される
+    expect(f.summary).toContain('浸水想定区域（架空デモD）（想定最大規模（デモ））');
+  });
+
   it('区域内が浸水のみなら優先度 B', () => {
     const f = hazardAssessmentFinding([floodInside], [], '2026-08-14 10:00:00');
     expect(f.priority).toBe('B');
