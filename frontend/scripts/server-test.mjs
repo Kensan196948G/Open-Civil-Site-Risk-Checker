@@ -193,6 +193,17 @@ const backend = http.createServer((req, res) => {
     });
     return;
   }
+  // 案件台帳 API 模擬（Issue #111）: ボディ付き POST/PATCH と DELETE の中継を検証する。
+  if (req.url === '/api/v1/cases' || req.url.startsWith('/api/v1/cases/') || req.url === '/api/v1/audit') {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      const body = Buffer.concat(chunks).toString('utf8');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ seenPath: req.url, method: req.method, body, headers: req.headers }));
+    });
+    return;
+  }
   // あえて web 層と衝突するセキュリティヘッダを返し、上流優先にならない（item 6）ことを検証する。
   // 受信ヘッダを echo し、bodyless 中継で Content-Length/Content-Type が剥がれる（item 7）ことを検証する。
   res.writeHead(200, {
@@ -314,6 +325,61 @@ try {
     aiPost.status === 200 && aiPostBody.method === 'POST' && aiPostBody.body === '{"prompt":"テスト"}' && aiPostBody.headers['content-type'] === 'application/json',
     `status=${aiPost.status} body=${aiPost.body.slice(0, 120)}`,
   );
+
+  // ---- 2.1 案件台帳 API（Issue #111）: POST/PATCH/DELETE のプロキシ許可 ----
+  console.log('▶ /api case registry proxy (Issue #111)');
+  const casePost = await request(webUpPort, '/api/v1/cases', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ code: 'OCSRC-PROXY-1', name: 'プロキシ経由' }),
+  });
+  const casePostBody = JSON.parse(casePost.body);
+  check(
+    'POST /api/v1/cases relays body + method to backend',
+    casePost.status === 200 && casePostBody.method === 'POST' && casePostBody.body.includes('OCSRC-PROXY-1') && casePostBody.seenPath === '/api/v1/cases',
+    `status=${casePost.status} body=${casePost.body.slice(0, 120)}`,
+  );
+
+  const casePatch = await request(webUpPort, '/api/v1/cases/1', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: '更新' }),
+  });
+  const casePatchBody = JSON.parse(casePatch.body);
+  check(
+    'PATCH /api/v1/cases/{id} relays body',
+    casePatch.status === 200 && casePatchBody.method === 'PATCH' && casePatchBody.body.includes('更新') && casePatchBody.seenPath === '/api/v1/cases/1',
+    `status=${casePatch.status} body=${casePatch.body.slice(0, 120)}`,
+  );
+
+  const caseDelete = await request(webUpPort, '/api/v1/cases/1', { method: 'DELETE' });
+  const caseDeleteBody = JSON.parse(caseDelete.body);
+  check(
+    'DELETE /api/v1/cases/{id} relays method',
+    caseDelete.status === 200 && caseDeleteBody.method === 'DELETE' && caseDeleteBody.seenPath === '/api/v1/cases/1',
+    `status=${caseDelete.status} body=${caseDelete.body.slice(0, 120)}`,
+  );
+
+  const auditGet = await request(webUpPort, '/api/v1/audit');
+  check(
+    'GET /api/v1/audit relays to backend',
+    auditGet.status === 200 && JSON.parse(auditGet.body).seenPath === '/api/v1/audit',
+    `status=${auditGet.status}`,
+  );
+
+  const caseSubmit = await request(webUpPort, '/api/v1/cases/1/submit', { method: 'POST' });
+  const caseSubmitBody = JSON.parse(caseSubmit.body);
+  check(
+    'POST /api/v1/cases/{id}/submit relays method',
+    caseSubmit.status === 200 && caseSubmitBody.method === 'POST' && caseSubmitBody.seenPath === '/api/v1/cases/1/submit',
+    `status=${caseSubmit.status} body=${caseSubmit.body.slice(0, 120)}`,
+  );
+
+  // 案件 API 以外の PATCH / DELETE は引き続き 405。
+  const patchOther = await request(webUpPort, '/api/v1/ping', { method: 'PATCH' });
+  check('PATCH /api/* (non-case) is 405', patchOther.status === 405);
+  const deleteOther = await request(webUpPort, '/api/v1/ping', { method: 'DELETE' });
+  check('DELETE /api/* (non-case) is 405', deleteOther.status === 405);
 
   // AI 経路は通常プロキシより長いアイドルタイムアウトを使う。
   // webSlow は PROXY=400ms / AI=1600ms のため、1.2 秒応答が 502 にならず通るはず。

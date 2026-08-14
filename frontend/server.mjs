@@ -461,10 +461,19 @@ function proxyApi(req, res) {
   };
   if (healthRewrite[target.pathname]) target.pathname = healthRewrite[target.pathname];
 
-  // AI ブローカー（POST /api/v1/ai/*）のみボディ付きリクエストを許容する。
+  // AI ブローカー（POST /api/v1/ai/*）と案件台帳（Issue #111: /api/v1/cases*・
+  // /api/v1/audit）のみボディ付き・書き込みリクエストを許容する。案件台帳は
+  // バックエンドの feature flag（OCSRC_CASE_STORE_ENABLED）が無効なら 503 を返すため、
+  // 本番では経路を開いても動作は変わらない（無効時は既存の 405 相当を 503 に置換）。
   const isAiPost = req.method === 'POST' && (decodedPath === '/api/v1/ai' || decodedPath.startsWith('/api/v1/ai/'));
-  if (req.method === 'POST' && !isAiPost) {
-    sendProxyError(res, 405, 'method_not_allowed', 'POST is only allowed for /api/v1/ai/*');
+  const isCaseApi = decodedPath === '/api/v1/cases'
+    || decodedPath.startsWith('/api/v1/cases/')
+    || decodedPath === '/api/v1/audit'
+    || decodedPath.startsWith('/api/v1/audit');
+  const isCaseWrite = isCaseApi && ['POST', 'PATCH', 'DELETE'].includes(req.method);
+  const writeAllowed = isAiPost || isCaseWrite;
+  if (['POST', 'PATCH', 'DELETE'].includes(req.method) && !writeAllowed) {
+    sendProxyError(res, 405, 'method_not_allowed', 'POST/PATCH/DELETE are only allowed for /api/v1/ai/*, /api/v1/cases* and /api/v1/audit');
     return;
   }
   if (isAiPost && aiRateLimited(req.socket.remoteAddress || 'unknown')) {
@@ -495,8 +504,8 @@ function proxyApi(req, res) {
     return upstream;
   };
 
-  if (req.method === 'POST') {
-    // ボディは 64KB 上限（AI プロンプト用途の最小限）。content-type のみ保持し、
+  if (req.method === 'POST' || req.method === 'PATCH') {
+    // ボディは 64KB 上限（AI プロンプト・案件作成/更新用途の最小限）。content-type のみ保持し、
     // 資格情報系ヘッダは従来どおり除去する。低速 chunked POST による接続占有を
     // 防ぐため、ボディ受信にもアイドルタイムアウトを設定する（CodeRabbit #241 指摘対応）。
     const chunks = [];
@@ -582,10 +591,18 @@ const server = http.createServer(async (req, res) => {
     // 公開経路（Cloudflare Tunnel）の認証ゲート。メソッド判定より先に評価し、
     // 未認証クライアントには許可メソッド等の情報も返さない。
     if (!(await checkTunnelAuth(req, res))) return;
-    // AI ブローカー（/api/v1/ai/* の POST）のみボディ付きリクエストを許容する。
+    // AI ブローカー（/api/v1/ai/* の POST）と案件台帳（Issue #111: /api/v1/cases*・
+    // /api/v1/audit の POST/PATCH/DELETE）のみ書き込みリクエストを許容する。
+    // それ以外の非 GET/HEAD は 405。案件台帳は backend の feature flag が無効なら
+    // 503 を返すため、経路を開いても本番動作は変わらない。
     const rawPath = (req.url || '/').split('?')[0];
     const isAiPost = req.method === 'POST' && (rawPath === '/api/v1/ai' || rawPath.startsWith('/api/v1/ai/'));
-    if (req.method !== 'GET' && req.method !== 'HEAD' && !isAiPost) {
+    const isCaseWrite = ['POST', 'PATCH', 'DELETE'].includes(req.method)
+      && (rawPath === '/api/v1/cases'
+        || rawPath.startsWith('/api/v1/cases/')
+        || rawPath === '/api/v1/audit'
+        || rawPath.startsWith('/api/v1/audit'));
+    if (req.method !== 'GET' && req.method !== 'HEAD' && !isAiPost && !isCaseWrite) {
       res.writeHead(405, { Allow: 'GET, HEAD' });
       res.end('Method Not Allowed');
       return;

@@ -33,6 +33,7 @@ import { addLiveCase, buildCaseFromAnalysis, deleteLiveCase, exportLiveCases, im
 import { buildMemoText } from './risk/memo';
 import { runAnalysis, STEP_DEFS, type AnalysisInputForm } from './api/runAnalysis';
 import { nowStamp } from './api/http';
+import { createCase } from './api/cases';
 import { pingSource } from './api/ping';
 
 // アプリ全体の状態管理。デザインモックの DCLogic.state を React の状態に移植。
@@ -88,6 +89,8 @@ export interface AppState {
   liveCases: CaseRecord[];
   /** 現在の確認結果がダッシュボードに保存済みか。 */
   currentSaved: boolean;
+  /** 案件保存先（Issue #111）。server=案件台帳 API / local=localStorage フォールバック。 */
+  caseSaveState: { kind: 'server' | 'local'; code?: string; id?: string } | null;
 }
 
 function initialState(): AppState {
@@ -124,6 +127,7 @@ function initialState(): AppState {
     fetchedAt: '—',
     liveCases: loadLiveCases(),
     currentSaved: false,
+    caseSaveState: null,
   };
 }
 
@@ -306,14 +310,33 @@ export function useAppController(): AppController {
     [doRun],
   );
 
-  // 現在の確認結果を本番データ案件として保存（本番データ投入の主経路）。
+  // 現在の確認結果を案件として保存。サーバー案件台帳（Issue #111）が有効なら
+  // サーバーへ、無効・未到達・権限不足なら既存の localStorage へフォールバックする。
+  // 結果は `caseSaveState` に反映される（'server' | 'local' | 'error'）。
   const saveCurrentAsCase = useCallback(() => {
     const s = stateRef.current;
     if (!s.location || !s.ranOnce) return;
     const record = buildCaseFromAnalysis(s.location, s.findings, s.logs, s.fetchedAt);
-    const next = addLiveCase(record);
-    setState((st) => ({ ...st, liveCases: next, currentSaved: true }));
-  }, []);
+    void (async () => {
+      try {
+        const created = await createCase({
+          code: record.code,
+          name: record.name,
+          address: record.address,
+          lat: record.lat,
+          lon: record.lon,
+          radius_m: record.radius,
+          counts: record.counts,
+          findings: record.findings ?? [],
+        });
+        patch({ currentSaved: true, caseSaveState: { kind: 'server', code: created.code, id: String(created.id) } });
+      } catch {
+        // サーバー未有効・オフライン・権限不足 → localStorage へフォールバック。
+        const next = addLiveCase(record);
+        setState((st) => ({ ...st, liveCases: next, currentSaved: true, caseSaveState: { kind: 'local' } }));
+      }
+    })();
+  }, [patch]);
 
   const deleteCase = useCallback((id: string) => {
     const next = deleteLiveCase(id);
