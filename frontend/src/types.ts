@@ -76,7 +76,7 @@ export interface SiteLocation {
 /** API 接続状態（要件 FR-501）。 */
 export type SourceStatus = 'success' | 'failed' | 'skipped';
 
-/** データソース台帳の1件（要件 §8.2 / SCR-006）。 */
+/** データソース台帳の1件（要件 §8.2 / SCR-006 / Issue #174 鮮度・ライセンス台帳）。 */
 export interface SourceLedgerEntry {
   key: SourceKey;
   name: string;
@@ -91,6 +91,12 @@ export interface SourceLedgerEntry {
   enabled: boolean;
   /** 接続テスト実行中フラグ（UI 用）。 */
   _testing?: boolean;
+  /** 元データの更新日（基準年・整備年度等）。未確認は ''。 */
+  sourceUpdatedAt?: string;
+  /** 利用条件メモ（出典表示義務・商用可否等・Issue #174）。 */
+  usageNote?: string;
+  /** 再取込履歴（新しい順・Issue #174）。各件: 日時と内容。 */
+  refreshHistory?: { at: string; note: string }[];
 }
 
 /** API 実行ログ1件（要件 FR-503 / SCR-007）。 */
