@@ -4,6 +4,7 @@ import { DUMMY_CASES_VISIBLE, THIS_WEEK_SINCE } from '../data/cases';
 import { getCaseStatus, getPrio } from '../data/constants';
 import { approveCase, isCaseStoreEnabled, listAudit, listCases, serverCaseToRecord, submitCase, type AuditEntry, type ServerCase } from '../api/cases';
 import { CASE_STATUS_OPTIONS, EMPTY_CASE_FILTER, filterCases, isCaseFilterActive } from '../report/caseFilter';
+import { buildCasesCsv } from '../report/caseCsv';
 import type { CaseRecord, Priority } from '../types';
 
 // SCR-000 ダッシュボード。実取得（本番）データ案件 + ダミー（サンプル）案件を表示する。
@@ -109,6 +110,21 @@ export function DashboardScreen() {
   // 案件一覧の検索・絞り込み（キーワード + 状態。KPI は全件ベースのまま）。
   const [caseFilter, setCaseFilter] = useState(EMPTY_CASE_FILTER);
   const visibleCases = useMemo(() => filterCases(cases, caseFilter), [cases, caseFilter]);
+
+  // 絞り込み後の案件一覧を CSV でダウンロード（UTF-8 BOM 付き・Excel の文字化け防止）。
+  const onExportCasesCsv = () => {
+    const blob = new Blob(['\uFEFF' + buildCasesCsv(visibleCases)], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ocsrc-cases_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      a.remove();
+    }, 200);
+  };
 
   const { agg, aggTotal, kpiCards } = useMemo(() => {
     const a: Record<Priority, number> = { A: 0, B: 0, C: 0, D: 0 };
@@ -390,6 +406,13 @@ export function DashboardScreen() {
                 </option>
               ))}
             </select>
+            <button
+              onClick={onExportCasesCsv}
+              title="絞り込み結果を CSV でダウンロード（UTF-8 BOM 付き）"
+              style={{ padding: '6px 12px', borderRadius: 7, fontSize: 11.5, border: '1px solid var(--accent-border)', background: 'var(--surface)', color: 'var(--accent)', cursor: 'pointer', fontWeight: 600 }}
+            >
+              ↓ CSV
+            </button>
             {isCaseFilterActive(caseFilter) && (
               <button
                 onClick={() => setCaseFilter(EMPTY_CASE_FILTER)}
