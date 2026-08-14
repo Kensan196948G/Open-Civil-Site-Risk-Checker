@@ -12,7 +12,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-DATASETS = ("river", "facility")
+DATASETS = ("river", "facility", "hazard")
 
 # Name resolution order: generic key first, then well-known KSJ attribute codes
 # (W05_004 = river name, P02_003/P02_004 = facility name variants).
@@ -184,3 +184,76 @@ async def query_nearby(
             }
         )
     return items
+
+
+# ハザード区域判定（Issue #112）。dataset='hazard' のポリゴン（浸水想定 A31・
+# 土砂災害警戒 A33 相当）に対して、区域内判定（ST_Contains）と最寄り区域までの
+# 距離（ST_Distance）を根拠付きで返す。タイル目視から公式区域内判定へ昇格する。
+
+HAZARD_TYPES = ("flood", "landslide")
+
+
+async def assess_hazard(
+    conn,
+    *,
+    lat: float,
+    lon: float,
+    radius_m: float = 5_000,
+    limit: int = 50,
+) -> dict:
+    """地点のハザード区域判定を返す。
+
+    Returns:
+        {
+          "status": "ok",
+          "inside": [ {dataset,name,attrs,source,source_updated_at,hazard_type,distance_m}, ... ],
+          "nearby": [ ... ],   # 区域内ではないが radius_m 内に最寄り区域があるもの
+        }
+    区域内のポリゴンは ST_Contains で、区域外は ST_Distance で距離を計算する。
+    データが未整備（該当 dataset なし）の場合、inside/nearby は空リストになる
+    （「該当なし」と「取得失敗」の区別は呼び出し側で 503 判定する）。
+    """
+    point = f"ST_SetSRID(ST_MakePoint({lon}, {lat}), 4326)"
+    rows = await conn.fetch(
+        f"""
+        SELECT dataset, name, attrs::text AS attrs_json, source, source_updated_at,
+               retrieved_at,
+               ST_Distance(geom::geography, {point}::geography) AS distance_m,
+               ST_Contains(geom, {point}) AS is_inside
+        FROM ksj_features
+        WHERE dataset = 'hazard'
+          AND ST_DWithin(geom::geography, {point}::geography, $1)
+        ORDER BY is_inside DESC, distance_m ASC
+        LIMIT $2
+        """,
+        radius_m,
+        limit,
+    )
+    inside: list[dict] = []
+    nearby: list[dict] = []
+    for r in rows:
+        item = {
+            "dataset": r["dataset"],
+            "name": r["name"],
+            "attrs": json.loads(r["attrs_json"]),
+            "source": r["source"],
+            "source_updated_at": r["source_updated_at"],
+            "retrieved_at": r["retrieved_at"].isoformat(),
+            "hazard_type": _hazard_type_of(r["name"], r["attrs_json"]),
+            "distance_m": round(float(r["distance_m"]), 1),
+        }
+        (inside if r["is_inside"] else nearby).append(item)
+    return {"status": "ok", "inside": inside, "nearby": nearby}
+
+
+def _hazard_type_of(name: str, attrs_json: str) -> str:
+    """区域名・属性からハザード種別（flood / landslide）を推定する。
+
+    断定しない範囲で表示分類に使う（正式な種別は出典属性に従う）。
+    """
+    text = f"{name} {attrs_json}".lower()
+    if "土砂" in text or "急傾斜" in text or "地すべり" in text:
+        return "landslide"
+    if "浸水" in text or "洪水" in text or "内水" in text:
+        return "flood"
+    return "unknown"

@@ -52,7 +52,7 @@ from .db import check_database, close_pools, get_pool
 from .geocode import GeocodeUnavailableError
 from .geocode import reverse as geocode_reverse
 from .geocode import search as geocode_search
-from .ksj import query_nearby
+from .ksj import assess_hazard, query_nearby
 from .settings import Settings, get_settings
 
 API_VERSION = "0.2.0"
@@ -221,6 +221,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "items": items,
             "meta": {"lat": lat, "lon": lon, "radius_m": radius_m},
         }
+
+    @app.get("/api/v1/hazard-assess")
+    async def hazard_assess(
+        settings: Annotated[Settings, Depends(get_settings)],
+        lat: Annotated[float, Query(ge=-90.0, le=90.0)],
+        lon: Annotated[float, Query(ge=-180.0, le=180.0)],
+        radius_m: Annotated[int, Query(ge=1, le=50_000)] = 5_000,
+    ) -> dict:
+        """ハザード区域判定（Issue #112）。
+
+        浸水想定（A31）・土砂災害警戒（A33）相当のポリゴン（dataset='hazard'）に対して
+        ST_Contains で区域内判定、ST_Distance で最寄り区域までの距離を返す。
+        タイル目視から公式区域内判定へ昇格する（断定表現はしない・出典・基準年を併記）。
+        DB 未整備・未到達時は 503（「該当なし」と「取得失敗」を区別・NFR-504）。
+        """
+        if settings.database_url is None:
+            raise HTTPException(status_code=503, detail="database not configured")
+        try:
+            pool = await get_pool(settings.database_url)
+            async with pool.acquire() as conn:
+                result = await assess_hazard(conn, lat=lat, lon=lon, radius_m=float(radius_m))
+        except HTTPException:
+            raise
+        except Exception as exc:  # driver missing, connection refused, bad schema
+            raise HTTPException(status_code=503, detail="database unavailable") from exc
+        result["meta"] = {"lat": lat, "lon": lon, "radius_m": radius_m}
+        return result
 
     @app.get("/api/v1/geocode")
     async def geocode(

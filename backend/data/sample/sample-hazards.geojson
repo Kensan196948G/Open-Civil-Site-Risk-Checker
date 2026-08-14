@@ -1,0 +1,69 @@
+{
+  "type": "FeatureCollection",
+  "_comment": "SYNTHETIC SAMPLE for tests/dev — NOT real KSJ data. Fictional hazard polygons (flood inundation A31-like / landslide A33-like) near Kasumigaseki for hazard-assess API (Issue #112).",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "浸水想定区域（架空デモA）",
+        "hazard_type": "flood",
+        "scenario": "想定最大規模（デモ）",
+        "source_updated": "2026（合成）"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [139.748, 35.671],
+            [139.756, 35.671],
+            [139.756, 35.677],
+            [139.748, 35.677],
+            [139.748, 35.671]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "土砂災害警戒区域（架空デモB）",
+        "hazard_type": "landslide",
+        "scenario": "土砂災害警戒区域（デモ）",
+        "source_updated": "2026（合成）"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [139.752, 35.674],
+            [139.758, 35.674],
+            [139.758, 35.680],
+            [139.752, 35.680],
+            [139.752, 35.674]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "浸水想定区域（架空デモC・遠方）",
+        "hazard_type": "flood",
+        "scenario": "想定最大規模（デモ）",
+        "source_updated": "2026（合成）"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [139.78, 35.69],
+            [139.79, 35.69],
+            [139.79, 35.70],
+            [139.78, 35.70],
+            [139.78, 35.69]
+          ]
+        ]
+      }
+    }
+  ]
+}
