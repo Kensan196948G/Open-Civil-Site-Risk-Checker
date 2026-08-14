@@ -53,6 +53,17 @@ class Settings(BaseSettings):
     anthropic_rate_limit_window_seconds: float = 60.0
     anthropic_max_concurrency: int = 2
 
+    # 案件台帳（Issue #111）。本番は既定で無効（false）のままにし、有効化は
+    # preview/dev 環境での検証後に判断する。有効時のみ cases/audit_log テーブルを
+    # 作成し、案件 CRUD API が応答する。無効時は API が 503 を返す（本番無影響）。
+    case_store_enabled: bool = False
+    # RBAC ロール割当（カンマ区切りユーザー識別子。X-OCSRC-User と照合する）。
+    # 未割当ユーザーは viewer。同一ユーザーが複数リストにある場合は上位ロールを優先。
+    case_admin_users: str = ""
+    case_approver_users: str = ""
+    case_editor_users: str = ""
+    case_auditor_users: str = ""
+
     @property
     def cors_origin_list(self) -> list[str]:
         """cors_origins parsed into origins.
@@ -65,6 +76,27 @@ class Settings(BaseSettings):
             origin.strip().rstrip("/") for origin in self.cors_origins.split(",")
         )
         return [origin for origin in normalized if origin]
+
+    @property
+    def case_admin_list(self) -> list[str]:
+        return _csv(self.case_admin_users)
+
+    @property
+    def case_approver_list(self) -> list[str]:
+        return _csv(self.case_approver_users)
+
+    @property
+    def case_editor_list(self) -> list[str]:
+        return _csv(self.case_editor_users)
+
+    @property
+    def case_auditor_list(self) -> list[str]:
+        return _csv(self.case_auditor_users)
+
+
+def _csv(value: str) -> list[str]:
+    """カンマ区切り設定値を空白除去・空要素除去したリストへ変換する。"""
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 @lru_cache

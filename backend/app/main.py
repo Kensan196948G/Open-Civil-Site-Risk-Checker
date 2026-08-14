@@ -24,6 +24,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from .ai import (
     AiMemoRequest,
@@ -31,6 +32,21 @@ from .ai import (
     call_anthropic,
     ensure_disclaimer,
     find_forbidden_expressions,
+)
+from .cases import (
+    ACTIONS,
+    can_transition,
+    create_case,
+    delete_case,
+    ensure_case_schema,
+    get_case,
+    list_audit,
+    list_cases,
+    record_audit,
+    resolve_role,
+    role_has,
+    transition_case,
+    update_case,
 )
 from .db import check_database, close_pools, get_pool
 from .geocode import GeocodeUnavailableError
@@ -41,6 +57,31 @@ from .settings import Settings, get_settings
 
 API_VERSION = "0.2.0"
 logger = logging.getLogger("ocsrc.api")
+
+
+class CaseCreateRequest(BaseModel):
+    """案件作成リクエスト（Issue #111）。findings はフロントの Finding 型互換の dict 配列。"""
+
+    code: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=200)
+    address: str = Field(default="", max_length=300)
+    lat: float = Field(ge=-90.0, le=90.0)
+    lon: float = Field(ge=-180.0, le=180.0)
+    radius_m: int = Field(ge=1, le=50_000)
+    counts: dict[str, int] = Field(default_factory=dict)
+    findings: list[dict] = Field(default_factory=list)
+
+
+class CaseUpdateRequest(BaseModel):
+    """案件更新リクエスト。None のフィールドは変更しない。"""
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    address: str | None = Field(default=None, max_length=300)
+    lat: float | None = Field(default=None, ge=-90.0, le=90.0)
+    lon: float | None = Field(default=None, ge=-180.0, le=180.0)
+    radius_m: int | None = Field(default=None, ge=1, le=50_000)
+    counts: dict[str, int] | None = None
+    findings: list[dict] | None = None
 
 
 def _ensure_audit_logger() -> None:
@@ -292,6 +333,307 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "model": settings.anthropic_model,
             "warnings": warnings,
         }
+
+    # ------------------------------------------------------------------
+    # 案件台帳 API（Issue #111）。feature flag（OCSRC_CASE_STORE_ENABLED）
+    # が無効のときは 503 を返し、本番に無影響のまま preview/dev で検証できる。
+    # ------------------------------------------------------------------
+
+    def _case_store_guard(
+        settings: Annotated[Settings, Depends(get_settings)],
+    ) -> None:
+        """案件台帳 feature flag ゲート（依存解決で body 検証より先に 503 を返す）。"""
+        if not settings.case_store_enabled:
+            raise HTTPException(
+                status_code=503,
+                detail="case store is not enabled (OCSRC_CASE_STORE_ENABLED=false)",
+            )
+
+    def _actor(request: Request) -> str:
+        """監査・認可用のユーザー識別子。
+
+        web 層（server.mjs）が Cloudflare Access JWT を検証した後に付与する
+        内部ヘッダ X-OCSRC-User のみを信用する（クライアント直送分は web 層で
+        除去済み）。未設定時（LAN 開発モード等）は anonymous として扱う。
+        """
+        return (request.headers.get("x-ocsrc-user") or "").strip()[:128] or "anonymous"
+
+    def _require(role: str, required: str, *, user: str) -> str:
+        """ロール要件チェック。不足時は 403（権限不足を偽装しない）。"""
+        if not role_has(role, required):
+            raise HTTPException(
+                status_code=403,
+                detail=f"permission denied: {required} role required (current={role}, user={user})",
+            )
+        return role
+
+    def _role_of(cfg: Settings, user: str) -> str:
+        return resolve_role(
+            user,
+            admin_users=cfg.case_admin_list,
+            approver_users=cfg.case_approver_list,
+            editor_users=cfg.case_editor_list,
+            auditor_users=cfg.case_auditor_list,
+        )
+
+    @app.get("/api/v1/cases")
+    async def cases_list(
+        request: Request,
+        settings: Annotated[Settings, Depends(get_settings)],
+        _guard: None = Depends(_case_store_guard),
+        limit: Annotated[int, Query(ge=1, le=500)] = 100,
+        offset: Annotated[int, Query(ge=0)] = 0,
+    ) -> dict:
+        """案件一覧（viewer 以上）。"""
+        user = _actor(request)
+        role = _role_of(settings, user)
+        _require(role, "viewer", user=user)
+        if settings.database_url is None:
+            raise HTTPException(status_code=503, detail="database not configured")
+        try:
+            pool = await get_pool(settings.database_url)
+            async with pool.acquire() as conn:
+                items = await list_cases(conn, limit=limit, offset=offset)
+        except Exception as exc:  # driver missing, connection refused, bad schema
+            raise HTTPException(status_code=503, detail="database unavailable") from exc
+        return {"status": "ok", "count": len(items), "items": [c.to_dict() for c in items]}
+
+    @app.post("/api/v1/cases", status_code=201)
+    async def cases_create(
+        req: CaseCreateRequest,
+        request: Request,
+        settings: Annotated[Settings, Depends(get_settings)],
+        _guard: None = Depends(_case_store_guard),
+    ) -> dict:
+        """案件作成（editor 以上）。作成者は監査用 actor として記録する。"""
+        user = _actor(request)
+        role = _role_of(settings, user)
+        _require(role, "editor", user=user)
+        if settings.database_url is None:
+            raise HTTPException(status_code=503, detail="database not configured")
+        try:
+            pool = await get_pool(settings.database_url)
+            async with pool.acquire() as conn:
+                await ensure_case_schema(conn)
+                case = await create_case(
+                    conn,
+                    code=req.code,
+                    name=req.name,
+                    address=req.address,
+                    lat=req.lat,
+                    lon=req.lon,
+                    radius_m=req.radius_m,
+                    counts=req.counts,
+                    findings=req.findings,
+                    created_by=user,
+                )
+                await record_audit(
+                    conn,
+                    entity="case",
+                    entity_id=str(case.id),
+                    action=ACTIONS["CASE_CREATED"],
+                    actor=user,
+                    detail={"code": case.code, "status": case.status},
+                )
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="database unavailable") from exc
+        return {"status": "ok", "case": case.to_dict()}
+
+    @app.get("/api/v1/cases/{case_id}")
+    async def cases_get(
+        case_id: int,
+        request: Request,
+        settings: Annotated[Settings, Depends(get_settings)],
+        _guard: None = Depends(_case_store_guard),
+    ) -> dict:
+        """案件詳細（viewer 以上）。"""
+        user = _actor(request)
+        role = _role_of(settings, user)
+        _require(role, "viewer", user=user)
+        if settings.database_url is None:
+            raise HTTPException(status_code=503, detail="database not configured")
+        try:
+            pool = await get_pool(settings.database_url)
+            async with pool.acquire() as conn:
+                case = await get_case(conn, case_id)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="database unavailable") from exc
+        if case is None:
+            raise HTTPException(status_code=404, detail="case not found")
+        return {"status": "ok", "case": case.to_dict()}
+
+    @app.patch("/api/v1/cases/{case_id}")
+    async def cases_update(
+        case_id: int,
+        req: CaseUpdateRequest,
+        request: Request,
+        settings: Annotated[Settings, Depends(get_settings)],
+        _guard: None = Depends(_case_store_guard),
+    ) -> dict:
+        """案件更新（editor 以上・approved は admin のみ）。"""
+        user = _actor(request)
+        role = _role_of(settings, user)
+        _require(role, "editor", user=user)
+        if settings.database_url is None:
+            raise HTTPException(status_code=503, detail="database not configured")
+        try:
+            pool = await get_pool(settings.database_url)
+            async with pool.acquire() as conn:
+                existing = await get_case(conn, case_id)
+                if existing is None:
+                    raise HTTPException(status_code=404, detail="case not found")
+                if existing.status == "approved" and not role_has(role, "admin"):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="approved cases can only be updated by admin",
+                    )
+                case = await update_case(
+                    conn,
+                    case_id,
+                    name=req.name,
+                    address=req.address,
+                    lat=req.lat,
+                    lon=req.lon,
+                    radius_m=req.radius_m,
+                    counts=req.counts,
+                    findings=req.findings,
+                    updated_by=user,
+                )
+                await record_audit(
+                    conn,
+                    entity="case",
+                    entity_id=str(case_id),
+                    action=ACTIONS["CASE_UPDATED"],
+                    actor=user,
+                    detail={"code": existing.code, "status": case.status if case else None},
+                )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="database unavailable") from exc
+        if case is None:
+            raise HTTPException(status_code=404, detail="case not found")
+        return {"status": "ok", "case": case.to_dict()}
+
+    @app.post("/api/v1/cases/{case_id}/submit")
+    async def cases_submit(
+        case_id: int,
+        request: Request,
+        settings: Annotated[Settings, Depends(get_settings)],
+        _guard: None = Depends(_case_store_guard),
+    ) -> dict:
+        """案件を承認申請へ遷移（draft→submitted、editor 以上）。"""
+        user = _actor(request)
+        role = _role_of(settings, user)
+        _require(role, "editor", user=user)
+        return await _transition(case_id, "submitted", user, settings)
+
+    @app.post("/api/v1/cases/{case_id}/approve")
+    async def cases_approve(
+        case_id: int,
+        request: Request,
+        settings: Annotated[Settings, Depends(get_settings)],
+        _guard: None = Depends(_case_store_guard),
+    ) -> dict:
+        """案件を承認（submitted→approved、approver 以上）。"""
+        user = _actor(request)
+        role = _role_of(settings, user)
+        _require(role, "approver", user=user)
+        return await _transition(case_id, "approved", user, settings)
+
+    async def _transition(case_id: int, to_status: str, user: str, cfg: Settings) -> dict:
+        if cfg.database_url is None:
+            raise HTTPException(status_code=503, detail="database not configured")
+        action = (
+            ACTIONS["CASE_APPROVED"] if to_status == "approved" else ACTIONS["CASE_SUBMITTED"]
+        )
+        try:
+            pool = await get_pool(cfg.database_url)
+            async with pool.acquire() as conn:
+                existing = await get_case(conn, case_id)
+                if existing is None:
+                    raise HTTPException(status_code=404, detail="case not found")
+                if not can_transition(existing.status, to_status):
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"invalid transition {existing.status} -> {to_status}",
+                    )
+                case = await transition_case(conn, case_id, to_status=to_status, actor=user)
+                await record_audit(
+                    conn,
+                    entity="case",
+                    entity_id=str(case_id),
+                    action=action,
+                    actor=user,
+                    detail={"code": existing.code, "from": existing.status, "to": to_status},
+                )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="database unavailable") from exc
+        if case is None:
+            raise HTTPException(status_code=404, detail="case not found")
+        return {"status": "ok", "case": case.to_dict()}
+
+    @app.delete("/api/v1/cases/{case_id}")
+    async def cases_delete(
+        case_id: int,
+        request: Request,
+        settings: Annotated[Settings, Depends(get_settings)],
+        _guard: None = Depends(_case_store_guard),
+    ) -> dict:
+        """案件削除（admin のみ）。監査ログは残す（証跡の改ざん防止）。"""
+        user = _actor(request)
+        role = _role_of(settings, user)
+        _require(role, "admin", user=user)
+        if settings.database_url is None:
+            raise HTTPException(status_code=503, detail="database not configured")
+        try:
+            pool = await get_pool(settings.database_url)
+            async with pool.acquire() as conn:
+                existing = await get_case(conn, case_id)
+                if existing is None:
+                    raise HTTPException(status_code=404, detail="case not found")
+                deleted = await delete_case(conn, case_id)
+                await record_audit(
+                    conn,
+                    entity="case",
+                    entity_id=str(case_id),
+                    action=ACTIONS["CASE_DELETED"],
+                    actor=user,
+                    detail={"code": existing.code, "name": existing.name},
+                )
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="database unavailable") from exc
+        if not deleted:
+            raise HTTPException(status_code=404, detail="case not found")
+        return {"status": "ok", "deleted": True, "id": case_id}
+
+    @app.get("/api/v1/audit")
+    async def audit_list(
+        request: Request,
+        settings: Annotated[Settings, Depends(get_settings)],
+        _guard: None = Depends(_case_store_guard),
+        entity: str | None = Query(default=None, max_length=32),
+        entity_id: str | None = Query(default=None, max_length=64),
+        limit: Annotated[int, Query(ge=1, le=500)] = 100,
+        offset: Annotated[int, Query(ge=0)] = 0,
+    ) -> dict:
+        """監査ログ閲覧（auditor 以上）。actor と action は記録するが本文は記録しない。"""
+        user = _actor(request)
+        role = _role_of(settings, user)
+        _require(role, "auditor", user=user)
+        if settings.database_url is None:
+            raise HTTPException(status_code=503, detail="database not configured")
+        try:
+            pool = await get_pool(settings.database_url)
+            async with pool.acquire() as conn:
+                entries = await list_audit(
+                    conn, entity=entity, entity_id=entity_id, limit=limit, offset=offset
+                )
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="database unavailable") from exc
+        return {"status": "ok", "count": len(entries), "items": [e.to_dict() for e in entries]}
 
     return app
 
