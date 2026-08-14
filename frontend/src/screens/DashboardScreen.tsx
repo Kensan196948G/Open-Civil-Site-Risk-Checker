@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../store';
 import { DUMMY_CASES_VISIBLE, THIS_WEEK_SINCE } from '../data/cases';
 import { getCaseStatus, getPrio } from '../data/constants';
-import { approveCase, isCaseStoreEnabled, listAudit, listCases, submitCase, type AuditEntry, type ServerCase } from '../api/cases';
+import { approveCase, isCaseStoreEnabled, listAudit, listCases, serverCaseToRecord, submitCase, type AuditEntry, type ServerCase } from '../api/cases';
 import type { CaseRecord, Priority } from '../types';
 
 // SCR-000 ダッシュボード。実取得（本番）データ案件 + ダミー（サンプル）案件を表示する。
@@ -298,6 +298,13 @@ export function DashboardScreen() {
                     {sc.status === 'approved' && (
                       <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{sc.approved_by ? `承認者: ${sc.approved_by}` : ''}</span>
                     )}
+                    {/* サーバー案件の確認結果を復元表示（findings を持つ場合のみ・Issue #111） */}
+                    {(() => {
+                      const rec = serverCaseToRecord(sc);
+                      return rec ? (
+                        <button onClick={() => openCase(rec)} style={miniBtn} title="保存済みの確認結果を表示">開く</button>
+                      ) : null;
+                    })()}
                   </span>
                 </div>
               ))}
