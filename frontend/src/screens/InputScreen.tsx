@@ -24,10 +24,10 @@ export function InputScreen() {
         </p>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
-          <button onClick={() => setType('address')} style={tab(form.type === 'address')}>
+          <button onClick={() => setType('address')} aria-pressed={form.type === 'address'} style={tab(form.type === 'address')}>
             住所で入力
           </button>
-          <button onClick={() => setType('coord')} style={tab(form.type === 'coord')}>
+          <button onClick={() => setType('coord')} aria-pressed={form.type === 'coord'} style={tab(form.type === 'coord')}>
             緯度経度で入力
           </button>
         </div>
@@ -72,6 +72,7 @@ export function InputScreen() {
                   <button
                     key={r}
                     onClick={() => setRadius(r)}
+                    aria-pressed={form.radius === r}
                     style={cssToStyle(
                       'padding:8px 16px;border-radius:7px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:\'IBM Plex Mono\',monospace;border:1.5px solid ' +
                         (on ? 'var(--accent);background:var(--accent-soft);color:var(--accent)' : 'var(--border);background:var(--surface);color:var(--text-2)'),
@@ -95,6 +96,7 @@ export function InputScreen() {
                   <button
                     key={k}
                     onClick={() => toggleCat(k)}
+                    aria-pressed={on}
                     style={cssToStyle(
                       'display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:8px;font-size:12.5px;font-weight:500;cursor:pointer;text-align:left;border:1.5px solid ' +
                         (on ? 'var(--accent-border);background:var(--accent-soft);color:var(--text)' : 'var(--border-3);background:var(--surface);color:var(--text-2)'),
@@ -125,7 +127,7 @@ export function InputScreen() {
           </div>
 
           {formError && (
-            <div style={{ marginBottom: 14, padding: '10px 12px', background: 'var(--err-bg)', border: '1px solid var(--err-border)', borderRadius: 7, fontSize: 12.5, color: 'var(--err-text)' }}>
+            <div role="alert" style={{ marginBottom: 14, padding: '10px 12px', background: 'var(--err-bg)', border: '1px solid var(--err-border)', borderRadius: 7, fontSize: 12.5, color: 'var(--err-text)' }}>
               {formError}
             </div>
           )}

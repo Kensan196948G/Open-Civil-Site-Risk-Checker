@@ -1,3 +1,5 @@
+import logging
+
 from fastapi.testclient import TestClient
 
 from app.main import API_VERSION, create_app
@@ -58,3 +60,20 @@ def test_healthz_is_legacy_alias_of_readyz() -> None:
     res = client.get("/healthz")
     assert res.status_code == 503
     assert res.json()["detail"]["db"] == "not_configured"
+
+
+def test_audit_logger_has_console_handler() -> None:
+    """ai_audit が uvicorn 環境でも journald/stderr へ出力されることを保証する。
+
+    外部評価 2026-08-12 の本番スモークで、INFO レコードがハンドラ不在により
+    捨てられる問題を検出したための回帰テスト。
+    """
+    audit_logger = logging.getLogger("ocsrc.api")
+    assert audit_logger.level <= logging.INFO
+    assert any(isinstance(h, logging.StreamHandler) for h in audit_logger.handlers)
+
+
+def test_db_check_timeout_default_tolerates_neon_cold_start() -> None:
+    """readyz の既定タイムアウトは Neon cold start を吸収できる値に保つ（Issue #238）。"""
+    settings = Settings(_env_file=None)
+    assert settings.db_check_timeout_seconds >= 20.0

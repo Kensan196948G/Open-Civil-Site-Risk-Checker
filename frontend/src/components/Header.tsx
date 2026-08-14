@@ -72,6 +72,7 @@ export function Header() {
       <button
         onClick={toggleTheme}
         title="テーマ切替"
+        aria-label={`テーマを${dark ? 'ライト' : 'ダーク'}へ切替`}
         style={{
           display: 'flex',
           alignItems: 'center',
