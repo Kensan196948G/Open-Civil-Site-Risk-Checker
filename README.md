@@ -376,7 +376,7 @@ frontend/src/
 
 ## 🐍 バックエンド（KSJ 空間検索・Phase 2 稼働中）
 
-`backend/` の FastAPI バックエンドは、国土数値情報（KSJ）のローカル DB 化（PostgreSQL + PostGIS）と空間検索 API を提供します。主なエンドポイントは **liveness `/livez`・readiness `/readyz`（DB 異常時 503）**、`/api/v1/ping`、`/api/v1/nearby`、AI ブローカー（`/api/v1/ai/status`・`/api/v1/ai/memo`）です。
+`backend/` の FastAPI バックエンドは、国土数値情報（KSJ）のローカル DB 化（PostgreSQL + PostGIS）と空間検索 API を提供します。主なエンドポイントは **liveness `/livez`・readiness `/readyz`（DB 異常時 503）**、`/api/v1/ping`、`/api/v1/nearby`、AI ブローカー（`/api/v1/ai/status`・`/api/v1/ai/memo`）、**案件台帳（Issue #111: `/api/v1/cases*`・`/api/v1/audit`、feature flag `OCSRC_CASE_STORE_ENABLED` 有効時のみ）**です。
 
 開発時（Docker で DB + backend を起動）:
 
@@ -419,7 +419,7 @@ curl http://127.0.0.1:8000/readyz             # → {"status":"ok","db":"ok",...
 | 🌐 **インターネット公開は Cloudflare Tunnel + Access（導入済み・稼働中）** | `https://riskchecker.mirai-dx-platform.com/` として一般公開中です。Cloudflare Edge で **TLS 終端 + Access 認証（ID ベース）+ レート制限**を行い、origin（`server.mjs`）側でも JWT を多層検証します。手順・現状の稼働状況は [`docs/deploy-backend.md`](docs/deploy-backend.md#-インターネット公開cloudflare-tunnel--cloudflare-access) を参照 |
 | 🔑 **本番 DB** | ローカル PostGIS の場合は `infra/.env.example` の `dev_only_password`（**開発専用**）から `OCSRC_DB_PASSWORD` 強パスワードへ **override 必須**。本番は **Neon（マネージド PostGIS）** に切替済み（構成・監視は [`docs/neon-database.md`](docs/neon-database.md)、切替手順は [`docs/deploy-backend.md`](docs/deploy-backend.md)） |
 
-> ⚠️ **アプリケーション内の認証・アクセス権限・サーバ側操作ログ**（要件 NFR-201/203/204/205・権限ロール）は引き続き **MVP スコープ外（クライアント完結設計の意図的判断）**です。上記の Cloudflare Access は「インターネットから誰が到達できるか」という**境界の認証**であり、アプリケーション内のユーザー管理・権限ロールとは別物です。サーバ側で案件データを扱う Phase 4+ で導入します（[`docs/requirements.md`](docs/requirements.md) §11.3.1 / [`docs/detailed-specification.md`](docs/detailed-specification.md) §15.4）。
+> ⚠️ **アプリケーション内の認証・アクセス権限・サーバ側操作ログ**（要件 NFR-201/203/204/205・権限ロール）: 2026-08-14 時点で **案件台帳 API（Issue #111）に RBAC（viewer/editor/approver/admin/auditor）と監査ログを実装済み**です。ただし**既定は feature flag `OCSRC_CASE_STORE_ENABLED=false` で無効**（本番は未有効のまま・preview/dev で検証後に有効化）。上記の Cloudflare Access は「インターネットから誰が到達できるか」という**境界の認証**であり、アプリケーション内のロール割当（`OCSRC_CASE_*_USERS` 環境変数）とは別物です。案件データを本番でサーバー保存する際は、ロール割当の運用と監査ログの保全方針を定めてから有効化してください（[`docs/requirements.md`](docs/requirements.md) §11.3.1 / [`docs/detailed-specification.md`](docs/detailed-specification.md) §15.4）。
 
 ---
 
@@ -434,7 +434,7 @@ curl http://127.0.0.1:8000/readyz             # → {"status":"ok","db":"ok",...
 | -------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Phase 2  | ✅ KSJ 実装済み | 国土数値情報のローカルDB化（PostgreSQL + PostGIS）+ FastAPI 空間検索 API（稼働中）。ハザードデータのローカルDB化は未着手 |
 | Phase 3  | ✅ 一部実装 | 気象庁 警報・注意報連携（実装済み・Issue #22）。xROAD は利用規約上の理由（匿名アクセス 403）、PLATEAU は試験運用・SLA無しのため見送り |
-| Phase 4  | ⏳ 未着手 | 複数候補地比較・案件管理・社内レビュー機能（認証・権限・サーバ側保存を伴う**バックエンド中心構成への移行**をここで再評価） |
+| Phase 4  | 🚧 一部実装（flag 無効でデフォルト稼働） | 複数候補地比較・案件管理・社内レビュー機能。**案件台帳 API + RBAC + 監査ログ + 承認WF（Issue #111）を実装済み**だが、本番は `OCSRC_CASE_STORE_ENABLED=false` のまま（preview/dev 検証後に有効化判断）。比較ビュー・PDF 調査パックは未着手 |
 | Phase 5  | ⏳ 未着手 | Civil Open Data Intelligence Platform への統合                                                                                        |
 
 詳細は `docs/requirements.md` / `docs/detailed-specification.md` を参照。

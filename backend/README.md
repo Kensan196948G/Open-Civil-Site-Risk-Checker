@@ -28,6 +28,14 @@ ruff check .                   # Lint
 | GET | `/api/v1/reverse-geocode?lat=&lon=` | Nominatim `/reverse` プロキシ |
 | GET | `/api/v1/ai/status` | AI ブローカー設定状態（`configured` / `model` のみ。API キーは返さない） |
 | POST | `/api/v1/ai/memo` | AI 調査メモ生成ブローカー。キーはサーバー側のみ。プロンプト本文は監査ログへ出力しない |
+| GET | `/api/v1/cases` | 案件一覧（viewer 以上・案件台帳が有効な場合のみ） |
+| POST | `/api/v1/cases` | 案件作成（editor 以上） |
+| GET | `/api/v1/cases/{id}` | 案件詳細（viewer 以上） |
+| PATCH | `/api/v1/cases/{id}` | 案件更新（editor 以上・approved は admin のみ） |
+| POST | `/api/v1/cases/{id}/submit` | 承認申請へ遷移（draft→submitted、editor 以上） |
+| POST | `/api/v1/cases/{id}/approve` | 承認（submitted→approved、approver 以上） |
+| DELETE | `/api/v1/cases/{id}` | 案件削除（admin のみ。監査ログは残す） |
+| GET | `/api/v1/audit` | 監査ログ閲覧（auditor 以上） |
 
 ### AI ブローカー（Anthropic）
 
@@ -44,6 +52,33 @@ ruff check .                   # Lint
 | `OCSRC_ANTHROPIC_MAX_CONCURRENCY` | `2` | 同時実行上限 |
 
 応答にはサーバー側で免責文の付与・断定表現の検出（`warnings`）が入り、利用は監査ログ（`ai_audit`）へ記録される。監査ログは `X-OCSRC-User`（web 層が Access JWT 検証後に付与する内部ヘッダ）でユーザーを識別し、プロンプト本文は記録しない。
+
+## 案件台帳・RBAC・監査ログ（Issue #111）
+
+案件データをサーバー側（PostgreSQL `cases` / `audit_log` テーブル）に永続化し、RBAC と承認ワークフローを提供する。**feature flag `OCSRC_CASE_STORE_ENABLED`（既定 `false`）が有効な場合のみ応答**し、無効時は全案件 API が 503 を返す（本番に無影響のまま preview/dev で検証できる）。
+
+- **認証**: web 層（server.mjs）が Cloudflare Access JWT を検証後に付与する `X-OCSRC-User` 内部ヘッダを actor として使用（クライアント直送分は web 層で除去）。
+- **RBAC**: `viewer / editor / approver / admin / auditor` の5ロール。ロールは環境変数（カンマ区切りユーザー識別子）で割り当て、未割当ユーザーは viewer。上位ロールは下位ロールの権限を含む。
+- **承認ワークフロー**: `draft → submitted → approved` の最小状態遷移。approved 案件の更新は admin のみ。
+- **監査ログ**: `case_created / case_submitted / case_approved / case_updated / case_deleted` を `audit_log` に追記（actor・時刻・対象・action。本文・秘密情報は記録しない）。
+
+| 変数 | 既定値 | 説明 |
+|---|---|---|
+| `OCSRC_CASE_STORE_ENABLED` | `false` | 案件台帳 API の有効化（本番は既定のまま維持推奨） |
+| `OCSRC_CASE_ADMIN_USERS` | 空 | admin ロールのユーザー識別子（カンマ区切り） |
+| `OCSRC_CASE_APPROVER_USERS` | 空 | approver ロールのユーザー識別子（カンマ区切り） |
+| `OCSRC_CASE_EDITOR_USERS` | 空 | editor ロールのユーザー識別子（カンマ区切り） |
+| `OCSRC_CASE_AUDITOR_USERS` | 空 | auditor ロールのユーザー識別子（カンマ区切り） |
+
+スキーマは `app/cases.py` の `CASE_SCHEMA_SQL` が `CREATE TABLE IF NOT EXISTS` で冪等作成する（既存 `ksj_features` に非干渉の additive migration）。ローカル検証例:
+
+```bash
+OCSRC_CASE_STORE_ENABLED=true \
+OCSRC_DATABASE_URL=postgresql://app:***@127.0.0.1:5432/site_risk_checker \
+OCSRC_CASE_ADMIN_USERS=admin@example.com \
+OCSRC_CASE_EDITOR_USERS=editor@example.com \
+  uvicorn app.main:app
+```
 
 ## KSJ データ取込
 
