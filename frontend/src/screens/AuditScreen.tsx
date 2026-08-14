@@ -2,19 +2,32 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { listAudit, type AuditEntry } from '../api/cases';
 import { ACTION_LABEL, DUMMY_AUDIT, fmtTs } from './auditConstants';
 import { buildAuditCsv } from '../report/auditCsv';
+import { ACTION_OPTIONS, EMPTY_FILTER, filterAudit, isFilterActive, type AuditFilter } from '../report/auditFilter';
 
 // SCR-009 監査ログ（Issue #111・auditor ロール）。
 // サーバー案件台帳（OCSRC_CASE_STORE_ENABLED）が有効な場合は /api/v1/audit から
 // 実データを、無効・未到達時は架空のダミー監査ログを表示する（空画面を残さない）。
 // 監査ログは actor・時刻・対象・action のみを保持し、本文・秘密情報は含まない。
+// actor / action / entity / キーワードによるフィルタ・検索に対応（監査証跡の実務利用）。
 
 const COLS = '0.9fr 1.1fr 1fr 1.4fr 2.2fr';
+
+const inputStyle: React.CSSProperties = {
+  padding: '7px 10px',
+  background: 'var(--surface)',
+  border: '1px solid var(--border-3)',
+  borderRadius: 6,
+  fontSize: 11.5,
+  color: 'var(--text-2)',
+  outline: 'none',
+};
 
 export function AuditScreen() {
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const loadedRef = useRef(false);
+  const [filter, setFilter] = useState<AuditFilter>(EMPTY_FILTER);
 
   // 初回のみサーバー監査ログを取得する（未設定・未到達・権限不足はダミー表示）。
   // ref で「一度だけ実行」を管理し、effect 内の同期 setState を避ける。
@@ -41,7 +54,10 @@ export function AuditScreen() {
     };
   }, []);
 
-  const rows = useMemo(() => entries ?? DUMMY_AUDIT, [entries]);
+  const allRows = useMemo(() => entries ?? DUMMY_AUDIT, [entries]);
+  // フィルタ適用後の表示行（フィルタが非アクティブなら全件）。
+  const rows = useMemo(() => filterAudit(allRows, filter), [allRows, filter]);
+  const active = isFilterActive(filter);
 
   // 監査証跡の CSV エクスポート（ISO/J-SOX 対応・UTF-8 BOM 付き）。
   const exportCsv = () => {
@@ -87,6 +103,56 @@ export function AuditScreen() {
           {msg}
         </div>
       )}
+
+      {/* フィルタ・検索（監査証跡の絞り込み・Issue #111） */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+        <input
+          type="text"
+          value={filter.actor}
+          onChange={(e) => setFilter({ ...filter, actor: e.target.value })}
+          placeholder="actor で絞り込み（例: @example.com）"
+          style={{ ...inputStyle, width: 190 }}
+          aria-label="actor で絞り込み"
+        />
+        <select
+          value={filter.action}
+          onChange={(e) => setFilter({ ...filter, action: e.target.value })}
+          style={{ ...inputStyle, width: 150 }}
+          aria-label="操作で絞り込み"
+        >
+          {ACTION_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <input
+          type="text"
+          value={filter.entity}
+          onChange={(e) => setFilter({ ...filter, entity: e.target.value })}
+          placeholder="対象で絞り込み（例: case#3）"
+          style={{ ...inputStyle, width: 150 }}
+          aria-label="対象で絞り込み"
+        />
+        <input
+          type="text"
+          value={filter.keyword}
+          onChange={(e) => setFilter({ ...filter, keyword: e.target.value })}
+          placeholder="キーワード検索（詳細含む）"
+          style={{ ...inputStyle, width: 170 }}
+          aria-label="キーワード検索"
+        />
+        {active && (
+          <button
+            onClick={() => setFilter(EMPTY_FILTER)}
+            style={{ padding: '7px 12px', background: 'var(--surface)', border: '1px solid var(--accent-border)', borderRadius: 6, fontSize: 11.5, fontWeight: 700, color: 'var(--accent)', cursor: 'pointer' }}
+          >
+            クリア
+          </button>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-3)', fontFamily: "'IBM Plex Mono', monospace" }}>
+          {active ? `${rows.length} / ${allRows.length} 件` : `${allRows.length} 件`}
+        </span>
+      </div>
+
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', fontFamily: "'IBM Plex Mono', monospace" }}>
         <div className="ocsrc-table-scroll" tabIndex={0} role="region" aria-label="監査ログ">
           <div className="ocsrc-grid-logs" style={{ display: 'grid', gridTemplateColumns: COLS, gap: 0, padding: '10px 16px', background: 'var(--surface-3)', borderBottom: '1px solid var(--border-2)', fontSize: 10, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '.3px' }}>
@@ -108,7 +174,7 @@ export function AuditScreen() {
         </div>
         {rows.length === 0 && (
           <div style={{ padding: '28px 16px', textAlign: 'center', fontSize: 12, color: 'var(--text-3)' }}>
-            監査ログはまだありません。
+            {active ? 'フィルタに一致する監査ログはありません。条件を変更してください。' : '監査ログはまだありません。'}
           </div>
         )}
       </div>
