@@ -135,7 +135,7 @@ export async function fetchKsj(input: AnalysisInput): Promise<AdapterResult> {
   const base = ksjBaseUrl();
   const url = ksjNearbyUrl(base, input);
   const endpoint = url.slice(base.length); // 取得ログにはパス+クエリのみ記録する
-  const out = await fetchJson<KsjNearbyResponse>(url, { timeout: 10000 });
+  const out = await fetchJson<KsjNearbyResponse>(url, { timeout: 10000, maxRetries: 1 });
   const log = {
     time: nowHMS(),
     source: 'ksj',

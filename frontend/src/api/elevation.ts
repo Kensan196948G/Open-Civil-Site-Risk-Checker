@@ -24,7 +24,7 @@ export async function fetchElevation(input: AnalysisInput): Promise<AdapterResul
 
   // 1) 地理院標高API
   const gsiUrl = `${GSI}?lon=${lon}&lat=${lat}&outtype=JSON`;
-  const gsi = await fetchJson<GsiResp>(gsiUrl, { timeout: 8000 });
+  const gsi = await fetchJson<GsiResp>(gsiUrl, { timeout: 8000, maxRetries: 1 });
   if (gsi.ok && gsi.data && typeof gsi.data.elevation === 'number') {
     return elevationResult({
       elevation: gsi.data.elevation,
@@ -39,7 +39,7 @@ export async function fetchElevation(input: AnalysisInput): Promise<AdapterResul
   }
 
   // 2) Open-Meteo 標高API（フォールバック）
-  const meteo = await fetchJson<MeteoElevResp>(`${METEO_ELEV}?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}`, { timeout: 8000 });
+  const meteo = await fetchJson<MeteoElevResp>(`${METEO_ELEV}?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}`, { timeout: 8000, maxRetries: 1 });
   if (meteo.ok && meteo.data?.elevation?.length) {
     return elevationResult({
       elevation: meteo.data.elevation[0],

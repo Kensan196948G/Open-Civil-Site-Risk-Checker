@@ -35,7 +35,7 @@ export async function fetchHazardAssessment(
 ): Promise<HazardAssessResponse> {
   const base = resolveBackendBase(loadBackendUrlOverride(), import.meta.env.VITE_OCSRC_BACKEND_URL as string | undefined);
   const qs = `lat=${lat}&lon=${lon}&radius_m=${radius_m}`;
-  const out = await fetchJson<HazardAssessResponse>(`${base}/api/v1/hazard-assess?${qs}`);
+  const out = await fetchJson<HazardAssessResponse>(`${base}/api/v1/hazard-assess?${qs}`, { maxRetries: 1 });
   if (!out.ok || !out.data) {
     throw new Error(out.error || 'ハザード区域判定の取得に失敗しました');
   }

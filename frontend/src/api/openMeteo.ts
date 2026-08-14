@@ -25,7 +25,7 @@ export async function fetchWeather(input: AnalysisInput): Promise<AdapterResult>
     timezone: 'Asia/Tokyo',
   });
   const url = `${ENDPOINT}?${params.toString()}`;
-  const out = await fetchJson<MeteoResponse>(url, { timeout: 10000 });
+  const out = await fetchJson<MeteoResponse>(url, { timeout: 10000, maxRetries: 1 });
   const fetchedAt = nowStamp();
   const log = {
     time: nowHMS(),
