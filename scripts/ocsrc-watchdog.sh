@@ -7,6 +7,8 @@
 #   - api チェックは /readyz（DB 異常時 503）を使用し、Neon の serverless cold start を
 #     吸収する再試行（既定 1 回・10 秒後）を行う。
 #   - 回復は連続 2 回の OK を確認してから Issue をクローズする（フラップによる開閉を減らす）。
+#   - DB のみの一時障害（Neon cold start 等）は連続 2 回（既定）失敗するまで起票しない
+#     （5 分間隔の 1〜2 回分の 503 で Issue を乱立させない。systemd / edge 等は即時起票）。
 #
 # チェック項目:
 #   1. systemd : ocsrc-web / ocsrc-api / ocsrc-tunnel が active
@@ -28,6 +30,7 @@
 #   OCSRC_WATCHDOG_COMMENT_INTERVAL 継続異常コメントの最小間隔秒（既定 1800）
 #   OCSRC_WATCHDOG_RECOVERY_OK_CHECKS 回復確定に必要な連続 OK 回数（既定 2）
 #   OCSRC_WATCHDOG_SKIP_EDGE=1      エッジ確認をスキップ（外部到達性のない環境用）
+#   OCSRC_WATCHDOG_ALERT_AFTER_FAILURES DB のみの一時障害を起票するまでの連続失敗回数（既定 2）
 #   OCSRC_WATCHDOG_WEB_URL / _API_URL / _EDGE_URL  チェック先の上書き（異常系テスト用）
 #
 # 個々のチェック失敗で中断せず全項目を集約するため、set -e は意図的に使わない。
@@ -45,6 +48,7 @@ STATE_FILE="${STATE_DIR}/state"
 RETRY_DELAY="${OCSRC_WATCHDOG_RETRY_DELAY:-10}"
 COMMENT_INTERVAL="${OCSRC_WATCHDOG_COMMENT_INTERVAL:-1800}"
 RECOVERY_OK_CHECKS="${OCSRC_WATCHDOG_RECOVERY_OK_CHECKS:-2}"
+ALERT_AFTER_FAILURES="${OCSRC_WATCHDOG_ALERT_AFTER_FAILURES:-2}"
 
 failures=()
 results=()
@@ -64,6 +68,7 @@ load_state() {
   LAST_COMMENT_AT=""
   FAILURE_COUNT=0
   CONSECUTIVE_OK=0
+  CONSECUTIVE_FAILURES=0
   if [[ -f "${STATE_FILE}" ]]; then
     # shellcheck disable=SC1090
     source "${STATE_FILE}"
@@ -80,6 +85,7 @@ FIRST_SEEN='${FIRST_SEEN}'
 LAST_COMMENT_AT=${LAST_COMMENT_AT}
 FAILURE_COUNT=${FAILURE_COUNT}
 CONSECUTIVE_OK=${CONSECUTIVE_OK}
+CONSECUTIVE_FAILURES=${CONSECUTIVE_FAILURES}
 EOF
   mv -f "${tmp}" "${STATE_FILE}"
 }
@@ -105,15 +111,16 @@ done
 
 # curl は接続失敗時も -w が 000 を出力しつつ非 0 で終了するため、|| echo で足すと
 # 000000 に化ける。出力をそのまま使い、空のときだけ 000 へフォールバックする。
-http_code() { local c; c="$(curl -m 20 -s -o /dev/null -w '%{http_code}' "$1" 2>/dev/null || true)"; echo "${c:-000}"; }
+http_code() { local c; c="$(curl -m 30 -s -o /dev/null -w '%{http_code}' "$1" 2>/dev/null || true)"; echo "${c:-000}"; }
 
 # ボディと応答時間をまとめて取得（secret を含まない readyz 応答のみ）。
 # グローバル FETCH_CODE / FETCH_MS を現在のシェルに設定する（コマンド置換のサブシェル問題を避ける）。
 fetch() { # fetch <url> <body_file>
   local url="$1" body_file="$2"
-  FETCH_CODE="$(curl -m 20 -s -o "${body_file}" -w '%{http_code}' "${url}" 2>/dev/null || true)"
+  # API の DB チェックタイムアウト（既定 20 秒）より長く取り、cold start 中でも応答を待つ。
+  FETCH_CODE="$(curl -m 30 -s -o "${body_file}" -w '%{http_code}' "${url}" 2>/dev/null || true)"
   FETCH_CODE="${FETCH_CODE:-000}"
-  FETCH_MS="$(curl -m 20 -s -o /dev/null -w '%{time_total}' "${url}" 2>/dev/null || true)"
+  FETCH_MS="$(curl -m 30 -s -o /dev/null -w '%{time_total}' "${url}" 2>/dev/null || true)"
   FETCH_MS="${FETCH_MS:-—}"
 }
 
@@ -187,6 +194,7 @@ issue_body() {
 
 if [[ ${#failures[@]} -eq 0 ]]; then
   CONSECUTIVE_OK=$((CONSECUTIVE_OK + 1))
+  CONSECUTIVE_FAILURES=0
   if [[ "${ACTIVE}" == "1" && "${CONSECUTIVE_OK}" -ge "${RECOVERY_OK_CHECKS}" ]]; then
     if [[ -n "${ISSUE_NUMBER}" ]]; then
       log "回復確定（${CONSECUTIVE_OK} 回連続 OK）-> Issue #${ISSUE_NUMBER} をクローズ"
@@ -208,6 +216,7 @@ if [[ ${#failures[@]} -eq 0 ]]; then
     LAST_COMMENT_AT=""
     FAILURE_COUNT=0
     CONSECUTIVE_OK=0
+    CONSECUTIVE_FAILURES=0
   elif [[ "${ACTIVE}" == "1" ]]; then
     log "回復確認中（${CONSECUTIVE_OK}/${RECOVERY_OK_CHECKS} 回連続 OK）。Issue #${ISSUE_NUMBER} は未クローズ"
   else
@@ -219,9 +228,24 @@ fi
 
 # --- 異常時: インシデント集約 ---
 log "FAILURES=${#failures[@]} (${now})"
+CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+
+# Neon cold start 等の DB のみの一時障害は、連続 N 回失敗するまで起票しない。
+# systemd / edge 等の恒常障害は従来どおり即時起票する。
+db_only=1
+for f in "${failures[@]}"; do
+  [[ "${f}" == api/readyz:* ]] || db_only=0
+done
+if [[ "${ACTIVE}" == "0" && "${db_only}" == "1" && "${CONSECUTIVE_FAILURES}" -lt "${ALERT_AFTER_FAILURES}" ]]; then
+  log "事前確認: DB のみの一時障害（${CONSECUTIVE_FAILURES}/${ALERT_AFTER_FAILURES} 回連続）。次回も失敗したら起票"
+  save_state
+  exit 1
+fi
+
 ACTIVE=1
 CONSECUTIVE_OK=0
-FAILURE_COUNT=$((FAILURE_COUNT + 1))
+FAILURE_COUNT=$((FAILURE_COUNT + CONSECUTIVE_FAILURES))
+CONSECUTIVE_FAILURES=0
 [[ -z "${FIRST_SEEN}" ]] && FIRST_SEEN="${now}"
 
 if [[ "${DRY_RUN}" == "1" ]]; then

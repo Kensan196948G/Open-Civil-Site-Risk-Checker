@@ -20,8 +20,10 @@ class Settings(BaseSettings):
     app_env: str = "development"
     # Plain PostgreSQL DSN, e.g. postgresql://app:***@db:5432/site_risk_checker
     database_url: str | None = None
-    # Neon の serverless cold start（数秒）を許容する値に引き上げる（外部評価 Phase 0）。
-    db_check_timeout_seconds: float = 8.0
+    # Neon の serverless cold start（autosuspend 後の復帰は 8 秒を超えることがある）を
+    # 許容する値に設定。watchdog 側は連続失敗判定で一時的な cold start を吸収する
+    # （外部評価 Phase 0 / Issue #238 再発防止）。
+    db_check_timeout_seconds: float = 20.0
     # Comma-separated allowlist of browser origins for CORS, e.g.
     # "http://localhost:5173". Empty (default) disables CORS entirely;
     # production stays same-origin behind the reverse proxy (Issue #35).
