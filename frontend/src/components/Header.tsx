@@ -9,6 +9,7 @@ const SCREEN_META: Record<Screen, [string, string]> = {
   analysis: ['リスク判定', '地図と確認優先度サマリー'],
   aimemo: ['AI調査メモ', '断定表現を避けた初期調査メモ'],
   report: ['レポート出力', 'Markdown / CSV 出力'],
+  compare: ['候補地比較', '複数地点のリスク要素を横並び比較（SCR-010）'],
   sources: ['データソース管理', '接続状態・利用条件の台帳'],
   logs: ['取得ログ', 'API実行履歴'],
   audit: ['監査ログ', '案件台帳の操作履歴（actor・時刻・action）'],

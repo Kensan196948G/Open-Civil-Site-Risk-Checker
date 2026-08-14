@@ -10,6 +10,7 @@ import { InputScreen } from './screens/InputScreen';
 import { AnalysisScreen } from './screens/AnalysisScreen';
 import { MemoScreen } from './screens/MemoScreen';
 import { ReportScreen } from './screens/ReportScreen';
+import { CompareScreen } from './screens/CompareScreen';
 import { SourcesScreen } from './screens/SourcesScreen';
 import { LogsScreen } from './screens/LogsScreen';
 import { AuditScreen } from './screens/AuditScreen';
@@ -59,6 +60,7 @@ export function App() {
             {screen === 'analysis' && <AnalysisScreen />}
             {screen === 'aimemo' && <MemoScreen />}
             {screen === 'report' && <ReportScreen />}
+            {screen === 'compare' && <CompareScreen />}
             {screen === 'sources' && <SourcesScreen />}
             {screen === 'logs' && <LogsScreen />}
             {screen === 'audit' && <AuditScreen />}
