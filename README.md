@@ -48,6 +48,12 @@ npm run test:smoke   # スモークテスト（esbuild ランナー / 制約環�
 | ローカル                   | `http://127.0.0.1:8700/`               | Cloudflare Access JWT（本番設定時・外部評価 #240） |
 | ヘルスチェック             | `http://127.0.0.1:8700/healthz` → `ok` | なし（LAN/ローカルのみ。インターネット経由は Issue #94 対応まで Access 保護下） |
 
+> **MVP / 関係者レビュー用 URL（案）**: 本番とは分離した MVP/Prototype 確認用サブドメイン
+> として `https://mvp-riskchecker.mirai-dx-platform.com/`（規定ドメイン `*.mirai-dx-platform.com`
+> 配下・本番と同構成の Cloudflare Tunnel + Access を別 Tunnel として作成）を想定しています。
+> DNS・Tunnel・Access の作成は Cloudflare 権限が必要なため、ユーザー側で作成後に本 README へ反映してください。
+> 本番は `https://riskchecker.mirai-dx-platform.com/`（既存・稼働中）です。
+
 > **インターネット公開**（`riskchecker.mirai-dx-platform.com`）は Cloudflare Tunnel（TLS 終端）+ Cloudflare Access（ID ベース認証・Issue #70）で保護しています。本番（`OCSRC_ACCESS_TEAM_DOMAIN` / `OCSRC_ACCESS_AUD` 設定時）は `/healthz` を除き **LAN 直アクセスにも Access JWT を要求**し、未認証は 403 を返します（外部評価 #240 対応）。通常のブラウザ利用は公開 URL 経由の Access セッションに集約されます。Access 未設定の開発モードのみ、LAN 直アクセスを認証なしで許可します。公開の詳細手順・セキュリティ境界は [`docs/deploy-backend.md`](docs/deploy-backend.md) を参照。
 >
 > LAN の IP は DHCP 割当のため環境や再起動のタイミングで変わり得ます。固定 IP をコードや設定に書き込む必要はありません（`server.mjs` は `HOST=0.0.0.0` で全インタフェース待受のため、どの IP が割り当たっても自動的に到達可能）。現在値を確認したい場合は `scripts/install-systemd.sh` の実行結果（`LAN: http://<IP>:<PORT>/` 行）、または `hostname -I` / `ip route get 1.1.1.1` を使用してください。
