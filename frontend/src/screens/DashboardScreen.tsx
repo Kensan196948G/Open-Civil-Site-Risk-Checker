@@ -243,12 +243,20 @@ export function DashboardScreen() {
         {/* サーバー案件台帳（Issue #111）: API 有効時のみ表示 */}
         {serverEnabled && (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--accent-border)', borderRadius: 11, overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 3px var(--shadow)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '15px 20px', borderBottom: '1px solid var(--border-2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '15px 20px', borderBottom: '1px solid var(--border-2)', flexWrap: 'wrap' }}>
               <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>案件台帳（サーバー保存）</h2>
               <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--text-3)' }}>
                 {serverCases.length} 件
               </span>
               <span style={{ flex: 1 }} />
+              {/* 状態サマリー: 承認待ち（submitted）を強調表示（Issue #111 承認WF） */}
+              {serverCases.length > 0 && (
+                <span style={{ display: 'inline-flex', gap: 6, fontSize: 10.5, fontWeight: 700 }}>
+                  <span style={{ color: 'var(--text-3)' }}>draft {serverCases.filter((c) => c.status === 'draft').length}</span>
+                  <span style={{ color: 'var(--warn-text, #b5701a)' }}>承認待ち {serverCases.filter((c) => c.status === 'submitted').length}</span>
+                  <span style={{ color: 'var(--ok-text)' }}>approved {serverCases.filter((c) => c.status === 'approved').length}</span>
+                </span>
+              )}
               <span style={{ fontSize: 10.5, color: 'var(--text-3)', background: 'var(--surface-4)', padding: '2px 9px', borderRadius: 10, border: '1px solid var(--border-3)' }}>
                 承認WF: draft → submitted → approved
               </span>
