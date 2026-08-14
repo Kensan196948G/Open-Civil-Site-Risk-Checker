@@ -28,35 +28,45 @@ export function App() {
   }, [theme]);
 
   return (
-    <div
-      className="ocsrc-body"
-      style={{
-        display: 'flex',
-        height: '100vh',
-        width: '100vw',
-        fontFamily: "'IBM Plex Sans JP', sans-serif",
-        background: 'var(--bg)',
-        color: 'var(--text)',
-        overflow: 'hidden',
-      }}
-    >
-      <Sidebar />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <Header />
-        <main style={{ flex: 1, position: 'relative', minWidth: 0, background: 'var(--bg)', overflow: 'hidden' }}>
-          {screen === 'dashboard' && <DashboardScreen />}
-          {screen === 'input' && <InputScreen />}
-          {screen === 'analysis' && <AnalysisScreen />}
-          {screen === 'aimemo' && <MemoScreen />}
-          {screen === 'report' && <ReportScreen />}
-          {screen === 'sources' && <SourcesScreen />}
-          {screen === 'logs' && <LogsScreen />}
-          {screen === 'settings' && <SettingsScreen />}
-          <FindingDrawer />
-          {state.running && <LoadingOverlay />}
-        </main>
-        <Footer />
+    <>
+      {/* キーボード利用者向けスキップリンク（フォーカス時に表示） */}
+      <a href="#ocsrc-main" className="ocsrc-skip-link">
+        メインコンテンツへ移動
+      </a>
+      <div
+        className="ocsrc-body"
+        style={{
+          display: 'flex',
+          height: '100vh',
+          width: '100vw',
+          fontFamily: "'IBM Plex Sans JP', sans-serif",
+          background: 'var(--bg)',
+          color: 'var(--text)',
+          overflow: 'hidden',
+        }}
+      >
+        <Sidebar />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <Header />
+          <main
+            id="ocsrc-main"
+            tabIndex={-1}
+            style={{ flex: 1, position: 'relative', minWidth: 0, background: 'var(--bg)', overflow: 'hidden' }}
+          >
+            {screen === 'dashboard' && <DashboardScreen />}
+            {screen === 'input' && <InputScreen />}
+            {screen === 'analysis' && <AnalysisScreen />}
+            {screen === 'aimemo' && <MemoScreen />}
+            {screen === 'report' && <ReportScreen />}
+            {screen === 'sources' && <SourcesScreen />}
+            {screen === 'logs' && <LogsScreen />}
+            {screen === 'settings' && <SettingsScreen />}
+            <FindingDrawer />
+            {state.running && <LoadingOverlay />}
+          </main>
+          <Footer />
+        </div>
       </div>
-    </div>
+    </>
   );
 }

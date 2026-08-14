@@ -66,6 +66,8 @@ interface AiMemoResponse {
   text?: string;
   error?: string;
   model?: string;
+  /** サーバー側（防御層）が検出した断定表現（直接 API 呼び出しにも効く）。 */
+  warnings?: string[];
 }
 
 export interface AiMemoResult {
@@ -108,7 +110,10 @@ export async function generateAiMemo(
 
   const raw = out.data.text;
   const text = ensureDisclaimer(raw);
-  const warnings = findForbiddenExpressions(text);
+  const serverWarnings = Array.isArray(out.data.warnings)
+    ? out.data.warnings.filter((w): w is string => typeof w === 'string')
+    : [];
+  const warnings = [...new Set([...findForbiddenExpressions(text), ...serverWarnings])];
   return {
     ok: true,
     text,
