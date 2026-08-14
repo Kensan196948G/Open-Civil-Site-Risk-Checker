@@ -146,4 +146,48 @@ describe('buildCompareHtml（A4 印刷・#175）', () => {
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;');
   });
+
+  it('地図キャプチャ未取得の場合は案内文を表示する（#274 方式）', () => {
+    const html = buildCompareHtml(rows, '2026-08-15 00:00:00');
+    expect(html).toContain('位置関係マップの画像は未取得です');
+    expect(html).toContain('地図画像を取得');
+  });
+
+  it('地図キャプチャ取得済みの場合は PNG を同梱し、出典・注記を明示する（#274 方式）', () => {
+    const capture = {
+      dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      width: 800,
+      height: 600,
+      center: { lat: 35.6745, lon: 139.7524 },
+      zoom: 12,
+      baseLayerLabel: '地理院タイル（淡色）',
+      includedLayers: ['地理院タイル', '比較候補地'],
+      excludedLayers: [],
+      capturedAt: '2026-08-15T10:00:00.000Z',
+      attribution: '地図: 地理院タイル（淡色） / 比較候補地 / 取得: 2026-08-15 19:00:00',
+      notes: ['ベース地図は地理院タイルを出典明示の上でキャプチャしたものです（国土地理院コンテンツ利用規約の確認対象）。'],
+    };
+    const html = buildCompareHtml(rows, '2026-08-15 00:00:00', capture);
+    expect(html).toContain('候補地の位置関係（地図キャプチャ）');
+    expect(html).toContain('data:image/png;base64,');
+    expect(html).toContain('比較候補地');
+    expect(html).toContain('国土地理院コンテンツ利用規約の確認対象');
+  });
+
+  it('地図キャプチャの画像 URL も HTML エスケープされる（XSS 対策）', () => {
+    const html = buildCompareHtml(rows, '2026-08-15 00:00:00', {
+      dataUrl: 'data:image/png;base64,<script>alert(1)</script>',
+      width: 1,
+      height: 1,
+      center: { lat: 0, lon: 0 },
+      zoom: 10,
+      baseLayerLabel: 'x',
+      includedLayers: [],
+      excludedLayers: [],
+      capturedAt: '2026-08-15T10:00:00.000Z',
+      attribution: 'x',
+      notes: [],
+    });
+    expect(html).not.toContain('<script>alert(1)</script>');
+  });
 });

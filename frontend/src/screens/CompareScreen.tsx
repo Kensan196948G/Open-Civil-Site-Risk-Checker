@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Map as LeafletMap } from 'leaflet';
 import { useApp } from '../store';
 import { DUMMY_CASES_VISIBLE } from '../data/cases';
 import { COMPARE_DEMO_ROWS } from '../data/fixtures';
@@ -18,6 +19,9 @@ import { openPackForPrint } from '../report/pack';
 import { CATEGORY_LABEL } from '../data/constants';
 import { CompareMap } from '../map/CompareMap';
 import { toCompareMapPoints } from '../map/compareMapPoints';
+import { BASE_TILE_LAYERS } from '../map/capture';
+import { captureMap } from '../map/captureMap';
+import type { MapCaptureResult } from '../map/capture';
 import type { CaseRecord } from '../types';
 
 // SCR-010 候補地比較（Issue #175）。保存済み案件（実データ + サーバー台帳 + ダミー）から
@@ -89,6 +93,41 @@ export function CompareScreen() {
   // 比較地図（SCR-010・候補地の位置関係・検索範囲。選択順の番号つきマーカー）。
   const mapPoints = useMemo(() => toCompareMapPoints(rows), [rows]);
 
+  // 比較マップのキャプチャ（#274 方式・印刷/PDF への同梱用）。
+  const compareMapRef = useRef<LeafletMap | null>(null);
+  const [compareCapture, setCompareCapture] = useState<MapCaptureResult | null>(null);
+  const [compareCaptureBusy, setCompareCaptureBusy] = useState(false);
+  const [compareCaptureMsg, setCompareCaptureMsg] = useState('');
+
+  const doCaptureCompareMap = async () => {
+    const map = compareMapRef.current;
+    if (!map || mapPoints.length === 0) return;
+    setCompareCaptureBusy(true);
+    setCompareCaptureMsg('');
+    try {
+      const layers: Parameters<typeof captureMap>[1] = {
+        base: BASE_TILE_LAYERS.pale,
+        ranges: mapPoints.map((p, i) => ({
+          lat: p.lat,
+          lon: p.lon,
+          radiusM: p.radius,
+          color: ['#2E5AAC', '#B5701A', '#3E76D6', '#6B45B0'][i % 4],
+          weight: 2,
+        })),
+        markers: mapPoints.map((p) => ({ lat: p.lat, lon: p.lon, label: `${p.rank}. ${p.name}` })),
+        markersLabel: '比較候補地',
+        site: mapPoints[0],
+      };
+      const result = await captureMap(map, layers, { scale: 2, drawSitePin: false });
+      setCompareCapture(result);
+      setCompareCaptureMsg('✓ 地図画像を取得しました（印刷 / PDF に同梱されます）');
+    } catch (e) {
+      setCompareCaptureMsg(`✗ 取得失敗: ${e instanceof Error ? e.message : '不明なエラー'}`);
+    } finally {
+      setCompareCaptureBusy(false);
+    }
+  };
+
   const onExport = (fmt: 'md' | 'csv') => {
     const target = rows.length ? rows : COMPARE_DEMO_ROWS;
     const content = fmt === 'md' ? buildCompareMd(target) : buildCompareCsv(target);
@@ -156,11 +195,16 @@ export function CompareScreen() {
 
       {/* 位置関係マップ（SCR-010・選択した候補地の位置・検索範囲） */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
           <b style={{ fontSize: 13 }}>候補地の位置関係</b>
           <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>番号は比較表の並び順（選択順）です</span>
+          <span style={{ flex: 1 }} />
+          <button onClick={() => void doCaptureCompareMap()} disabled={compareCaptureBusy || mapPoints.length === 0} style={{ ...miniBtn, color: 'var(--accent)', borderColor: 'var(--accent-border)' }} title="表示中の地図を画像化して印刷 / PDF に同梱（#274 方式）">
+            {compareCaptureBusy ? '画像化中…' : '📷 地図画像を取得'}
+          </button>
+          {compareCaptureMsg && <span style={{ fontSize: 10.5, color: 'var(--text-2)' }}>{compareCaptureMsg}</span>}
         </div>
-        <CompareMap points={mapPoints} />
+        <CompareMap points={mapPoints} mapRef={compareMapRef} />
       </div>
 
       {/* 比較表 */}
@@ -173,10 +217,11 @@ export function CompareScreen() {
           <button
             onClick={() => {
               const target = rows.length ? rows : COMPARE_DEMO_ROWS;
-              openPackForPrint(buildCompareHtml(target, new Date().toISOString().slice(0, 19).replace('T', ' ')));
+              const generatedAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+              openPackForPrint(buildCompareHtml(target, generatedAt, compareCapture));
             }}
             style={miniBtn}
-            title="比較表を A4 で印刷 / PDF 化（#175）"
+            title="比較表を A4 で印刷 / PDF 化（#175・地図キャプチャ同梱）"
           >
             🖨 印刷 / PDF
           </button>

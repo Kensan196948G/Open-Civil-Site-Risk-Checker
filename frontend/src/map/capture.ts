@@ -29,6 +29,8 @@ export interface CaptureOptions {
   scale?: number;
   /** ハザードタイル（洪水浸水想定・土砂災害）を画像に含めるか。既定 false（ライセンス考慮）。 */
   includeHazardLayers?: boolean;
+  /** 調査地点ピンを描画するか。既定 true（候補地比較では false を指定）。 */
+  drawSitePin?: boolean;
 }
 
 /** キャプチャ結果（調査パックへ同梱するメタデータ付き）。 */

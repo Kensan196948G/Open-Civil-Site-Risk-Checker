@@ -5,6 +5,7 @@
 // 安全/危険の断定表現は使わない。
 
 import type { CaseRecord, Category, Finding, Priority } from '../types';
+import type { MapCaptureResult } from '../map/capture';
 import { CATEGORY_LABEL, STATUS } from '../data/constants';
 
 // 比較表に出すカテゴリ（データ品質は含めない・主要リスク要素のみ）。
@@ -168,7 +169,11 @@ function escHtml(s: string): string {
 }
 
 /** 比較表の A4 印刷向け自己完結 HTML を生成する（#113 調査パックと同方式）。 */
-export function buildCompareHtml(rows: CompareRow[], generatedAt: string): string {
+export function buildCompareHtml(
+  rows: CompareRow[],
+  generatedAt: string,
+  mapCapture?: MapCaptureResult | null,
+): string {
   const headerCells = rows
     .map(
       (r) =>
@@ -198,6 +203,15 @@ export function buildCompareHtml(rows: CompareRow[], generatedAt: string): strin
     .map((r) => `<td style="text-align:center">${r.counts.A ?? 0}</td>`)
     .join('\n');
 
+  // 地図キャプチャセクション（#274 方式・SCR-010 の位置関係を画像で残す）。
+  const mapCaptureHtml = mapCapture
+    ? `<figure>
+        <img src="${escHtml(mapCapture.dataUrl)}" alt="候補地の位置関係（地図キャプチャ・出典: ${escHtml(mapCapture.baseLayerLabel)}）" style="width:100%;max-width:270mm;border:1px solid #ccd4de;border-radius:4px;"/>
+        <figcaption class="meta">${escHtml(mapCapture.attribution)}</figcaption>
+        ${mapCapture.notes.map((n) => `<p class="meta">※ ${escHtml(n)}</p>`).join('\n')}
+      </figure>`
+    : `<p class="meta">位置関係マップの画像は未取得です（比較画面の「地図画像を取得」から取得すると印刷/PDF に同梱されます）。</p>`;
+
   return `<!doctype html>
 <html lang="ja">
 <head>
@@ -217,6 +231,8 @@ export function buildCompareHtml(rows: CompareRow[], generatedAt: string): strin
   .detail { color: #3c4a5c; font-size: 8.5pt; margin-top: 2pt; }
   .status { white-space: nowrap; }
   .notice { background: #fdf6e3; border: 1px solid #e8d9a0; padding: 7pt 9pt; font-size: 8.5pt; margin: 6pt 0; }
+  figure { margin: 10pt 0; }
+  figcaption { margin-top: 3pt; }
   .footer { margin-top: 10pt; font-size: 8pt; color: #5a6678; }
   @media print { .no-print { display: none; } }
 </style>
@@ -233,6 +249,9 @@ export function buildCompareHtml(rows: CompareRow[], generatedAt: string): strin
       <tr><th class="cat">優先度 A 合計</th>${prioCells}</tr>
     </tfoot>
   </table>
+
+  <h2 style="font-size:11pt;margin:10pt 0 4pt;border-bottom:1px solid #ccd4de;padding-bottom:2pt;">候補地の位置関係（地図キャプチャ）</h2>
+  ${mapCaptureHtml}
 
   <div class="notice">
     <b>免責・注意事項</b>：本表は保存済み案件の確認結果を横並びにした<strong>参考情報</strong>です。
