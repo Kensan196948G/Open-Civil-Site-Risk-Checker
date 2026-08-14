@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { listAudit, type AuditEntry } from '../api/cases';
 import { ACTION_LABEL, DUMMY_AUDIT, fmtTs } from './auditConstants';
+import { buildAuditCsv } from '../report/auditCsv';
 
 // SCR-009 監査ログ（Issue #111・auditor ロール）。
 // サーバー案件台帳（OCSRC_CASE_STORE_ENABLED）が有効な場合は /api/v1/audit から
@@ -42,10 +43,39 @@ export function AuditScreen() {
 
   const rows = useMemo(() => entries ?? DUMMY_AUDIT, [entries]);
 
+  // 監査証跡の CSV エクスポート（ISO/J-SOX 対応・UTF-8 BOM 付き）。
+  const exportCsv = () => {
+    const csv = buildAuditCsv(rows);
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ocsrc-audit_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      a.remove();
+    }, 200);
+  };
+
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'auto', padding: '26px 28px 50px' }}>
-      <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-009</div>
-      <h1 style={{ margin: '3px 0 4px', fontSize: 21, fontWeight: 700 }}>監査ログ</h1>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, marginBottom: 4 }}>
+        <div>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-009</div>
+          <h1 style={{ margin: '3px 0 4px', fontSize: 21, fontWeight: 700 }}>監査ログ</h1>
+        </div>
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={exportCsv}
+          disabled={rows.length === 0}
+          style={{ padding: '8px 14px', background: 'var(--surface)', color: 'var(--accent)', border: '1.5px solid var(--accent-border)', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: rows.length ? 'pointer' : 'default', opacity: rows.length ? 1 : 0.5 }}
+          title="表示中の監査ログを CSV でエクスポート（監査証跡）"
+        >
+          ↓ CSV エクスポート
+        </button>
+      </div>
       <p style={{ margin: '0 0 14px', fontSize: 12.5, color: 'var(--text-2)' }}>
         案件台帳の操作履歴です（Issue #111）。actor・時刻・対象・action を記録し、本文や秘密情報は含みません。
         {enabled === null && '読み込み中…'}
