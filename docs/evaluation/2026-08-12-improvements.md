@@ -1313,3 +1313,14 @@ objective の「Preview／ローカル環境で MVP を検証し、確認 URL �
 4. 案件台帳・データソース台帳の本番有効化判断（ユーザー判断）
 5. TS7（#109）・バックアップ復元演習・Cloudflare 側項目（ユーザー判断）
 6. AI 費用の概算単価調整（ユーザー判断）・プッシュ通知・PWA・RAG（将来バックログ）
+
+## 49. 追記（2026-08-15・第44弾）: MVP 公開 URL の整理（本番 / MVP 用サブドメイン案）
+
+| 種別 | URL | 状態 |
+|---|---|---|
+| 本番 | `https://riskchecker.mirai-dx-platform.com/` | 稼働中（Cloudflare Tunnel + Access） |
+| MVP / Prototype（案） | `https://mvp-riskchecker.mirai-dx-platform.com/` | **要ユーザー作成**（DNS・Tunnel・Access は Cloudflare 権限が必要・README に手順・想定を明記） |
+
+- objective の「本番: 既存作成サブドメイン＋規定ドメイン / MVP: MVP 用サブドメイン＋規定ドメイン」を満たす整理
+- MVP サブドメインは本番と分離した別 Tunnel として作成する想定（本番に影響なし）
+- 作成後に README へ反映し、関係者レビュー用 URL として使用する（ユーザー判断）
