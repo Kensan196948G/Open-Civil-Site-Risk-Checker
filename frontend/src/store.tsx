@@ -28,6 +28,7 @@ import type {
 } from './types';
 import type { MapCaptureResult } from './map/capture';
 import { SAMPLE } from './data/constants';
+import type { SurveyTemplate } from './data/templates';
 import { cloneLedger } from './data/sources';
 import { loadAnalysisDefaults } from './settings/appSettings';
 import { addLiveCase, buildCaseFromAnalysis, deleteLiveCase, exportLiveCases, importLiveCases, loadLiveCases } from './data/caseStore';
@@ -157,6 +158,8 @@ export interface AppController {
   onLon: (v: string) => void;
   setRadius: (r: number) => void;
   toggleCat: (k: keyof FormCategories) => void;
+  /** 調査テンプレート（評価書 #21）を適用し、検索半径・カテゴリの初期値をまとめて設定する。 */
+  applyTemplate: (t: SurveyTemplate) => void;
   runAnalysisAction: () => void;
   runSample: () => void;
   clearResult: () => void;
@@ -220,6 +223,15 @@ export function useAppController(): AppController {
       setState((s) => ({ ...s, form: { ...s.form, categories: { ...s.form.categories, [k]: !s.form.categories[k] } } })),
     [],
   );
+
+  const applyTemplate = useCallback((t: SurveyTemplate) => {
+    // テンプレートのカテゴリ初期値をフォームへ反映（data_quality は含まない・個別調整可能）。
+    setState((s) => ({
+      ...s,
+      form: { ...s.form, radius: t.radius, categories: { ...t.categories } },
+      formError: '',
+    }));
+  }, []);
 
   const doRun = useCallback(async (form: FormState, opts: { addressOverride?: string } = {}) => {
     const lat = form.type === 'coord' ? parseFloat(form.lat) : SAMPLE.lat; // address 型は geocode 結果で上書き
@@ -448,6 +460,7 @@ export function useAppController(): AppController {
       onLon,
       setRadius,
       toggleCat,
+      applyTemplate,
       runAnalysisAction,
       runSample,
       clearResult,
@@ -481,6 +494,7 @@ export function useAppController(): AppController {
       onLon,
       setRadius,
       toggleCat,
+      applyTemplate,
       runAnalysisAction,
       runSample,
       clearResult,
