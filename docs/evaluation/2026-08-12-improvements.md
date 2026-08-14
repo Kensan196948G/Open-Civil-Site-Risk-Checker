@@ -295,3 +295,34 @@ Issue #111 の完了条件残り（監査ログ閲覧・案件詳細の監査履
 2. サーバ側永続化（#174: data_sources テーブル + API）
 3. A31/A33 実データ調達（#112）・案件台帳の本番有効化判断（ユーザー判断）
 4. バックアップ復元演習・Cloudflare 側項目（ユーザー判断）
+
+## 14. 追記（2026-08-14・第7弾）: データソース台帳のサーバ側永続化（Issue #174 完了）
+
+Issue #174 の残課題だったサーバ側永続化（Neon テーブル + API + 再取込履歴の自動記録）を実装。
+
+### 14.1 実装内容
+
+| # | 改善 | ファイル | 効果 |
+|---|---|---|---|
+| 1 | `data_sources` / `data_source_refreshes` テーブル（additive） | `backend/app/data_sources.py` | 各ソースのメタ情報（名称・提供元・ライセンス・元データ更新日・利用条件・最終取得）と再取込履歴（追記型）を永続化 |
+| 2 | `GET /api/v1/data-sources` API | `backend/app/main.py` | 台帳一覧 + 再取込履歴（ソースごと集約）を返す。feature flag `OCSRC_DATA_SOURCE_STORE_ENABLED`（既定 false）無効時は 503 |
+| 3 | seed 拡張 | `backend/app/seed_demo_cases.py` | `--with-sources` でデモ台帳（7ソース・架空値）と再取込履歴を冪等投入 |
+| 4 | フロント連携 | `frontend/src/api/dataSources.ts`・`SourcesScreen.tsx` | API 有効時にサーバー台帳 + 再取込履歴を表示し、無効・未到達時は静的台帳へフォールバック |
+
+### 14.2 検証証跡（2026-08-14 実測・第7弾）
+
+| 検証 | 結果 |
+|---|---:|
+| backend pytest | **95 passed**（新規6件: ユニット2 + 統合4: 台帳一覧・履歴・冪等・flag off 503） |
+| backend ruff | PASS |
+| frontend vitest | **125 passed**（新規5件: 有効性検出・取得・マッピング） |
+| frontend smoke / server | 108/108 / 103 |
+| typecheck / lint / build | PASS |
+| 実 API 動作（curl） | seed → 台帳7件・ksj 履歴・flag off 503 |
+
+### 14.3 残課題（更新）
+
+1. A31/A33 実データ調達（#112）・全国カバレッジ投入
+2. 案件台帳・データソース台帳の本番有効化判断（ユーザー判断）
+3. 地図キャプチャ（#113 残）・承認WF（#111）連動
+4. バックアップ復元演習・Cloudflare 側項目（ユーザー判断）

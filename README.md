@@ -378,7 +378,7 @@ frontend/src/
 
 ## 🐍 バックエンド（KSJ 空間検索・Phase 2 稼働中）
 
-`backend/` の FastAPI バックエンドは、国土数値情報（KSJ）のローカル DB 化（PostgreSQL + PostGIS）と空間検索 API を提供します。主なエンドポイントは **liveness `/livez`・readiness `/readyz`（DB 異常時 503）**、`/api/v1/ping`、`/api/v1/nearby`、**ハザード区域判定 `/api/v1/hazard-assess`（Issue #112）**、AI ブローカー（`/api/v1/ai/status`・`/api/v1/ai/memo`）、**案件台帳（Issue #111: `/api/v1/cases*`・`/api/v1/audit`、feature flag `OCSRC_CASE_STORE_ENABLED` 有効時のみ）**です。
+`backend/` の FastAPI バックエンドは、国土数値情報（KSJ）のローカル DB 化（PostgreSQL + PostGIS）と空間検索 API を提供します。主なエンドポイントは **liveness `/livez`・readiness `/readyz`（DB 異常時 503）**、`/api/v1/ping`、`/api/v1/nearby`、**ハザード区域判定 `/api/v1/hazard-assess`（Issue #112）**、**データソース台帳 `/api/v1/data-sources`（Issue #174・feature flag `OCSRC_DATA_SOURCE_STORE_ENABLED` 有効時のみ）**、AI ブローカー（`/api/v1/ai/status`・`/api/v1/ai/memo`）、**案件台帳（Issue #111: `/api/v1/cases*`・`/api/v1/audit`、feature flag `OCSRC_CASE_STORE_ENABLED` 有効時のみ）**です。
 
 開発時（Docker で DB + backend を起動）:
 
@@ -435,7 +435,7 @@ curl http://127.0.0.1:8000/readyz             # → {"status":"ok","db":"ok",...
 
 | フェーズ | 状況 | 内容                                                                                                                                  |
 | -------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Phase 2  | ✅ KSJ 実装済み | 国土数値情報のローカルDB化（PostgreSQL + PostGIS）+ FastAPI 空間検索 API（稼働中）。**ハザード区域判定（Issue #112・A31/A33 相当・合成サンプルで動作検証済み）**。**データ鮮度・ライセンス台帳（Issue #174・台帳 UI + レポート自動埋め込み）**。実データ調達・サーバ側永続化は利用規約確認後に実施 |
+| Phase 2  | ✅ KSJ 実装済み | 国土数値情報のローカルDB化（PostgreSQL + PostGIS）+ FastAPI 空間検索 API（稼働中）。**ハザード区域判定（Issue #112・A31/A33 相当・合成サンプルで動作検証済み）**。**データ鮮度・ライセンス台帳（Issue #174・台帳 UI + レポート自動埋め込み + サーバ側永続化 `data_sources`/`data_source_refreshes`・feature flag 有効時のみ）**。実データ調達は利用規約確認後に実施 |
 | Phase 3  | ✅ 一部実装 | 気象庁 警報・注意報連携（実装済み・Issue #22）。xROAD は利用規約上の理由（匿名アクセス 403）、PLATEAU は試験運用・SLA無しのため見送り |
 | Phase 4  | 🚧 一部実装（flag 無効でデフォルト稼働） | 複数候補地比較・案件管理・社内レビュー機能。**案件台帳 API + RBAC + 監査ログ + 承認WF（Issue #111）、候補地比較ビュー（Issue #175）、調査パック（Issue #113・A4 印刷向け HTML/PDF）を実装済み**。案件台帳は本番 `OCSRC_CASE_STORE_ENABLED=false` のまま（preview/dev 検証後に有効化判断）。地図キャプチャ・承認WF連動は未着手 |
 | Phase 5  | ⏳ 未着手 | Civil Open Data Intelligence Platform への統合                                                                                        |
