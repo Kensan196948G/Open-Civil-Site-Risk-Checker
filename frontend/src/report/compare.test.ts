@@ -190,4 +190,29 @@ describe('buildCompareHtml（A4 印刷・#175）', () => {
     });
     expect(html).not.toContain('<script>alert(1)</script>');
   });
+
+  it('気象警報が未チェックの場合は案内文を表示する（評価書 #18）', () => {
+    const html = buildCompareHtml(rows, '2026-08-15 00:00:00', null, {});
+    expect(html).toContain('気象警報は未チェックです');
+    expect(html).toContain('気象警報（現在）をチェック');
+  });
+
+  it('気象警報チェック済みの場合は候補地別に表示する（評価書 #18）', () => {
+    const html = buildCompareHtml(rows, '2026-08-15 00:00:00', null, {
+      [rows[0].caseId]: { level: 'alert', label: '発表中（大雨警報）' },
+      [rows[1].caseId]: { level: 'none', label: '発表なし' },
+    });
+    expect(html).toContain('気象警報（現在）');
+    expect(html).toContain('発表中（大雨警報）');
+    expect(html).toContain('発表なし');
+    expect(html).toContain('都道府県（気象庁発表単位）');
+  });
+
+  it('気象警報のラベルも HTML エスケープされる（XSS 対策）', () => {
+    const html = buildCompareHtml(rows, '2026-08-15 00:00:00', null, {
+      [rows[0].caseId]: { level: 'alert', label: '発表中（<script>alert(1)</script>）' },
+    });
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
 });

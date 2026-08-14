@@ -6,6 +6,7 @@
 
 import type { CaseRecord, Category, Finding, Priority } from '../types';
 import type { MapCaptureResult } from '../map/capture';
+import type { WarningSummary } from './warningSummary';
 import { CATEGORY_LABEL, STATUS } from '../data/constants';
 
 // 比較表に出すカテゴリ（データ品質は含めない・主要リスク要素のみ）。
@@ -173,6 +174,7 @@ export function buildCompareHtml(
   rows: CompareRow[],
   generatedAt: string,
   mapCapture?: MapCaptureResult | null,
+  warnings?: Record<string, WarningSummary> | null,
 ): string {
   const headerCells = rows
     .map(
@@ -211,6 +213,24 @@ export function buildCompareHtml(
         ${mapCapture.notes.map((n) => `<p class="meta">※ ${escHtml(n)}</p>`).join('\n')}
       </figure>`
     : `<p class="meta">位置関係マップの画像は未取得です（比較画面の「地図画像を取得」から取得すると印刷/PDF に同梱されます）。</p>`;
+
+  // 気象警報（現在）セクション（評価書 #18・比較画面のチェック結果を帳票に残す）。
+  const checked = warnings && rows.filter((r) => warnings[r.caseId]).length > 0;
+  const warningHtml = checked
+    ? `<table>
+        <thead><tr><th class="cat" style="width:30%">候補地</th><th>警報・注意報（現在）</th></tr></thead>
+        <tbody>
+          ${rows
+            .filter((r) => warnings![r.caseId])
+            .map(
+              (r) =>
+                `<tr><td>${escHtml(r.name)}</td><td>${escHtml(warnings![r.caseId].label)}</td></tr>`,
+            )
+            .join('\n')}
+        </tbody>
+      </table>
+      <p class="meta">都道府県（気象庁発表単位）の現在の発表状況です。地点そのものが対象地域と一致するとは限りません。</p>`
+    : `<p class="meta">気象警報は未チェックです（比較画面の「⚠ 気象警報（現在）をチェック」で取得すると印刷/PDF に同梱されます）。</p>`;
 
   return `<!doctype html>
 <html lang="ja">
@@ -252,6 +272,9 @@ export function buildCompareHtml(
 
   <h2 style="font-size:11pt;margin:10pt 0 4pt;border-bottom:1px solid #ccd4de;padding-bottom:2pt;">候補地の位置関係（地図キャプチャ）</h2>
   ${mapCaptureHtml}
+
+  <h2 style="font-size:11pt;margin:10pt 0 4pt;border-bottom:1px solid #ccd4de;padding-bottom:2pt;">気象警報（現在）</h2>
+  ${warningHtml}
 
   <div class="notice">
     <b>免責・注意事項</b>：本表は保存済み案件の確認結果を横並びにした<strong>参考情報</strong>です。

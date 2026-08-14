@@ -291,7 +291,7 @@ export function CompareScreen() {
             onClick={() => {
               const target = rows.length ? rows : COMPARE_DEMO_ROWS;
               const generatedAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
-              openPackForPrint(buildCompareHtml(target, generatedAt, compareCapture));
+              openPackForPrint(buildCompareHtml(target, generatedAt, compareCapture, warnings));
             }}
             style={miniBtn}
             title="比較表を A4 で印刷 / PDF 化（#175・地図キャプチャ同梱）"
