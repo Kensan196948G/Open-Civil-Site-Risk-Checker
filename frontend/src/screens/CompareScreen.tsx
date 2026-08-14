@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../store';
 import { DUMMY_CASES_VISIBLE } from '../data/cases';
 import { COMPARE_DEMO_ROWS } from '../data/fixtures';
+import { isCaseStoreEnabled, listCases, serverCaseToRecord } from '../api/cases';
 import {
   COMPARE_CATEGORIES,
   buildCompareCsv,
@@ -15,17 +16,45 @@ import {
 import { CATEGORY_LABEL } from '../data/constants';
 import type { CaseRecord } from '../types';
 
-// SCR-010 候補地比較（Issue #175）。保存済み案件（実データ + ダミー）から
+// SCR-010 候補地比較（Issue #175）。保存済み案件（実データ + サーバー台帳 + ダミー）から
 // 2〜4 地点を選択し、主要リスク要素を横並び比較する。
 // 「データ未取得」と「リスク低」を区別し、安全/危険は断定しない。
+// サーバー案件台帳（#111・feature flag 有効時のみ）が使える場合はサーバー案件も候補に加える。
 
 export function CompareScreen() {
   const { state, go } = useApp();
-  // 比較候補: 実データ案件 + ダミー案件（表示設定時のみ）。findings を持たない
-  // 案件は「データ未取得」として比較可能（未取得と低リスクを区別する設計）。
+  // サーバー案件台帳（Issue #175 の残課題: サーバー保存済み案件の比較対応）。
+  // API 有効時のみ読み込む（無効・未到達は従来どおりローカル案件のみ）。
+  const [serverCases, setServerCases] = useState<CaseRecord[]>([]);
+  const [serverEnabled, setServerEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const ok = await isCaseStoreEnabled();
+        if (cancelled) return;
+        setServerEnabled(ok);
+        if (ok) {
+          const items = await listCases();
+          if (cancelled) return;
+          setServerCases(items.map(serverCaseToRecord).filter((x): x is CaseRecord => x !== null));
+        }
+      } catch {
+        if (cancelled) return;
+        setServerEnabled(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 比較候補: 実データ案件 + サーバー台帳案件（有効時）+ ダミー案件（表示設定時のみ）。
+  // findings を持たない案件は「データ未取得」として比較可能（未取得と低リスクを区別する設計）。
   const candidates: CaseRecord[] = useMemo(
-    () => [...state.liveCases, ...DUMMY_CASES_VISIBLE],
-    [state.liveCases],
+    () => [...state.liveCases, ...serverCases, ...DUMMY_CASES_VISIBLE],
+    [state.liveCases, serverCases],
   );
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [msg, setMsg] = useState<string | null>(null);
@@ -101,7 +130,7 @@ export function CompareScreen() {
                 borderColor: selected.has(c.id) ? 'var(--accent)' : 'var(--border-3)',
               }}
             >
-              {c.isDummy ? '【ダミー】' : ''}{c.name}
+              {c.isDummy ? '【ダミー】' : c.id.startsWith('server-') ? '【サーバー】' : ''}{c.name}
             </button>
           ))}
           {candidates.length === 0 && (
@@ -183,6 +212,8 @@ export function CompareScreen() {
       </div>
       <p style={{ margin: '12px 2px 0', fontSize: 11, color: 'var(--text-3)', lineHeight: 1.6 }}>
         比較表は保存済み案件の確認結果を横並びにした参考情報です。データ未取得（no_data）は「リスクが低い」ではなく判断材料の不足を意味します。出典・取得日時は各案件の詳細を参照してください。
+        {serverEnabled === true && serverCases.length > 0 && ' サーバー案件台帳（#111）の保存済み案件を含みます。'}
+        {serverEnabled === false && ' サーバー案件台帳が未設定のため、比較対象はこの端末の案件のみです。'}
       </p>
       <p style={{ margin: '8px 2px 0', fontSize: 11, color: 'var(--text-3)' }}>
         <button onClick={() => go('input')} style={{ ...miniBtn, padding: '4px 10px', fontSize: 10.5 }}>＋ 地点入力へ（新規確認）</button>
