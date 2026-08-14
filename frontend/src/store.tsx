@@ -234,8 +234,9 @@ export function useAppController(): AppController {
     };
 
     // 取得ステップを pending で初期化（部分結果表示）。新規実行は未保存にリセット。
+    // 地図キャプチャ（Issue #274）も前回地点の古い画像が混入しないようリセットする。
     const steps: FetchStep[] = STEP_DEFS.map((d) => ({ key: d.key, name: d.name, status: 'pending' }));
-    setState((s) => ({ ...s, running: true, formError: '', fetchSteps: steps, features: { roads: [], water: [], facilities: [] }, currentSaved: false }));
+    setState((s) => ({ ...s, running: true, formError: '', fetchSteps: steps, features: { roads: [], water: [], facilities: [] }, currentSaved: false, mapCapture: null, captureHazardLayers: false }));
 
     const onStep = (key: SourceKey, status: FetchStep['status']) => {
       setState((s) => ({ ...s, fetchSteps: s.fetchSteps.map((x) => (x.key === key ? { ...x, status } : x)) }));
@@ -302,6 +303,7 @@ export function useAppController(): AppController {
           categoryFilter: 'all',
           memoText: '',
           currentSaved: true,
+          mapCapture: null, // 復元案件は地図が再構築されるため、前回のキャプチャは破棄（#274）
         }));
         return;
       }
