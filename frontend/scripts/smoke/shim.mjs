@@ -68,6 +68,10 @@ function makeMatchers(received, negate) {
         typeof received === 'string' ? received.includes(sub) : Array.isArray(received) && received.includes(sub);
       check(pass, `toContain(${fmt(sub)})`);
     },
+    toMatch: (re) => {
+      const pass = typeof received === 'string' && re.test(received);
+      check(pass, `toMatch(${fmt(String(re))})`);
+    },
     toHaveLength: (n) => check(received != null && received.length === n, `toHaveLength(${fmt(n)})`),
   };
 }
