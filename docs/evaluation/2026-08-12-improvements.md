@@ -1319,7 +1319,7 @@ objective の「Preview／ローカル環境で MVP を検証し、確認 URL �
 | 種別 | URL | 状態 |
 |---|---|---|
 | 本番 | `https://riskchecker.mirai-dx-platform.com/` | 稼働中（Cloudflare Tunnel + Access） |
-| MVP / Prototype（案） | `https://mvp-riskchecker.mirai-dx-platform.com/` | **要ユーザー作成**（DNS・Tunnel・Access は Cloudflare 権限が必要・README に手順・想定を明記） |
+| MVP / Prototype | **`https://riskchecker-mvp.mirai-dx-platform.com/`**（ユーザー指定） | **要ユーザー作成**（DNS・Tunnel・Access は Cloudflare 権限が必要・README に手順・想定を明記）・**全てダミーデータ**（`VITE_SHOW_DUMMY=true` ビルド＋`seed_demo_cases`＋合成サンプルのみ） |
 
 - objective の「本番: 既存作成サブドメイン＋規定ドメイン / MVP: MVP 用サブドメイン＋規定ドメイン」を満たす整理
 - MVP サブドメインは本番と分離した別 Tunnel として作成する想定（本番に影響なし）
@@ -1386,3 +1386,33 @@ Subagent は環境エラー（MCP 初期化失敗）で利用不可のため、o
 6. 案件台帳・データソース台帳の本番有効化判断（ユーザー判断）
 7. TS7（#109）・バックアップ復元演習・Cloudflare 側項目（ユーザー判断）
 8. プッシュ通知・PWA・RAG（将来バックログ）・Low 2 件（実害なし）
+
+## 52. 追記（2026-08-15・第53弾）: #238 クローズ・MVP サブドメイン確定・MVP ダミーデータ方針
+
+### 52.1 #238 クローズ（満了確認・ユーザー確認）
+
+満了確認チェックリストの全項目をユーザーが確認し、最終検証（誤起票ゼロ継続・本番ヘルスチェック 302/200・main CI success）の上、**Issue #238 をクローズ**。対策（PR #259: readyz 分離・再試行・インシデント集約）の効果を検証証跡として記録。**P0 のうち監視検証中だった 1 件が解消**。
+
+### 52.2 MVP サブドメインの確定（ユーザー指定）
+
+- **MVP / Prototype URL**: `https://riskchecker-mvp.mirai-dx-platform.com/`（ユーザー指定・README §常駐サービス に反映）
+- 本番: `https://riskchecker.mirai-dx-platform.com/`（既存・稼働中・変更なし）
+
+### 52.3 MVP は全てダミーデータ（ユーザー指示）
+
+MVP/関係者レビュー環境は実データを一切使用せず、架空ダミーデータのみで構成する方針を README に明記:
+- フロント: `VITE_SHOW_DUMMY=true` ビルド（ダミー案件 6 件・比較デモ行を表示）
+- バックエンド: `python -m app.seed_demo_cases --with-sources`（架空案件台帳 3 件・監査ログ・データソース台帳 7 件）
+- ハザード判定: 合成サンプルのみ（`backend/data/sample/sample-hazards.geojson`）
+- 出所は `isDummy` フラグ・「ダミーデータ」タグで常に明示
+
+### 52.4 残課題（更新）
+
+1. #240 LAN 認証統一の判断（ユーザー判断・手順整理済み）
+2. #94 /healthz エッジ除外（要 Cloudflare ダッシュボード操作・手順整理済み・作成後 CTO が curl 検証）
+3. **MVP サブドメイン（riskchecker-mvp）の作成**（要 Cloudflare 権限・ユーザー操作・作成後に README 反映と CTO 検証）
+4. **実ブラウザでの目視確認**（本番反映後・地図キャプチャ/比較マップ/気象警報チェック・ユーザー実行完了の連絡待ち）
+5. A31/A33 実データ投入（ユーザー判断・#112 実装部は完了）
+6. AI 概算単価実値（OCSRC_AI_COST_*・ユーザー判断・コード変更不要で調整可能化）
+7. 案件台帳・データソース台帳の本番有効化判断（ユーザー判断）
+8. TS7（#109）・バックアップ復元演習（人間実施）・プッシュ通知/PWA/RAG（将来バックログ）・Low 2 件（実害なし）

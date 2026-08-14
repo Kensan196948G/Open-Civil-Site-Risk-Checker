@@ -48,11 +48,17 @@ npm run test:smoke   # スモークテスト（esbuild ランナー / 制約環�
 | ローカル                   | `http://127.0.0.1:8700/`               | Cloudflare Access JWT（本番設定時・外部評価 #240） |
 | ヘルスチェック             | `http://127.0.0.1:8700/healthz` → `ok` | なし（LAN/ローカルのみ。インターネット経由は Issue #94 対応まで Access 保護下） |
 
-> **MVP / 関係者レビュー用 URL（案）**: 本番とは分離した MVP/Prototype 確認用サブドメイン
-> として `https://mvp-riskchecker.mirai-dx-platform.com/`（規定ドメイン `*.mirai-dx-platform.com`
-> 配下・本番と同構成の Cloudflare Tunnel + Access を別 Tunnel として作成）を想定しています。
+> **MVP / 関係者レビュー用 URL**: 本番とは分離した MVP/Prototype 確認用サブドメイン
+> として **`https://riskchecker-mvp.mirai-dx-platform.com/`**（規定ドメイン `*.mirai-dx-platform.com`
+> 配下・本番と同構成の Cloudflare Tunnel + Access を別 Tunnel として作成）を使用します。
 > DNS・Tunnel・Access の作成は Cloudflare 権限が必要なため、ユーザー側で作成後に本 README へ反映してください。
 > 本番は `https://riskchecker.mirai-dx-platform.com/`（既存・稼働中）です。
+>
+> **MVP は全てダミーデータ**: MVP/関係者レビュー環境は**実データを一切使用せず、架空のダミーデータのみ**で構成します。
+> - フロント: `VITE_SHOW_DUMMY=true` でビルド（ダッシュボードのダミー案件 6 件・比較デモ行を表示。本番ビルドでは既定で非表示）
+> - バックエンド: `python -m app.seed_demo_cases --with-sources` で**架空の案件台帳 3 件・監査ログ・データソース台帳 7 件**を投入（実データ投入・本番案件は使用しない）
+> - ハザード判定: 合成サンプル（`backend/data/sample/sample-hazards.geojson`・架空）のみ
+> - 出所は `isDummy` フラグと「ダミーデータ」タグで常に明示（実データと混在させない）
 
 > **インターネット公開**（`riskchecker.mirai-dx-platform.com`）は Cloudflare Tunnel（TLS 終端）+ Cloudflare Access（ID ベース認証・Issue #70）で保護しています。本番（`OCSRC_ACCESS_TEAM_DOMAIN` / `OCSRC_ACCESS_AUD` 設定時）は `/healthz` を除き **LAN 直アクセスにも Access JWT を要求**し、未認証は 403 を返します（外部評価 #240 対応）。通常のブラウザ利用は公開 URL 経由の Access セッションに集約されます。Access 未設定の開発モードのみ、LAN 直アクセスを認証なしで許可します。公開の詳細手順・セキュリティ境界は [`docs/deploy-backend.md`](docs/deploy-backend.md) を参照。
 >
