@@ -161,13 +161,13 @@ docker compose ps                         # Docker の場合
 | OpenStreetMap / Overpass  | 周辺道路・水域・施設・駅（実距離計測）           | ✅ 実連携                                                     |
 | Open-Meteo                | 7日予報（強雨・強風の抽出）                      | ✅ 実連携                                                     |
 | 国土地理院 地理院タイル   | 背景地図（淡色/標準/写真）・標高                 | ✅ 実連携                                                     |
-| ハザードマップポータル    | 洪水浸水想定・土砂災害の重ね合わせタイル         | ✅ 実連携（視覚確認向け）                                     |
-| 国土数値情報 (KSJ)        | 河川（ローカルDB / PostGIS 空間検索。施設 `P02` はスキーマ・取込CLI対応済みだが未投入 — 施設は Overpass が実運用でカバー） | ✅ 実連携（既定: same-origin `/api` プロキシ経由・Phase 2）   |
+| ハザードマップポータル    | 洪水浸水想定・土砂災害の重ね合わせタイル + **区域内判定（Issue #112: `/api/v1/hazard-assess`・合成サンプル検証済み・実データ調達は利用規約確認後）** | ✅ 実連携（自動判定 + タイル視覚フォールバック）             |
+| 国土数値情報 (KSJ)        | 河川（ローカルDB / PostGIS 空間検索。施設 `P02` はスキーマ・取込CLI対応済みだが未投入 — 施設は Overpass が実運用でカバー）。**ハザードポリゴン（A31/A33 相当・dataset=`hazard`）** | ✅ 実連携（既定: same-origin `/api` プロキシ経由・Phase 2）   |
 | 気象庁 警報・注意報       | 都道府県（気象庁発表単位）の警報・注意報発表状況 | ✅ 実連携（Phase 3・認証不要・CORS開放）                      |
 | PLATEAU                   | 3D都市モデル                                     | ⏸ 未実装（実リクエストなし・疑似ログを記録しない）            |
 | xROAD                     | 道路交通量                                       | ⏸ 未連携（利用規約同意が必要）                                |
 
-> ハザードの重なり判定はクライアント側では行わず、タイル重ね合わせによる**視覚確認**として表示します（出典明示・断定回避・実タイル取得の成否は検証しないため HTTP コードを記録しない）。KSJ はバックエンド停止・DB 未整備時に「取得失敗」、PLATEAU / xROAD は「未実装・未連携（実リクエストなし）」として誠実に区別表示します（要件 FR-503 / NFR-504・外部評価 Phase 0）。
+> ハザードの重なり判定は **Issue #112 でサーバ側の区域内判定（ST_Contains）と最寄り距離（ST_Distance）へ昇格**しました（`/api/v1/hazard-assess`・出典・基準年つき・断定表現なし）。バックエンド未到達時は従来の**タイル目視（視覚確認要）**へフォールバックします。KSJ はバックエンド停止・DB 未整備時に「取得失敗」、PLATEAU / xROAD は「未実装・未連携（実リクエストなし）」として誠実に区別表示します（要件 FR-503 / NFR-504・外部評価 Phase 0）。
 >
 > **気象庁 警報・注意報連携（Phase 3・Issue #22）**: 地点の都道府県を Nominatim 逆ジオコーディングで特定し、`https://www.jma.go.jp/bosai/warning/data/warning/{都道府県コード}.json` を直接取得します（バックエンド不要）。表示文は気象庁自身が作成した `headlineText` をそのまま採用し、アプリ側で警報名を合成しません。**北海道・鹿児島県・沖縄県は地域ごとに気象台が分かれ単一コードを持たないため、人口の多い代表地域（札幌／鹿児島県本土／沖縄本島）の発表状況を表示し、その旨を確認結果の注意事項に明記**します。
 
@@ -377,7 +377,7 @@ frontend/src/
 
 ## 🐍 バックエンド（KSJ 空間検索・Phase 2 稼働中）
 
-`backend/` の FastAPI バックエンドは、国土数値情報（KSJ）のローカル DB 化（PostgreSQL + PostGIS）と空間検索 API を提供します。主なエンドポイントは **liveness `/livez`・readiness `/readyz`（DB 異常時 503）**、`/api/v1/ping`、`/api/v1/nearby`、AI ブローカー（`/api/v1/ai/status`・`/api/v1/ai/memo`）、**案件台帳（Issue #111: `/api/v1/cases*`・`/api/v1/audit`、feature flag `OCSRC_CASE_STORE_ENABLED` 有効時のみ）**です。
+`backend/` の FastAPI バックエンドは、国土数値情報（KSJ）のローカル DB 化（PostgreSQL + PostGIS）と空間検索 API を提供します。主なエンドポイントは **liveness `/livez`・readiness `/readyz`（DB 異常時 503）**、`/api/v1/ping`、`/api/v1/nearby`、**ハザード区域判定 `/api/v1/hazard-assess`（Issue #112）**、AI ブローカー（`/api/v1/ai/status`・`/api/v1/ai/memo`）、**案件台帳（Issue #111: `/api/v1/cases*`・`/api/v1/audit`、feature flag `OCSRC_CASE_STORE_ENABLED` 有効時のみ）**です。
 
 開発時（Docker で DB + backend を起動）:
 
@@ -392,6 +392,7 @@ curl http://127.0.0.1:8000/readyz             # → {"status":"ok","db":"ok",...
 - 既定の `docker compose up`（フロント配信のみ）には**影響しません**（profile 分離）
 - 🚀 **本番デプロイ（systemd）**: `scripts/install-systemd-api.sh` で `ocsrc-api.service` を常駐化します（venv 自動構築・**127.0.0.1 バインド**・`ocsrc-web` へのプロキシ先自動注入・DB 資格情報は `/etc/ocsrc/api.env` で管理）。手順の正本は [`docs/deploy-backend.md`](docs/deploy-backend.md)
 - 🗺️ **KSJ 空間検索（Phase 2-3/2-4 実装済み）**: `python -m app.ingest` で国土数値情報（GeoJSON）を PostGIS へ取込み、`GET /api/v1/nearby?lat=&lon=&radius_m=` で近傍の河川・施設を距離つきで返します（取込手順は [`backend/data/README.md`](backend/data/README.md)）。**実データでの動作検証済み**: NII Geoshape 経由で荒川水系（日本橋川・隅田川等 2,937件、CC BY 4.0）を取込み、霞が関周辺の検索で実取得できることを確認
+- 🏞️ **ハザード区域判定（Issue #112・Phase 1 実装済み）**: `GET /api/v1/hazard-assess?lat=&lon=&radius_m=` で浸水想定（A31）・土砂災害警戒（A33）相当のポリゴン（dataset=`hazard`）に対して `ST_Contains` の区域内判定と `ST_Distance` の最寄り距離を返します。フロントはタイル目視から**区域内/外 + 距離 + 出典・基準年**の自動判定表示へ昇格（API 未到達時は従来の視覚確認へフォールバック）。テスト・開発用の合成サンプルは `backend/data/sample/sample-hazards.geojson`（実データ調達は A31/A33 の利用規約確認後に実施）
 - 🔌 **バックエンド接続先は既定で「このサイト経由（same-origin `/api` プロキシ）」です（Issue #57）**: 追加設定なしで、LAN 上の別端末のブラウザからも配信オリジン（`:8700`）の `/api/*` 経由で 127.0.0.1 バインドの API へ到達します。優先順位は ① **SCR-008 のカスタム URL**（localStorage 保存・ビルド不要で即時反映） > ② ビルド時 `VITE_OCSRC_BACKEND_URL`（例 `http://127.0.0.1:8000`） > ③ **未設定 = same-origin 既定（相対 `/api`）**。バックエンド停止・DB 未整備時は「取得失敗」として誠実に表示します（「該当なし」と区別・NFR-504）。SCR-008 の接続テストは、既定時はプロキシ特例の `/api/readyz`、カスタム URL 設定時は `{URL}/readyz` で DB 到達性まで確認します
 - 詳細は [`backend/README.md`](backend/README.md) を参照
 
@@ -433,7 +434,7 @@ curl http://127.0.0.1:8000/readyz             # → {"status":"ok","db":"ok",...
 
 | フェーズ | 状況 | 内容                                                                                                                                  |
 | -------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Phase 2  | ✅ KSJ 実装済み | 国土数値情報のローカルDB化（PostgreSQL + PostGIS）+ FastAPI 空間検索 API（稼働中）。ハザードデータのローカルDB化は未着手 |
+| Phase 2  | ✅ KSJ 実装済み | 国土数値情報のローカルDB化（PostgreSQL + PostGIS）+ FastAPI 空間検索 API（稼働中）。**ハザード区域判定（Issue #112・A31/A33 相当・合成サンプルで動作検証済み）**。実データ調達は利用規約確認後に実施 |
 | Phase 3  | ✅ 一部実装 | 気象庁 警報・注意報連携（実装済み・Issue #22）。xROAD は利用規約上の理由（匿名アクセス 403）、PLATEAU は試験運用・SLA無しのため見送り |
 | Phase 4  | 🚧 一部実装（flag 無効でデフォルト稼働） | 複数候補地比較・案件管理・社内レビュー機能。**案件台帳 API + RBAC + 監査ログ + 承認WF（Issue #111）を実装済み**だが、本番は `OCSRC_CASE_STORE_ENABLED=false` のまま（preview/dev 検証後に有効化判断）。比較ビュー・PDF 調査パックは未着手 |
 | Phase 5  | ⏳ 未着手 | Civil Open Data Intelligence Platform への統合                                                                                        |
