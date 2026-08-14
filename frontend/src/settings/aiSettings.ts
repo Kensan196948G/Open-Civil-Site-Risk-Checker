@@ -1,5 +1,6 @@
 import { fetchJson } from '../api/http';
 import { ksjBaseUrl } from '../api/ksj';
+import type { AiUsageSummary } from './aiUsage';
 
 // AI 設定（SCR-008 システム設定 / AI調査メモ向け）。
 // 外部評価 Phase 0 以降: API キーはブラウザ（localStorage）に保存せず、
@@ -45,4 +46,14 @@ export async function testAiServerConnection(): Promise<AiTestVerdict> {
     return { ok: true, message: `サーバー側 AI 設定が有効です（${PROVIDER_NAME} / ${status.model}）` };
   }
   return { ok: false, message: 'サーバー側 AI 設定が未設定です（OCSRC_ANTHROPIC_API_KEY）。運用者に確認してください。' };
+}
+
+/** AI 利用実績の集計（評価書 #20）。DB 未設定・未到達は 503 を返すため ok=false になる。 */
+export async function fetchAiUsage(days = 30): Promise<{ ok: boolean; usage?: AiUsageSummary; error?: string }> {
+  const out = await fetchJson<AiUsageSummary>(`${ksjBaseUrl()}/api/v1/ai/usage?days=${days}`, {
+    timeout: 10000,
+    maxRetries: 1, // 読み取り専用・DB コールドスタート等の一時 503 に限定リトライ
+  });
+  if (out.ok && out.data) return { ok: true, usage: out.data };
+  return { ok: false, error: out.error };
 }

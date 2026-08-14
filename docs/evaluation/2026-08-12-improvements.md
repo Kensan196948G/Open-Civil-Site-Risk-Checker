@@ -748,3 +748,35 @@ Issue #175（候補地比較）の実務利用（社内レビュー・紙配布�
 3. A31/A33 実データ取得・投入（ユーザー判断・手順整備済み）
 4. 案件台帳・データソース台帳の本番有効化判断（ユーザー判断）
 5. TS7（#109）・バックアップ復元演習・Cloudflare 側項目（ユーザー判断）
+
+## 30. 追記（2026-08-15・第23弾）: AI 利用状況ダッシュボード（評価書 #20・垂直スライス）
+
+### 30.1 実施内容
+
+| レイヤ | 内容 | 変更ファイル |
+|---|---|---|
+| DB | `ai_usage` テーブル（additive migration・`CREATE TABLE IF NOT EXISTS`・プロンプト本文非記録・ts/user/status 索引） | `backend/app/ai_usage.py`（新規） |
+| バックエンド | AI 呼び出しの監査ログ出力に加え、**best-effort で DB 記録**（`_audit_ai`・DB 未設定/未到達でも AI メモ生成フローは継続）。`GET /api/v1/ai/usage?days=` で合計・日別（JST）・ユーザー別・**概算費用**（トークン≈文字数/4・入力/出力別単価定数）を返す。DB 未設定/未到達は 503（「0 件」と区別・NFR-504） | `backend/app/main.py` |
+| フロント | SCR-008 の AI 設定セクションに**利用状況カード**（合計要約・日別表・ユーザー別表・概算注記）。純粋整形ロジックは `aiUsage.ts` に分離 | `frontend/src/settings/aiUsage.ts`（新規）・`aiSettings.ts`・`screens/SettingsScreen.tsx` |
+| テスト | バックエンド: ユニット 6 件（概算費用・スキーマ・503 系）+ DB 統合 2 件（記録→集計・AI メモ→API 一貫性・本文非保存）。フロント: `aiUsage.test.ts` 5 件 | `backend/tests/test_ai_usage_unit.py`・`test_ai_usage_db_integration.py`（新規）・`frontend/src/settings/aiUsage.test.ts`（新規） |
+
+### 30.2 検証（CI 相当をローカルで再現）
+
+| 検証 | 結果 |
+|---|---:|
+| backend ruff | PASS |
+| backend pytest（ユニット） | 75 passed（うち ai_usage 6 件） |
+| backend pytest（PostGIS 統合・一時コンテナ 15435） | **103 passed**（DB 統合 28 件含む・ai_usage 2 件含む） |
+| frontend typecheck / lint / vitest | PASS / PASS / **196 passed**（+5） |
+| frontend smoke | **172/172 passed** |
+| frontend build | PASS（「利用状況」のバンドル反映を grep 確認） |
+| 検証後クリーンアップ | PostGIS 一時コンテナ削除済み・他プロジェクト非干渉 |
+
+### 30.3 残課題（更新）
+
+1. #238 の7日間検証満了確認（2026-08-19 頃・満了時にクローズ判断）
+2. 地図キャプチャ・本番反映後の実ブラウザ目視確認（外部タイル CORS 応答に依存）
+3. A31/A33 実データ取得・投入（ユーザー判断・手順整備済み）
+4. 案件台帳・データソース台帳の本番有効化判断（ユーザー判断）
+5. TS7（#109）・バックアップ復元演習・Cloudflare 側項目（ユーザー判断）
+6. AI 費用の概算単価（`ai_usage.py` の定数）は実契約・モデルに応じた調整が必要（ユーザー判断）
