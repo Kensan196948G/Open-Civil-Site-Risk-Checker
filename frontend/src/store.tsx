@@ -30,6 +30,7 @@ import type { MapCaptureResult } from './map/capture';
 import { SAMPLE } from './data/constants';
 import type { SurveyTemplate } from './data/templates';
 import { cloneLedger } from './data/sources';
+import { rememberAddress } from './settings/recentAddresses';
 import { loadAnalysisDefaults } from './settings/appSettings';
 import { addLiveCase, buildCaseFromAnalysis, deleteLiveCase, exportLiveCases, importLiveCases, loadLiveCases } from './data/caseStore';
 import { buildMemoText } from './risk/memo';
@@ -271,6 +272,8 @@ export function useAppController(): AppController {
     const { location, findings, logs, features } = outcome.result;
     // 案件起点の実行では案件名・所在地を地点ラベルに使う。
     const finalLocation = opts.addressOverride ? { ...location, address: opts.addressOverride } : location;
+    // 住所入力で実行した場合は、入力住所を履歴（最近の住所）へ記録する（評価書 #11）。
+    if (form.type === 'address') rememberAddress(form.address);
     setState((s) => ({
       ...s,
       running: false,
