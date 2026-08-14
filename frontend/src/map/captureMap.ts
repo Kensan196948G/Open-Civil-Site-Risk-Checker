@@ -31,13 +31,17 @@ export interface CaptureLayerSet {
   hazard?: CaptureTileLayer[];
   /** 表示中のベクタ（道路・水路）ポリライン。 */
   polylines?: { label: string; lines: [number, number][][]; color: string; weight: number; opacity: number }[];
-  /** 表示中の検索範囲円。 */
+  /** 表示中の検索範囲円（単一・分析画面用）。 */
   range?: { lat: number; lon: number; radiusM: number; color: string; weight: number };
+  /** 複数の検索範囲円（候補地比較・SCR-010 用。指定時は range より優先）。 */
+  ranges?: { lat: number; lon: number; radiusM: number; color: string; weight: number }[];
   /** 表示中の施設マーカー。 */
   markers?: { lat: number; lon: number; label: string }[];
+  /** マーカーの帰属ラベル（既定 'OSM施設'・比較画面では '比較候補地' 等を指定）。 */
+  markersLabel?: string;
   /** 表示中だが画像から除外されたレイヤ（理由付き・呼び出し側がライセンス判断して指定）。 */
   excluded?: { label: string; reason: string }[];
-  /** 調査地点ピン（常に描画）。 */
+  /** 調査地点ピン（比較画面等で描画しない場合は opts.drawSitePin=false）。 */
   site: { lat: number; lon: number };
 }
 
@@ -181,13 +185,14 @@ export async function captureMap(
   }
   ctx.globalAlpha = 1;
 
-  // ---- 検索範囲円 ----
-  if (layers.range) {
-    const c = pointFor(drawCtx, layers.range.lat, layers.range.lon);
-    const mpp = metersPerPixel(layers.range.lat, zoom, TILE_SIZE);
-    const rPx = Math.max(2, layers.range.radiusM / mpp) * scale;
-    ctx.strokeStyle = layers.range.color;
-    ctx.lineWidth = layers.range.weight * scale;
+  // ---- 検索範囲円（単一 or 複数・候補地比較は ranges） ----
+  const circles = layers.ranges ?? (layers.range ? [layers.range] : []);
+  for (const rc of circles) {
+    const c = pointFor(drawCtx, rc.lat, rc.lon);
+    const mpp = metersPerPixel(rc.lat, zoom, TILE_SIZE);
+    const rPx = Math.max(2, rc.radiusM / mpp) * scale;
+    ctx.strokeStyle = rc.color;
+    ctx.lineWidth = rc.weight * scale;
     ctx.setLineDash([8 * scale, 8 * scale]);
     ctx.beginPath();
     ctx.arc(c.x, c.y, rPx, 0, Math.PI * 2);
@@ -214,8 +219,8 @@ export async function captureMap(
     ctx.fillText(label, p.x + 8 * scale + pad, p.y + 4 * scale);
   }
 
-  // ---- 調査地点ピン ----
-  {
+  // ---- 調査地点ピン（drawSitePin=false で省略・候補地比較用） ----
+  if (opts.drawSitePin !== false) {
     const p = pointFor(drawCtx, layers.site.lat, layers.site.lon);
     const r = 9 * scale;
     ctx.fillStyle = 'rgba(255,255,255,.92)';
@@ -237,7 +242,7 @@ export async function captureMap(
     ...(layers.extraTiles ?? []).map((t) => t.attribution),
     ...(layers.hazard ?? []).map((t) => t.attribution),
     ...(layers.polylines ?? []).map((p) => p.label),
-    ...(layers.markers ?? []).map(() => 'OSM施設'),
+    ...(layers.markers ?? []).map(() => layers.markersLabel ?? 'OSM施設'),
   ];
   const excluded = layers.excluded ?? [];
   const capturedAt = new Date().toISOString();

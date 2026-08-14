@@ -10,17 +10,18 @@ import { comparePointLabel, type CompareMapPoint } from './compareMapPoints';
 
 const RANK_COLORS = ['#2E5AAC', '#B5701A', '#3E76D6', '#6B45B0'];
 
-export function CompareMap({ points }: { points: CompareMapPoint[] }) {
+export function CompareMap({ points, mapRef }: { points: CompareMapPoint[]; mapRef?: React.MutableRefObject<L.Map | null> }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
 
   // 地図生成（1 回のみ）。
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || mapRef.current) return;
+    if (!el || mapInstanceRef.current) return;
     const map = L.map(el, { zoomControl: true, attributionControl: true }).setView([35.68, 139.75], 12);
-    mapRef.current = map;
+    mapInstanceRef.current = map;
+    if (mapRef) mapRef.current = map;
     L.tileLayer(BASE_TILE_LAYERS.pale.urlTemplate, { maxZoom: 18, attribution: BASE_TILE_LAYERS.pale.attribution }).addTo(map);
     markersRef.current = L.layerGroup().addTo(map);
     setTimeout(() => {
@@ -32,14 +33,17 @@ export function CompareMap({ points }: { points: CompareMapPoint[] }) {
     }, 120);
     return () => {
       map.remove();
-      mapRef.current = null;
+      mapInstanceRef.current = null;
+      if (mapRef) mapRef.current = null;
       markersRef.current = null;
     };
+    // mapRef は画面側で安定した ref を渡す（変更されない）。生成は 1 回のみ。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 地点の変更に合わせてマーカーを再構築。
   useEffect(() => {
-    const map = mapRef.current;
+    const map = mapInstanceRef.current;
     const group = markersRef.current;
     if (!map || !group) return;
     group.clearLayers();
