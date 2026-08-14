@@ -24,6 +24,7 @@ ruff check .                   # Lint
 | GET | `/healthz` | `/readyz` の後方互換エイリアス（異常時は 503） |
 | GET | `/api/v1/ping` | API 疎通確認 |
 | GET | `/api/v1/nearby?lat=&lon=&radius_m=` | 取込済み KSJ（河川・施設）の近傍検索。距離昇順・出典/整備年度つき。DB 未整備時は 503（「該当なし」と「取得失敗」を区別、NFR-504） |
+| GET | `/api/v1/hazard-assess?lat=&lon=&radius_m=` | ハザード区域判定（Issue #112）。浸水想定（A31）・土砂災害警戒（A33）相当のポリゴン（dataset=`hazard`）に対して `ST_Contains` の区域内判定と `ST_Distance` の最寄り距離を返す。データ欠落地域は空リスト（該当なし）、DB 未到達は 503 |
 | GET | `/api/v1/geocode?q=` | Nominatim `/search` プロキシ（ブラウザから同一オリジンで利用。1 req/sec をプロセス単位で遵守） |
 | GET | `/api/v1/reverse-geocode?lat=&lon=` | Nominatim `/reverse` プロキシ |
 | GET | `/api/v1/ai/status` | AI ブローカー設定状態（`configured` / `model` のみ。API キーは返さない） |

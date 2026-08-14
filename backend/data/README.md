@@ -46,3 +46,23 @@ OCSRC_DATABASE_URL=postgresql://app:***@127.0.0.1:5432/site_risk_checker \
 3. 取込コマンドは上記と同様（`--name-key` は河川データなら `W05_004`、施設データはデータセットごとに異なるため実ファイルの属性を確認してください）
 
 > 座標は WGS84（EPSG:4326）必須。範囲外の feature は取込時に reject され、理由が表示されます（NFR-501/505）。
+
+## ハザード区域データ（Issue #112・dataset=`hazard`）
+
+`/api/v1/hazard-assess` の区域内判定（ST_Contains）・最寄り距離（ST_Distance）に使う
+ポリゴンデータ。浸水想定区域（A31）・土砂災害警戒区域（A33）相当を dataset=`hazard` で取り込む。
+
+- テスト・開発用の**合成サンプル**（実データではない）: `sample/sample-hazards.geojson`
+  （霞が関周辺に架空の浸水想定・土砂災害警戒ポリゴン3件）
+- 実データは国交省ハザードマップポータル等から A31/A33 を取得し、公式 KSJ と同様に
+  `--dataset hazard` で取込（利用規約・出典表記の確認が必須）
+
+```bash
+cd backend
+OCSRC_DATABASE_URL=postgresql://app:***@127.0.0.1:5432/site_risk_checker \
+  python -m app.ingest data/raw/flood-a31.geojson \
+  --dataset hazard \
+  --source "国土数値情報（浸水想定区域）…出典表記" \
+  --source-updated "基準年" \
+  --name-key 名称
+```

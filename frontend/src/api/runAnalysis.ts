@@ -3,6 +3,7 @@ import { fetchWeather } from './openMeteo';
 import { fetchOverpass } from './overpass';
 import { fetchElevation } from './elevation';
 import { fetchKsj } from './ksj';
+import { fetchHazardAssessment, hazardAssessmentFinding, hazardLogLine } from './hazard';
 import { fetchJmaWarning } from './jmaWarning';
 import { nowHMS, nowStamp } from './http';
 import { radiusLabel } from '../data/constants';
@@ -163,23 +164,28 @@ export async function runAnalysis(form: AnalysisInputForm, opts: RunOpts = {}): 
         onStep('ksj', 'skipped');
       });
 
-  // ハザードマップ: タイルレイヤは表示可能（重ね合わせは利用者が目視確認）。
-  // 実タイルリクエストの成否を検証していないため、HTTP 200 等の疑似ログは記録しない。
-  const hazardP = Promise.resolve().then(() => {
-    if (cat.hazard) {
-      findings.push(hazardVisualFinding());
-      logs.push({
-        time: nowHMS(),
-        source: 'hazard_portal',
-        endpoint: '（タイルレイヤ表示のみ・実リクエストなし）',
-        code: '—',
-        status: 'visual_only',
-        ms: '—',
-        error: '重ね合わせ表示は可能。区域判定は目視確認が必要で、実タイル取得の成否は検証していない',
-      });
-      onStep('hazard_portal', 'success');
-    } else {
+  // ハザード区域判定（Issue #112）: 自前バックエンドの /api/v1/hazard-assess で
+  // 区域内判定（ST_Contains）と最寄り距離（ST_Distance）を取得する。バックエンド
+  // 未到達・未整備時は従来の「タイル目視（視覚確認要）」へフォールバックする
+  // （取得失敗を成功扱いにしない・NFR-504）。
+  const hazardP = Promise.resolve().then(async () => {
+    if (!cat.hazard) {
       onStep('hazard_portal', 'skipped');
+      return;
+    }
+    const start = performance.now();
+    try {
+      const res = await fetchHazardAssessment(input.lat, input.lon, input.radius * 5);
+      const ms = String(Math.round(performance.now() - start));
+      findings.push(hazardAssessmentFinding(res.inside, res.nearby, nowStamp()));
+      logs.push(hazardLogLine(true, '200', ms, ''));
+      onStep('hazard_portal', 'success');
+    } catch (err) {
+      // API 未到達 → タイル目視へフォールバック（誠実な表示・疑似成功にしない）。
+      findings.push(hazardVisualFinding());
+      const ms = String(Math.round(performance.now() - start));
+      logs.push(hazardLogLine(false, '503', ms, err instanceof Error ? err.message : 'ハザード区域判定APIに到達できません'));
+      onStep('hazard_portal', 'failed');
     }
   });
 
@@ -238,6 +244,7 @@ export async function runAnalysis(form: AnalysisInputForm, opts: RunOpts = {}): 
 }
 
 function hazardVisualFinding(): Finding {
+  // ハザード区域判定 API に到達できない場合のフォールバック（タイル目視・視覚確認要）。
   return {
     id: 'haz-1',
     category: 'hazard',
