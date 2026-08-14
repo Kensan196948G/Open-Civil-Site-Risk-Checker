@@ -1040,6 +1040,8 @@ site-risk-check_{YYYYMMDD_HHMM}_{location_slug}.md
 ### 15.4 認証・認可（将来構想・MVP スコープ外）
 
 > ⚠️ 以下は §3.4 バックエンド中心構成へ移行する場合の構想であり、**MVP スコープ外（クライアント完結設計の意図的判断・§2.3）**である。現行の運用境界は §15.2 に従う。サーバ側に案件データ・ユーザー管理を持つ段階（Phase 4+）で必須となる。
+>
+> 📝 **追記（2026-08-14）**: 案件台帳 API（Issue #111）で **RBAC（viewer/editor/approver/admin/auditor）と監査ログの垂直スライスを実装**（`backend/app/cases.py`・`backend/app/main.py`・`backend/tests/test_cases_*`）。ただし **feature flag `OCSRC_CASE_STORE_ENABLED`（既定 false）で無効**のまま本番には未適用。有効化時は本節のロール設計（reviewer は approver 相当）と監査ログ保全方針を確定してから行う。
 
 #### 認証（構想）
 

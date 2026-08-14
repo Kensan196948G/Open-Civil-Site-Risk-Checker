@@ -1,13 +1,21 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../store';
 import { DUMMY_CASES_VISIBLE, THIS_WEEK_SINCE } from '../data/cases';
 import { getCaseStatus, getPrio } from '../data/constants';
+import { approveCase, isCaseStoreEnabled, listCases, submitCase, type ServerCase } from '../api/cases';
 import type { CaseRecord, Priority } from '../types';
 
 // SCR-000 ダッシュボード。実取得（本番）データ案件 + ダミー（サンプル）案件を表示する。
 // 既定の起動画面。実データは localStorage に保存され、ダミーは「ダミーデータ」と明記する。
+// サーバー案件台帳（Issue #111）が有効な場合は、承認ワークフローを備えた台帳セクションを表示する。
 const GRADES: Priority[] = ['A', 'B', 'C', 'D'];
 const AGG_NAMES: Record<Priority, string> = { A: '専門確認優先', B: '追加確認推奨', C: '参考情報あり', D: 'データ不足' };
+
+const SERVER_STATUS_LABEL: Record<ServerCase['status'], string> = {
+  draft: '下書き',
+  submitted: '承認申請中',
+  approved: '承認済み',
+};
 
 export function DashboardScreen() {
   const { state, go, openCase, deleteCase, importCases, exportCases } = useApp();
@@ -15,6 +23,57 @@ export function DashboardScreen() {
   const CASE_STATUS = getCaseStatus(state.theme);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  // サーバー案件台帳（Issue #111）。API が有効な場合のみ読み込む。
+  const [serverEnabled, setServerEnabled] = useState<boolean | null>(null);
+  const [serverCases, setServerCases] = useState<ServerCase[]>([]);
+  const [serverMsg, setServerMsg] = useState<string | null>(null);
+
+  const reloadServerCases = useCallback(async () => {
+    try {
+      const items = await listCases();
+      setServerCases(items);
+      setServerMsg(null);
+    } catch (err) {
+      setServerMsg(err instanceof Error ? err.message : '案件台帳の取得に失敗しました');
+    }
+  }, []);
+
+  // 案件台帳 API の有効性を起動時に検出（無効・未到達ならセクション非表示）。
+  useEffect(() => {
+    let cancelled = false;
+    void isCaseStoreEnabled().then((ok) => {
+      if (cancelled) return;
+      setServerEnabled(ok);
+      if (ok) void reloadServerCases();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadServerCases]);
+
+  const onServerSubmit = useCallback(
+    async (id: number) => {
+      try {
+        await submitCase(id);
+        await reloadServerCases();
+      } catch (err) {
+        setServerMsg(err instanceof Error ? err.message : '承認申請に失敗しました');
+      }
+    },
+    [reloadServerCases],
+  );
+
+  const onServerApprove = useCallback(
+    async (id: number) => {
+      try {
+        await approveCase(id);
+        await reloadServerCases();
+      } catch (err) {
+        setServerMsg(err instanceof Error ? err.message : '承認に失敗しました');
+      }
+    },
+    [reloadServerCases],
+  );
 
   // 実データ（新しい順）を先頭に、続いてダミー（表示設定時のみ）を並べる。
   const cases: CaseRecord[] = useMemo(() => [...state.liveCases, ...DUMMY_CASES_VISIBLE], [state.liveCases]);
@@ -156,6 +215,67 @@ export function DashboardScreen() {
           </div>
         </div>
 
+        {/* サーバー案件台帳（Issue #111）: API 有効時のみ表示 */}
+        {serverEnabled && (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--accent-border)', borderRadius: 11, overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 3px var(--shadow)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '15px 20px', borderBottom: '1px solid var(--border-2)' }}>
+              <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>案件台帳（サーバー保存）</h2>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--text-3)' }}>
+                {serverCases.length} 件
+              </span>
+              <span style={{ flex: 1 }} />
+              <span style={{ fontSize: 10.5, color: 'var(--text-3)', background: 'var(--surface-4)', padding: '2px 9px', borderRadius: 10, border: '1px solid var(--border-3)' }}>
+                承認WF: draft → submitted → approved
+              </span>
+            </div>
+            {serverMsg && (
+              <div style={{ padding: '9px 20px', fontSize: 11.5, color: 'var(--err-text)', background: 'var(--err-bg)', borderBottom: '1px solid var(--err-border)' }}>
+                {serverMsg}
+              </div>
+            )}
+            <div className="ocsrc-table-scroll" tabIndex={0} role="region" aria-label="サーバー案件台帳">
+              <div className="ocsrc-grid-cases" style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.6fr 1fr 1.2fr 1fr', gap: 0, padding: '10px 20px', background: 'var(--surface-3)', borderBottom: '1px solid var(--border-2)', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '.3px' }}>
+                <span>案件名 / 番号</span>
+                <span>所在地</span>
+                <span>作成日</span>
+                <span>状態</span>
+                <span style={{ textAlign: 'right' }}>操作</span>
+              </div>
+              {serverCases.map((sc) => (
+                <div key={sc.id} className="ocsrc-grid-cases" style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.6fr 1fr 1.2fr 1fr', gap: 0, padding: '13px 20px', borderBottom: '1px solid var(--border-2)', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-strong)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 200 }}>{sc.name}</div>
+                    <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5, color: 'var(--text-4)' }}>{sc.code} · #{sc.id}</div>
+                  </div>
+                  <span style={{ fontSize: 11.5, color: 'var(--text-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sc.address || sc.name}</span>
+                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, color: 'var(--text-3)' }}>{sc.created_at.slice(0, 10)}</span>
+                  <span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 11, background: 'var(--surface-4)', color: 'var(--text-2)', border: '1px solid var(--border-3)' }}>
+                      {SERVER_STATUS_LABEL[sc.status]}
+                    </span>
+                  </span>
+                  <span style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                    {sc.status === 'draft' && (
+                      <button onClick={() => void onServerSubmit(sc.id)} style={miniBtn} title="承認申請へ提出（draft → submitted）">申請</button>
+                    )}
+                    {sc.status === 'submitted' && (
+                      <button onClick={() => void onServerApprove(sc.id)} style={approveBtn} title="承認（submitted → approved）">承認</button>
+                    )}
+                    {sc.status === 'approved' && (
+                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{sc.approved_by ? `承認者: ${sc.approved_by}` : ''}</span>
+                    )}
+                  </span>
+                </div>
+              ))}
+              {serverCases.length === 0 && (
+                <div style={{ padding: '24px 20px', textAlign: 'center', fontSize: 12, color: 'var(--text-3)' }}>
+                  サーバー案件はまだありません。地点確認の結果を「ダッシュボードに保存」すると、サーバー案件台帳へ登録されます。
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* 案件一覧 */}
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 11, overflow: 'hidden', boxShadow: '0 1px 3px var(--shadow)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '15px 20px', borderBottom: '1px solid var(--border-2)' }}>
@@ -233,6 +353,15 @@ export function DashboardScreen() {
             <>実データは地点確認の結果を SCR-002 の「ダッシュボードに保存」で追加できます。確認優先度Dは「リスクが低い」ではなく判断材料の不足を意味します。</>
           )}
         </p>
+        {state.caseSaveState && (
+          <p style={{ margin: '8px 2px 0', fontSize: 11, color: 'var(--text-3)', lineHeight: 1.6 }}>
+            {state.caseSaveState.kind === 'server' ? (
+              <>最新の保存先: <b style={{ color: 'var(--ok-text)' }}>サーバー案件台帳</b>（{state.caseSaveState.code}）— 承認ワークフローで管理されます。</>
+            ) : (
+              <>最新の保存先: <b style={{ color: 'var(--text-2)' }}>この端末（localStorage）</b> — サーバー案件台帳が未設定のため、下書きとして端末内に保存しました。</>
+            )}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -247,6 +376,22 @@ const ghostBtn: React.CSSProperties = {
   fontSize: 12.5,
   fontWeight: 700,
   cursor: 'pointer',
+};
+const miniBtn: React.CSSProperties = {
+  padding: '6px 12px',
+  background: 'var(--surface)',
+  border: '1px solid var(--accent-border)',
+  borderRadius: 6,
+  fontSize: 11.5,
+  fontWeight: 700,
+  color: 'var(--accent)',
+  cursor: 'pointer',
+};
+const approveBtn: React.CSSProperties = {
+  ...miniBtn,
+  background: 'var(--ok-bg)',
+  color: 'var(--ok-text)',
+  borderColor: 'var(--ok-border)',
 };
 const dummyTag: React.CSSProperties = {
   fontSize: 9.5,

@@ -1,5 +1,7 @@
 # 改善台帳・検証証跡・再評価（2026-08-12）
 
+> 追記（2026-08-14）: 依存更新PR整理と **Issue #111 案件台帳（サーバ側永続化・RBAC・監査ログ・承認WF）の垂直スライス**を実装。詳細は §8 に追記。
+
 ## 1. 実装済み改善
 
 ### 1.1 本セッション（ブランチ `feat/eval-2026-08-12-ai-audit-a11y`）
@@ -94,3 +96,55 @@
 4. バックアップ復元演習の実施記録（`docs/backup-restore.md`）
 5. Cloudflare ダッシュボードでの `/healthz` bypass・Alerting・Entra ID 接続（ユーザー操作）
 6. 依存更新 PR の整理（マージ可否の判定または close）
+
+## 8. 追記（2026-08-14）: 依存更新整理 + Issue #111 案件台帳 垂直スライス
+
+### 8.1 依存更新 PR の整理（完了）
+
+前回の残課題「依存更新 PR 7 件の整理」を完了。nanoid 修正（PR #258）より前の stale branch だった PR #249-254 を main と同期（uvicorn/fastapi の requirements.txt、typescript-eslint/vite/globals/@types/leaflet の lockfile 競合は両変更を保持して解決）し、CI 3 ジョブ green を確認してマージ。
+
+| PR | 内容 | 結果 |
+|---|---|---|
+| #197 | fastapi >=0.141.1 | merged |
+| #249 | uvicorn >=0.52.1 | merged（競合解決） |
+| #250 | typescript-eslint 8.66.0 | merged |
+| #251 | ruff >=0.16.1 | merged |
+| #252 | vite 8.2.0 | merged（lockfile 競合解決） |
+| #253 | globals 17.9.0 | merged |
+| #254 | @types/leaflet 1.9.22 | merged |
+| #73 | typescript 7.0.2 | **保留**（Issue #62: typescript-eslint の TS7 非対応待ち） |
+
+### 8.2 Issue #111 案件台帳（サーバ側永続化・RBAC・監査ログ・承認WF）実装
+
+外部評価の最重要推奨（案件台帳 + 監査ログ + 承認付きレポート）の**バックエンド垂直スライス**を実装。本番無影響（feature flag 既定 off）で、preview/dev で実動作を検証できる。
+
+- **DB（additive migration）**: `cases` / `audit_log` テーブルを `CREATE TABLE IF NOT EXISTS` で冪等作成（既存 `ksj_features` に非干渉）。
+- **API**: `GET/POST /api/v1/cases`、`GET/PATCH/DELETE /api/v1/cases/{id}`、`POST .../submit`・`.../approve`、`GET /api/v1/audit`。
+- **RBAC**: `viewer / editor / approver / admin / auditor` の5ロール。ロール割当はサーバー側環境変数（`OCSRC_CASE_*_USERS`）で管理。actor は web 層が Access JWT 検証後に付与する `X-OCSRC-User`（クライアント直送は server.mjs で除去済み・偽装不可）。
+- **承認WF**: `draft → submitted → approved`。approved 案件の更新は admin のみ。
+- **監査ログ**: `case_created / case_submitted / case_approved / case_updated / case_deleted` を追記（actor・時刻・対象・action。本文・秘密情報は記録しない）。
+- **feature flag**: `OCSRC_CASE_STORE_ENABLED`（既定 false）。無効時は全案件 API が 503（依存解決で body 検証より先に判定）。本番は未有効のまま。
+- **web 層（server.mjs）**: `/api/v1/cases*`・`/api/v1/audit` の POST/PATCH/DELETE をプロキシ許可（flag 無効時は backend が 503 を返すため本番動作は不変）。X-OCSRC-User は既存の付与経路を利用。
+- **フロントエンド**: 案件保存をサーバー優先（`/api/v1/cases` 成功時）・localStorage フォールバックに昇格。ダッシュボードに「案件台帳（サーバー保存）」セクション（一覧・申請・承認ボタン・承認者表示）を追加（API 有効時のみ表示）。
+
+### 8.3 検証証跡（2026-08-14 実測）
+
+| 検証 | 結果 | 備考 |
+|---|---:|---|
+| backend ruff | PASS | app/ tests/ 全ファイル |
+| backend pytest | **79 passed** | 新規22件: RBAC 境界10 + DB 統合12（CRUD・承認WF・監査・403/409/404） |
+| backend DB 統合 | PASS | CI 同一 PostGIS 16-3.4 一時コンテナ（127.0.0.1:15440）で実行 |
+| frontend typecheck / lint | PASS | tsc --noEmit / eslint |
+| frontend vitest | **92 passed** | 新規10件（案件 API クライアント） |
+| frontend server integration | **103 passed** | 新規8件（案件 POST/PATCH/DELETE/submit/audit 中継・非案件 405） |
+| frontend smoke | 80/80 | esbuild shim ランナー |
+| frontend build | PASS | vite 8.2.0・gzip 143.65 KB |
+| 実 API 動作（curl） | PASS | viewer 403 / editor 201 / submit→approve→approved / 監査ログ / flag off 503 |
+| 本番影響 | なし | feature flag 既定 off・本番設定未変更 |
+
+### 8.4 残課題（引き続き）
+
+1. 案件台帳の**本番有効化判断**（ロール割当運用・監査ログ保全方針を定めてから `OCSRC_CASE_STORE_ENABLED=true`）
+2. Issue #112 ハザードポリゴン判定（データ調達・利用規約確認）
+3. 管理画面（監査ログ閲覧 UI・ロール管理 UI）
+4. バックアップ復元演習・Cloudflare 側項目（IdP・Alerting・/healthz bypass）はユーザー判断
