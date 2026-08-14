@@ -14,9 +14,13 @@ export interface AuditFilter {
   entity: string;
   /** キーワード（detail の JSON 文字列と actor/action に部分一致）。空文字は無視。 */
   keyword: string;
+  /** 開始日（YYYY-MM-DD・監査期間の特定・ISO/J-SOX）。空文字は無視。 */
+  dateFrom: string;
+  /** 終了日（YYYY-MM-DD・監査期間の特定・ISO/J-SOX）。空文字は無視。 */
+  dateTo: string;
 }
 
-export const EMPTY_FILTER: AuditFilter = { actor: '', action: 'all', entity: '', keyword: '' };
+export const EMPTY_FILTER: AuditFilter = { actor: '', action: 'all', entity: '', keyword: '', dateFrom: '', dateTo: '' };
 
 /** action の選択肢（全件 + ラベル順）。 */
 export const ACTION_OPTIONS: { value: string; label: string }[] = [
@@ -30,6 +34,8 @@ export function filterAudit(entries: AuditEntry[], filter: AuditFilter): AuditEn
   const action = filter.action;
   const entity = filter.entity.trim().toLowerCase();
   const keyword = filter.keyword.trim().toLowerCase();
+  const dateFrom = filter.dateFrom.trim();
+  const dateTo = filter.dateTo.trim();
 
   return entries.filter((e) => {
     if (actor && !e.actor.toLowerCase().includes(actor)) return false;
@@ -48,11 +54,22 @@ export function filterAudit(entries: AuditEntry[], filter: AuditFilter): AuditEn
         .toLowerCase();
       if (!haystack.includes(keyword)) return false;
     }
+    // 日付レンジ（YYYY-MM-DD の文字列比較・ISO タイムスタンプの先頭 10 文字）。
+    const date = e.ts.slice(0, 10);
+    if (dateFrom && date < dateFrom) return false;
+    if (dateTo && date > dateTo) return false;
     return true;
   });
 }
 
 /** フィルタが非アクティブ（全件表示）か。 */
 export function isFilterActive(filter: AuditFilter): boolean {
-  return filter.actor.trim() !== '' || filter.action !== 'all' || filter.entity.trim() !== '' || filter.keyword.trim() !== '';
+  return (
+    filter.actor.trim() !== '' ||
+    filter.action !== 'all' ||
+    filter.entity.trim() !== '' ||
+    filter.keyword.trim() !== '' ||
+    filter.dateFrom.trim() !== '' ||
+    filter.dateTo.trim() !== ''
+  );
 }
