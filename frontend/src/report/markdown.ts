@@ -60,7 +60,12 @@ export function buildReportMd(ctx: ReportContext): string {
   L.push('');
 
   L.push('## 6. 参照データ・出典', '');
-  sources.forEach((s) => L.push(`- ${s.name}（${s.provider}） / ${s.license} / 状態：${s.stat}`));
+  // Issue #174: 台帳から出典・ライセンス・鮮度（元データ更新日）・利用条件を自動埋め込みする。
+  sources.forEach((s) => {
+    const freshness = s.sourceUpdatedAt ? ` / 元データ更新: ${s.sourceUpdatedAt}` : '';
+    const usage = s.usageNote ? ` / 利用条件: ${s.usageNote}` : '';
+    L.push(`- ${s.name}（${s.provider}） / ${s.license} / 状態：${s.stat}${freshness}${usage}`);
+  });
   L.push('');
 
   L.push('## 7. 注意事項', '');
