@@ -157,3 +157,89 @@ export function buildCompareCsv(rows: CompareRow[]): string {
     .map((row) => row.map((c) => (/[",\n]/.test(String(c)) ? `"${String(c).replace(/"/g, '""')}"` : c)).join(','))
     .join('\n');
 }
+
+/** HTML をエスケープする（XSS 対策・比較表の文言エスケープ）。 */
+function escHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** 比較表の A4 印刷向け自己完結 HTML を生成する（#113 調査パックと同方式）。 */
+export function buildCompareHtml(rows: CompareRow[], generatedAt: string): string {
+  const headerCells = rows
+    .map(
+      (r) =>
+        `<th><div class="name">${escHtml(r.name)}</div>` +
+        `<div class="meta">${escHtml(r.code)} / ${escHtml(r.date)}</div>` +
+        `<div class="meta">${escHtml(r.addressLabel())}</div></th>`,
+    )
+    .join('\n');
+
+  const bodyRows = COMPARE_CATEGORIES.map((cat) => {
+    const cells = rows
+      .map((r) => {
+        const fs = r.byCategory[cat];
+        const meta = cellMeta(summarizeCategory(fs));
+        const details = cellDetail(fs);
+        const color = meta.label === '該当あり' || meta.label.includes('混在') ? '#c5392f' : '#5a6678';
+        const detailHtml = details
+          .map((d) => `<div class="detail">${escHtml(d)}</div>`)
+          .join('');
+        return `<td><span class="status" style="color:${color};font-weight:700">${escHtml(meta.label)}</span>${detailHtml}</td>`;
+      })
+      .join('\n');
+    return `<tr><th class="cat">${escHtml(CATEGORY_LABEL[cat])}</th>${cells}</tr>`;
+  }).join('\n');
+
+  const prioCells = rows
+    .map((r) => `<td style="text-align:center">${r.counts.A ?? 0}</td>`)
+    .join('\n');
+
+  return `<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<title>候補地比較表</title>
+<style>
+  @page { size: A4 landscape; margin: 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", Meiryo, sans-serif; color: #1c2733; font-size: 10pt; line-height: 1.6; margin: 0; }
+  h1 { font-size: 15pt; margin: 0 0 2pt; }
+  .meta { color: #5a6678; font-size: 8.5pt; }
+  table { width: 100%; border-collapse: collapse; margin: 8pt 0; }
+  th, td { border: 1px solid #ccd4de; padding: 6pt 8pt; text-align: left; vertical-align: top; font-size: 9pt; }
+  th { background: #eef2f8; }
+  th.cat { width: 14%; white-space: nowrap; }
+  th .name { font-size: 9.5pt; font-weight: 700; }
+  .detail { color: #3c4a5c; font-size: 8.5pt; margin-top: 2pt; }
+  .status { white-space: nowrap; }
+  .notice { background: #fdf6e3; border: 1px solid #e8d9a0; padding: 7pt 9pt; font-size: 8.5pt; margin: 6pt 0; }
+  .footer { margin-top: 10pt; font-size: 8pt; color: #5a6678; }
+  @media print { .no-print { display: none; } }
+</style>
+</head>
+<body>
+  <button class="no-print" onclick="window.print()" style="margin-bottom:10px;padding:8px 18px;font-size:12px;cursor:pointer;">🖨 このページを PDF として印刷</button>
+  <h1>工事候補地 リスク要素比較表</h1>
+  <p class="meta">作成: ${escHtml(generatedAt)} / 比較対象 ${rows.length} 地点</p>
+
+  <table>
+    <thead><tr><th class="cat">カテゴリ</th>${headerCells}</tr></thead>
+    <tbody>${bodyRows}</tbody>
+    <tfoot>
+      <tr><th class="cat">優先度 A 合計</th>${prioCells}</tr>
+    </tfoot>
+  </table>
+
+  <div class="notice">
+    <b>免責・注意事項</b>：本表は保存済み案件の確認結果を横並びにした<strong>参考情報</strong>です。
+    データ未取得（no_data）は「リスクが低い」ではなく判断材料の不足を意味します。安全・危険を断定するものではなく、
+    自治体公表資料と現地確認による再確認が必要です。出典・取得日時は各案件の詳細を参照してください。
+  </div>
+  <p class="footer">本表は「工事候補地リスクチェッカー」で生成された参考情報です（デモ用サンプルを含む場合があります）。</p>
+</body>
+</html>`;
+}

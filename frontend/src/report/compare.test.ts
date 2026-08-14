@@ -6,6 +6,7 @@ import type { CaseRecord, Finding } from '../types';
 import {
   COMPARE_CATEGORIES,
   buildCompareCsv,
+  buildCompareHtml,
   buildCompareMd,
   cellMeta,
   summarizeCategory,
@@ -110,5 +111,39 @@ describe('buildCompareMd / buildCompareCsv', () => {
     expect(csv).toContain('category');
     expect(csv).toContain('河川・水域');
     expect(csv.split('\n').length).toBeGreaterThan(3);
+  });
+});
+
+describe('buildCompareHtml（A4 印刷・#175）', () => {
+  const rows = [
+    toCompareRow(caseRecord('1', [finding('rivers', 'found')])),
+    toCompareRow(caseRecord('2', [finding('rivers', 'no_data')])),
+  ];
+
+  it('A4 横向き印刷向けの自己完結 HTML を生成する', () => {
+    const html = buildCompareHtml(rows, '2026-08-15 00:00:00');
+    expect(html).toContain('<!doctype html>');
+    expect(html).toContain('@page { size: A4 landscape');
+    expect(html).toContain('リスク要素比較表');
+    expect(html).toContain('河川・水域');
+    expect(html).toContain('データ未取得');
+    expect(html).toContain('該当あり');
+    expect(html).toContain('優先度 A 合計');
+  });
+
+  it('免責文と出典注意を含む（断定表現なしの方針）', () => {
+    const html = buildCompareHtml(rows, '2026-08-15 00:00:00');
+    expect(html).toContain('免責・注意事項');
+    expect(html).toContain('データ未取得（no_data）は「リスクが低い」ではなく');
+    expect(html).toContain('出典・取得日時は各案件の詳細を参照');
+  });
+
+  it('XSS エスケープが機能する', () => {
+    const html = buildCompareHtml(
+      [toCompareRow(caseRecord('1', []))].map((r) => ({ ...r, name: '<script>alert(1)</script>' })),
+      '2026-08-15 00:00:00',
+    );
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;');
   });
 });
