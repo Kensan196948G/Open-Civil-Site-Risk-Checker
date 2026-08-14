@@ -11,6 +11,7 @@ const WORKFLOW_NAV: NavItem[] = [
   { key: 'analysis', label: 'リスク判定', code: 'SCR-002' },
   { key: 'aimemo', label: 'AI調査メモ', code: 'SCR-004' },
   { key: 'report', label: 'レポート出力', code: 'SCR-005' },
+  { key: 'compare', label: '候補地比較', code: 'SCR-010' },
 ];
 
 const ADMIN_NAV: NavItem[] = [
