@@ -16,6 +16,7 @@ const WORKFLOW_NAV: NavItem[] = [
 const ADMIN_NAV: NavItem[] = [
   { key: 'sources', label: 'データソース管理', code: 'SCR-006' },
   { key: 'logs', label: '取得ログ', code: 'SCR-007' },
+  { key: 'audit', label: '監査ログ', code: 'SCR-009' },
   { key: 'settings', label: 'システム設定', code: 'SCR-008' },
 ];
 

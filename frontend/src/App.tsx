@@ -12,6 +12,7 @@ import { MemoScreen } from './screens/MemoScreen';
 import { ReportScreen } from './screens/ReportScreen';
 import { SourcesScreen } from './screens/SourcesScreen';
 import { LogsScreen } from './screens/LogsScreen';
+import { AuditScreen } from './screens/AuditScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 
 // 全体レイアウト（Redesign版の最上位 div 構造を移植）。
@@ -60,6 +61,7 @@ export function App() {
             {screen === 'report' && <ReportScreen />}
             {screen === 'sources' && <SourcesScreen />}
             {screen === 'logs' && <LogsScreen />}
+            {screen === 'audit' && <AuditScreen />}
             {screen === 'settings' && <SettingsScreen />}
             <FindingDrawer />
             {state.running && <LoadingOverlay />}

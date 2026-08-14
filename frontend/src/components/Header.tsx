@@ -11,6 +11,7 @@ const SCREEN_META: Record<Screen, [string, string]> = {
   report: ['レポート出力', 'Markdown / CSV 出力'],
   sources: ['データソース管理', '接続状態・利用条件の台帳'],
   logs: ['取得ログ', 'API実行履歴'],
+  audit: ['監査ログ', '案件台帳の操作履歴（actor・時刻・action）'],
   settings: ['システム設定', 'AI・バックエンド・既定値・ローカルデータ'],
 };
 
