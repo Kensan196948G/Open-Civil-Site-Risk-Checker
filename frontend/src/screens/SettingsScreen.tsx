@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../store';
 import { buildTimeBackendUrl } from '../api/ksj';
 import { CATEGORY_OPTIONS, RADIUS_OPTIONS, radiusLabel } from '../data/constants';
+import { ACTION_LABEL, ALL_ROLES, ROLE_DESC, ROLE_LABEL, buildMatrix, type CaseRole } from '../report/rbac';
 import {
   PROVIDER_NAME,
   fetchAiServerStatus,
@@ -375,6 +376,59 @@ export function SettingsScreen() {
           </button>
         </div>
         {defaultsNotice && <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--text-3)' }}>{defaultsNotice}</div>}
+      </section>
+
+      {/* ---- アクセス権限（RBAC・Issue #111） ---- */}
+      <section style={sectionStyle}>
+        <h2 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>アクセス権限（RBAC）</h2>
+        <p style={{ margin: '0 0 12px', fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-3)' }}>
+          案件台帳（サーバー保存）のロールと権限マトリクスです（Issue #111・viewer / auditor / editor / approver / admin）。
+          ロール割当はサーバー側の環境変数（<code style={{ fontSize: 10.5 }}>OCSRC_CASE_*_USERS</code>）で行います。本番では案件台帳が未設定（feature flag off）のため、この表示は参考情報です。
+        </p>
+        <div style={{ marginBottom: 12 }}>
+          {ALL_ROLES.map((r: CaseRole) => (
+            <div key={r} style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: 10, padding: '6px 0', borderBottom: '1px solid var(--border-3)', fontSize: 12 }}>
+              <span style={{ fontWeight: 700, color: 'var(--text-strong)' }}>{ROLE_LABEL[r]}</span>
+              <span style={{ color: 'var(--text-2)' }}>{ROLE_DESC[r]}</span>
+            </div>
+          ))}
+        </div>
+        <div className="ocsrc-table-scroll" tabIndex={0} role="region" aria-label="RBAC 権限マトリクス">
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+            <thead>
+              <tr style={{ background: 'var(--surface-3)' }}>
+                <th style={{ textAlign: 'left', padding: '7px 10px', border: '1px solid var(--border-2)' }}>操作</th>
+                {ALL_ROLES.map((r: CaseRole) => (
+                  <th key={r} style={{ textAlign: 'center', padding: '7px 6px', border: '1px solid var(--border-2)', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                    {ROLE_LABEL[r]}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(() => {
+                const m = buildMatrix();
+                return (Object.keys(m) as Array<keyof typeof m>).map((action) => (
+                  <tr key={action}>
+                    <td style={{ padding: '6px 10px', border: '1px solid var(--border-3)', color: 'var(--text-2)' }}>{ACTION_LABEL[action]}</td>
+                    {ALL_ROLES.map((r: CaseRole) => (
+                      <td key={r} style={{ textAlign: 'center', padding: '6px', border: '1px solid var(--border-3)' }}>
+                        {m[action][r] ? (
+                          <span style={{ color: 'var(--ok-text)', fontWeight: 700 }}>✓</span>
+                        ) : (
+                          <span style={{ color: 'var(--text-4)' }}>—</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ));
+              })()}
+            </tbody>
+          </table>
+        </div>
+        <p style={{ margin: '10px 0 0', fontSize: 10.5, lineHeight: 1.6, color: 'var(--text-4)' }}>
+          承認ワークフローは draft → submitted → approved の逐次遷移のみ許可されます（approved 案件の更新は admin のみ）。
+        </p>
       </section>
 
       {/* ---- ローカルデータ管理 ---- */}
