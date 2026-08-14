@@ -2,17 +2,16 @@ import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useApp } from '../store';
-import type { BaseLayer, MapFeatures, OverlayKey, SiteLocation } from '../types';
+import type { MapFeatures, OverlayKey, SiteLocation } from '../types';
+import { BASE_TILE_LAYERS, HAZARD_TILE_LAYERS, HILLSHADE_TILE_LAYER } from './capture';
 
 // Leaflet 地図（要件 FR-101〜105）。背景は地理院タイル、ハザード／陰影は重ね合わせタイル、
 // 道路・水域・施設は Overpass 実取得ジオメトリを描画する。マーカーは divIcon を用いるため
 // 既定マーカー画像のパス問題を回避できる。
+// タイル URL・出典表記は capture.ts の定義（BASE_TILE_LAYERS / HAZARD_TILE_LAYERS /
+// HILLSHADE_TILE_LAYER）と共用し、地図キャプチャ（Issue #274）と二重管理しない。
 
-const BASE_URLS: Record<BaseLayer, { url: string; attr: string; ext: string }> = {
-  pale: { url: 'https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', attr: '地理院タイル', ext: 'png' },
-  std: { url: 'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', attr: '地理院タイル', ext: 'png' },
-  photo: { url: 'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', attr: '地理院タイル(シームレス空中写真)', ext: 'jpg' },
-};
+const HAZARD_LAYERS = new Map(HAZARD_TILE_LAYERS.map((t) => [t.key, t]));
 
 // ハザードタイル専用ペイン。ダークテーマの invert フィルタ（styles.css の
 // .leaflet-tile-pane）の適用範囲外に置き、洪水浸水・土砂災害の色を凡例と一致させる。
@@ -20,12 +19,12 @@ const BASE_URLS: Record<BaseLayer, { url: string; attr: string; ext: string }> =
 const HAZARD_PANE = 'ocsrc-hazard';
 const HAZARD_PANE_Z_INDEX = '250';
 
-export function SiteMap() {
+export function SiteMap({ mapRef }: { mapRef?: React.MutableRefObject<L.Map | null> }) {
   const { state } = useApp();
   const { location, features, baseLayer, overlays } = state;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
   const baseLayerObjRef = useRef<L.TileLayer | null>(null);
   const overlayObjsRef = useRef<Partial<Record<OverlayKey, L.Layer>>>({});
 
@@ -45,11 +44,12 @@ export function SiteMap() {
     const el = containerRef.current;
     const center: [number, number] = [location.lat, location.lon];
     const map = L.map(el, { zoomControl: true, attributionControl: true }).setView(center, 16);
-    mapRef.current = map;
+    mapInstanceRef.current = map;
+    if (mapRef) mapRef.current = map;
     map.createPane(HAZARD_PANE).style.zIndex = HAZARD_PANE_Z_INDEX;
 
-    const b = BASE_URLS[baseRef.current];
-    const base = L.tileLayer(b.url, { maxZoom: 18, attribution: b.attr }).addTo(map);
+    const b = BASE_TILE_LAYERS[baseRef.current];
+    const base = L.tileLayer(b.urlTemplate, { maxZoom: 18, attribution: b.attribution }).addTo(map);
     baseLayerObjRef.current = base;
 
     buildOverlays(location, features, overlayObjsRef);
@@ -76,7 +76,8 @@ export function SiteMap() {
 
     return () => {
       map.remove();
-      mapRef.current = null;
+      mapInstanceRef.current = null;
+      if (mapRef) mapRef.current = null;
       baseLayerObjRef.current = null;
       overlayObjsRef.current = {};
     };
@@ -86,18 +87,18 @@ export function SiteMap() {
 
   // ---- ベースマップ切替 ----
   useEffect(() => {
-    const map = mapRef.current;
+    const map = mapInstanceRef.current;
     if (!map) return;
     if (baseLayerObjRef.current) map.removeLayer(baseLayerObjRef.current);
-    const b = BASE_URLS[baseLayer];
-    baseLayerObjRef.current = L.tileLayer(b.url, { maxZoom: 18, attribution: b.attr }).addTo(map);
+    const b = BASE_TILE_LAYERS[baseLayer];
+    baseLayerObjRef.current = L.tileLayer(b.urlTemplate, { maxZoom: 18, attribution: b.attribution }).addTo(map);
     // ベースは最背面へ
     baseLayerObjRef.current.bringToBack();
   }, [baseLayer]);
 
   // ---- レイヤ表示切替 ----
   useEffect(() => {
-    const map = mapRef.current;
+    const map = mapInstanceRef.current;
     if (!map) return;
     applyOverlays(map, overlayObjsRef.current, overlays);
   }, [overlays]);
@@ -115,9 +116,9 @@ function buildOverlays(
 
   ov.range = L.circle(center, { radius: location.radius, color: '#2E5AAC', weight: 2, fillColor: '#2E5AAC', fillOpacity: 0.06, dashArray: '5 5' });
 
-  ov.hillshade = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/hillshademap/{z}/{x}/{y}.png', { opacity: 0.5, attribution: '地理院タイル(陰影起伏図)' });
-  ov.flood = L.tileLayer('https://disaportaldata.gsi.go.jp/raster/01_flood_l2_shinsuishin_data/{z}/{x}/{y}.png', { opacity: 0.6, pane: HAZARD_PANE, attribution: 'ハザードマップポータルサイト' });
-  ov.sediment = L.tileLayer('https://disaportaldata.gsi.go.jp/raster/05_dosekiryukeikaikuiki/{z}/{x}/{y}.png', { opacity: 0.6, pane: HAZARD_PANE, attribution: 'ハザードマップポータルサイト' });
+  ov.hillshade = L.tileLayer(HILLSHADE_TILE_LAYER.urlTemplate, { opacity: 0.5, attribution: HILLSHADE_TILE_LAYER.attribution });
+  ov.flood = L.tileLayer(HAZARD_LAYERS.get('flood')!.urlTemplate, { opacity: 0.6, pane: HAZARD_PANE, attribution: HAZARD_LAYERS.get('flood')!.attribution });
+  ov.sediment = L.tileLayer(HAZARD_LAYERS.get('sediment')!.urlTemplate, { opacity: 0.6, pane: HAZARD_PANE, attribution: HAZARD_LAYERS.get('sediment')!.attribution });
 
   ov.roads = L.layerGroup((features.roads || []).map((line) => L.polyline(line, { color: '#B5701A', weight: 4, opacity: 0.8 })));
   ov.water = L.layerGroup((features.water || []).map((line) => L.polyline(line, { color: '#2E5AAC', weight: 5, opacity: 0.6 })));

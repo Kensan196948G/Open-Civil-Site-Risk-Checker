@@ -26,6 +26,7 @@ import type {
   SourceLedgerEntry,
   Theme,
 } from './types';
+import type { MapCaptureResult } from './map/capture';
 import { SAMPLE } from './data/constants';
 import { cloneLedger } from './data/sources';
 import { loadAnalysisDefaults } from './settings/appSettings';
@@ -91,6 +92,10 @@ export interface AppState {
   currentSaved: boolean;
   /** 案件保存先（Issue #111）。server=案件台帳 API / local=localStorage フォールバック。 */
   caseSaveState: { kind: 'server' | 'local'; code?: string; id?: string } | null;
+  /** 地図キャプチャ結果（Issue #274）。分析画面で取得し、調査パックへ同梱する。 */
+  mapCapture: MapCaptureResult | null;
+  /** ハザードタイルをキャプチャ画像へ含めるか（ライセンス考慮・既定 false）。 */
+  captureHazardLayers: boolean;
 }
 
 function initialState(): AppState {
@@ -128,6 +133,8 @@ function initialState(): AppState {
     liveCases: loadLiveCases(),
     currentSaved: false,
     caseSaveState: null,
+    mapCapture: null,
+    captureHazardLayers: false,
   };
 }
 
@@ -168,6 +175,9 @@ export interface AppController {
   // report
   setFmt: (f: 'md' | 'csv') => void;
   setVis: (v: 'internal' | 'public') => void;
+  // map capture (Issue #274)
+  setMapCapture: (c: MapCaptureResult | null) => void;
+  setCaptureHazardLayers: (v: boolean) => void;
   // sources
   testSource: (key: SourceKey) => void;
 }
@@ -224,8 +234,9 @@ export function useAppController(): AppController {
     };
 
     // 取得ステップを pending で初期化（部分結果表示）。新規実行は未保存にリセット。
+    // 地図キャプチャ（Issue #274）も前回地点の古い画像が混入しないようリセットする。
     const steps: FetchStep[] = STEP_DEFS.map((d) => ({ key: d.key, name: d.name, status: 'pending' }));
-    setState((s) => ({ ...s, running: true, formError: '', fetchSteps: steps, features: { roads: [], water: [], facilities: [] }, currentSaved: false }));
+    setState((s) => ({ ...s, running: true, formError: '', fetchSteps: steps, features: { roads: [], water: [], facilities: [] }, currentSaved: false, mapCapture: null, captureHazardLayers: false }));
 
     const onStep = (key: SourceKey, status: FetchStep['status']) => {
       setState((s) => ({ ...s, fetchSteps: s.fetchSteps.map((x) => (x.key === key ? { ...x, status } : x)) }));
@@ -292,6 +303,7 @@ export function useAppController(): AppController {
           categoryFilter: 'all',
           memoText: '',
           currentSaved: true,
+          mapCapture: null, // 復元案件は地図が再構築されるため、前回のキャプチャは破棄（#274）
         }));
         return;
       }
@@ -407,6 +419,9 @@ export function useAppController(): AppController {
   const setFmt = useCallback((f: 'md' | 'csv') => patch({ reportFormat: f }), [patch]);
   const setVis = useCallback((v: 'internal' | 'public') => patch({ reportVisibility: v }), [patch]);
 
+  const setMapCapture = useCallback((c: MapCaptureResult | null) => patch({ mapCapture: c }), [patch]);
+  const setCaptureHazardLayers = useCallback((v: boolean) => patch({ captureHazardLayers: v }), [patch]);
+
   const testSource = useCallback((key: SourceKey) => {
     setState((s) => ({ ...s, sources: s.sources.map((x) => (x.key === key ? { ...x, _testing: true } : x)) }));
     void pingSource(key).then((res) => {
@@ -447,6 +462,8 @@ export function useAppController(): AppController {
       memoTextOrDefault,
       setFmt,
       setVis,
+      setMapCapture,
+      setCaptureHazardLayers,
       testSource,
     }),
     [
@@ -478,6 +495,8 @@ export function useAppController(): AppController {
       memoTextOrDefault,
       setFmt,
       setVis,
+      setMapCapture,
+      setCaptureHazardLayers,
       testSource,
     ],
   );

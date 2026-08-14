@@ -11,7 +11,7 @@ const REPORT_SECTIONS = ['調査条件', '確認優先度サマリー', 'カテ�
 
 export function ReportScreen() {
   const { state, go, setFmt, setVis } = useApp();
-  const { ranOnce, location, findings, sources, reportFormat, reportVisibility, fetchedAt } = state;
+  const { ranOnce, location, findings, sources, reportFormat, reportVisibility, fetchedAt, mapCapture } = state;
 
   const preview = useMemo(() => {
     if (!location) return '';
@@ -83,15 +83,20 @@ export function ReportScreen() {
             </button>
           </div>
 
-          <div style={fieldLabel}>調査パック（Issue #113）</div>
+          <div style={fieldLabel}>調査パック（Issue #113・地図キャプチャ #274）</div>
           <div style={{ padding: '11px 12px', background: 'var(--surface-3)', borderRadius: 7, marginBottom: 20 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.7, marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.7, marginBottom: 8 }}>
               A4 印刷向けレポート（出典一覧・確認チェックリスト・免責文・承認欄）を新しいウィンドウで開き、ブラウザの印刷（PDF 保存）で出力します。
+            </div>
+            <div style={{ fontSize: 10.5, lineHeight: 1.6, marginBottom: 8, color: mapCapture ? 'var(--ok-text)' : 'var(--text-3)' }}>
+              {mapCapture
+                ? `✓ 地図画像: 取得済み（${mapCapture.capturedAt.slice(11, 19)}・${mapCapture.width}×${mapCapture.height}px・出典明示つき）`
+                : '地図画像: 未取得 — 分析画面の「地図画像を取得」から取得すると調査パックに同梱されます'}
             </div>
             <button
               onClick={() => {
                 if (!location) return;
-                const html = buildPackHtml({ location, findings, sources, visibility: reportVisibility, fetchedAt });
+                const html = buildPackHtml({ location, findings, sources, visibility: reportVisibility, fetchedAt, mapCapture });
                 openPackForPrint(html);
               }}
               style={{ width: '100%', padding: 12, background: 'var(--surface)', color: 'var(--accent)', border: '1.5px solid var(--accent-border)', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
