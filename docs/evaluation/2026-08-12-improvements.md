@@ -1059,8 +1059,8 @@ Issue #175（候補地比較）の実務利用（社内レビュー・紙配布�
 
 | # | 内容 | 変更ファイル |
 |---|---|---|
-| 1 | **最近の住所**（localStorage に最大 5 件・住所入力で実行した入力を記録・ワンクリック再入力） | `frontend/src/settings/recentAddresses.ts`（新規）・`screens/InputScreen.tsx`・`store.tsx` |
-| 2 | 記録タイミング: 分析成功時に住所入力（address 型）のみ記録（座標入力・案件起点は対象外）。重複除去・最大件数 | `store.tsx`（doRun） |
+| 1 | **最近の住所**（localStorage に最大 5 件・住所入力で実行した入力を記録・ワンクリック再入力） | `frontend/src/settings/recentAddresses.ts`（新規）・`frontend/src/screens/InputScreen.tsx`・`frontend/src/store.tsx` |
+| 2 | 記録タイミング: 分析成功時に住所入力（address 型）のみ記録（座標入力・案件起点は対象外）。重複除去・最大件数 | `frontend/src/store.tsx`（doRun） |
 | 3 | テスト: パース（不正 JSON・非文字列・空）・追加（先頭/重複/空無視/最大件数）の 7 件 | `frontend/src/settings/recentAddresses.test.ts`（新規） |
 
 ### 40.2 検証

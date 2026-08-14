@@ -5,14 +5,17 @@
 const KEY = 'ocsrc-recent-addresses';
 export const MAX_RECENT_ADDRESSES = 5;
 
-/** 履歴をパースする（純粋・不正 JSON・非文字列・空文字は除外）。 */
+/** 履歴をパースする（純粋・不正 JSON・非文字列・空文字は除外・trim 後に重複除去）。 */
 export function parseRecentAddresses(json: string | null): string[] {
   if (!json) return [];
   try {
     const v: unknown = JSON.parse(json);
     if (!Array.isArray(v)) return [];
+    const seen = new Set<string>();
     return v
-      .filter((x): x is string => typeof x === 'string' && x.trim() !== '')
+      .filter((x): x is string => typeof x === 'string')
+      .map((s) => s.trim())
+      .filter((s) => s !== '' && !seen.has(s) && (seen.add(s), true))
       .slice(0, MAX_RECENT_ADDRESSES);
   } catch {
     return [];

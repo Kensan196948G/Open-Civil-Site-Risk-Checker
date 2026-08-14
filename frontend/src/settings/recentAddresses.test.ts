@@ -19,6 +19,13 @@ describe('parseRecentAddresses', () => {
     ]);
   });
 
+  it('保存済み履歴も trim・重複除去して正規化する（前後空白・重複チップを防ぐ）', () => {
+    expect(parseRecentAddresses(JSON.stringify([' 東京都千代田区（架空） ', '東京都千代田区（架空）', 'A（架空）']))).toEqual([
+      '東京都千代田区（架空）',
+      'A（架空）',
+    ]);
+  });
+
   it('最大件数に丸める', () => {
     const many = Array.from({ length: 10 }, (_, i) => `住所${i}（架空）`);
     expect(parseRecentAddresses(JSON.stringify(many))).toHaveLength(MAX_RECENT_ADDRESSES);
