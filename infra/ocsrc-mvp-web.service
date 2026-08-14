@@ -1,0 +1,29 @@
+[Unit]
+# Open Civil Site Risk Checker — MVP/Prototype Web (server.mjs, dummy-data build).
+# Serves frontend/dist-mvp (VITE_SHOW_DUMMY=true build: ダミーデータ表示のみ) on :8701.
+# NOTE: 公開する前に /etc/ocsrc/mvp-web.env に OCSRC_ACCESS_TEAM_DOMAIN / OCSRC_ACCESS_AUD を
+# 設定すること（本番 ocsrc-web と同じ Access JWT 検証・未設定のまま公開しない）。
+# 参照: docs/deploy-backend.md（MVP セクション）・README（MVP URL）
+Description=Open Civil Site Risk Checker MVP Web (OCSRC SPA, dummy-only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kensan
+Environment=NODE_ENV=production
+Environment=HOST=0.0.0.0
+Environment=PORT=8701
+# MVP はダミーデータ表示ビルド（VITE_SHOW_DUMMY=true）を配信する。
+Environment=DIST=/home/kensan/Projects/Mirai-DX-Project/Open-Civil-Site-Risk-Checker/frontend/dist-mvp
+# Access JWT 検証（本番と同じ値・/etc/ocsrc/mvp-web.env で提供）
+EnvironmentFile=-/etc/ocsrc/mvp-web.env
+Environment=PATH=/home/kensan/.nvm/versions/node/v25.2.1/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=/home/kensan/Projects/Mirai-DX-Project/Open-Civil-Site-Risk-Checker/frontend
+ExecStart=/home/kensan/.nvm/versions/node/v25.2.1/bin/node /home/kensan/Projects/Mirai-DX-Project/Open-Civil-Site-Risk-Checker/frontend/server.mjs
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

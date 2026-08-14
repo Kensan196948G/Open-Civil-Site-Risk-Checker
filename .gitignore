@@ -2,6 +2,7 @@
 node_modules/
 **/node_modules/
 dist/
+dist-mvp/
 **/dist/
 dist-ssr/
 .vite/

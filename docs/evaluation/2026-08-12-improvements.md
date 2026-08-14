@@ -1416,3 +1416,42 @@ MVP/関係者レビュー環境は実データを一切使用せず、架空ダ�
 6. AI 概算単価実値（OCSRC_AI_COST_*・ユーザー判断・コード変更不要で調整可能化）
 7. 案件台帳・データソース台帳の本番有効化判断（ユーザー判断）
 8. TS7（#109）・バックアップ復元演習（人間実施）・プッシュ通知/PWA/RAG（将来バックログ）・Low 2 件（実害なし）
+
+## 53. 追記（2026-08-15・第54弾）: MVP サブドメインのセットアップ着手（ユーザー指示対応）
+
+### 53.1 実施内容（CTO が実行・安全設計）
+
+| # | 内容 | 結果 |
+|---|---|---|
+| 1 | MVP 用ビルド（`VITE_SHOW_DUMMY=true` → `frontend/dist-mvp`）を作成・ローカル検証（:8701 で 200・healthz 200・ダミー表示確認） | ✅ |
+| 2 | Cloudflare トンネル `ocsrc-mvp` を作成・`riskchecker-mvp.mirai-dx-platform.com` の DNS ルートを設定（誤ルートは overwrite で修正） | ✅ |
+| 3 | systemd ユニット（`infra/ocsrc-mvp-web.service` :8701・`infra/ocsrc-mvp-tunnel.service`）と tunnel 設定（`~/.cloudflared/ocsrc-mvp-config.yml`）を準備 | ✅ |
+| 4 | `.gitignore` に `dist-mvp/` を追加 | ✅ |
+| 5 | **セキュリティ確認**: MVP Web を Access 未設定のまま LAN 公開しないよう停止（server.mjs は HOST=0.0.0.0 のため無認証 /api プロキシ公開を回避）。トンネルコネクタは未起動のため外部到達不可（安全） | ✅ |
+
+### 53.2 ブロッカー（要ユーザー操作・Cloudflare 権限）
+
+1. **Access アプリ作成**（`riskchecker-mvp.mirai-dx-platform.com`）: Zero Trust ダッシュボードでのみ作成可（deploy-backend.md 295 行: API は読み取り専用スコープ・書き込みは失敗）。本番 `riskchecker` と同様に ID ベース認証を設定
+2. **`OCSRC_ACCESS_TEAM_DOMAIN` / `OCSRC_ACCESS_AUD` の値**: 本番 web.env は nobody のみ読取可・sudo 不可のため CTO からは参照不能。ユーザーが `/etc/ocsrc/mvp-web.env` に本番と同じ値を設定
+3. 上記完了後に `systemctl enable --now ocsrc-mvp-web ocsrc-mvp-tunnel` で起動 → CTO が外部検証
+
+### 53.3 #94（/healthz エッジ除外）・#240（IdP 判断）
+
+- #94: 外部 `/healthz` は 302 のまま（未対応）。**要ユーザー**: Zero Trust ダッシュボードで `/healthz` 専用 Access アプリ（bypass ポリシー）を作成（手順は Issue #94 コメント）→ CTO が外部 200 を検証
+- #240: IdP 接続（Entra ID 等）or 現状維持の判断待ち
+
+### 53.4 A31/A33 実データ・AI 単価・案件台帳有効化
+
+- A31/A33 実データ投入: **要規約確認・本番 DB 操作**（objective の「実データ投入は本番対象外」）。取込パイプライン・手順は整備済み（README・#112）。本番投入はユーザー確認後に実施
+- AI 概算単価: 既定 3.0/15.0（USD/百万トークン・広く公表される Sonnet API レートに一致）を `OCSRC_AI_COST_*` で調整可能（#306 済み）。契約上の実値はユーザー判断
+- 案件台帳・データソース台帳の本番有効化: ロール割当（`OCSRC_CASE_*_USERS`）の実ユーザー指定が必要（ユーザー提供待ち）。本番 flag 変更は確認後に実施
+
+### 53.5 残課題（更新）
+
+1. MVP 公開: Access アプリ作成 → mvp-web.env 設定 → systemd 起動（ユーザー操作・手順整備済み・CTO が起動後検証）
+2. #94 /healthz 除外（要 Cloudflare ダッシュボード操作・作成後 CTO が curl 検証）
+3. #240 IdP 判断（ユーザー）
+4. A31/A33 実データ本番投入（要規約確認・ユーザー確認後）
+5. 案件台帳・データソース台帳の本番有効化（ロール割当の実ユーザー指定待ち）
+6. 実ブラウザ目視確認（本番反映後・地図キャプチャ/比較マップ/気象警報チェック・ユーザー完了連絡待ち）
+7. TS7（#109）・バックアップ復元演習（人間実施）・プッシュ通知/PWA/RAG（将来バックログ）・Low 2 件（実害なし）
