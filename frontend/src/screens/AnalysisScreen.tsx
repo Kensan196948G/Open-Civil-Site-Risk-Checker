@@ -1,6 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import type { Map as LeafletMap } from 'leaflet';
 import { useApp } from '../store';
 import { SiteMap } from '../map/SiteMap';
+import { BASE_TILE_LAYERS, HAZARD_EXCLUSION_REASON, HAZARD_TILE_LAYERS, HILLSHADE_TILE_LAYER } from '../map/capture';
+import { captureMap } from '../map/captureMap';
 import { decorate } from '../decorate';
 import { countsOf, memoPreview } from '../risk/memo';
 import { SOURCE_SHORT, getPrio } from '../data/constants';
@@ -37,8 +40,49 @@ const CHIP_DEFS: [string, string][] = [
 const GRADES: Priority[] = ['A', 'B', 'C', 'D'];
 
 export function AnalysisScreen() {
-  const { state, go, setBase, toggleOverlay, setCategoryFilter, openFinding, saveCurrentAsCase, clearResult } = useApp();
-  const { ranOnce, location, baseLayer, overlays, categoryFilter, findings, sources, theme, currentSaved } = state;
+  const { state, go, setBase, toggleOverlay, setCategoryFilter, openFinding, saveCurrentAsCase, clearResult, setMapCapture, setCaptureHazardLayers } = useApp();
+  const { ranOnce, location, baseLayer, overlays, categoryFilter, findings, sources, theme, currentSaved, captureHazardLayers, mapCapture, features } = state;
+
+  // 地図キャプチャ（Issue #274）の UI 状態。
+  const mapRef = useRef<LeafletMap | null>(null);
+  const [captureBusy, setCaptureBusy] = useState(false);
+  const [captureMsg, setCaptureMsg] = useState('');
+
+  const doCapture = async () => {
+    const map = mapRef.current;
+    if (!map || !location) return;
+    setCaptureBusy(true);
+    setCaptureMsg('');
+    try {
+      const hazardShown = HAZARD_TILE_LAYERS.filter((t) => overlays[t.key as OverlayKey]);
+      const result = await captureMap(
+        map,
+        {
+          base: BASE_TILE_LAYERS[baseLayer],
+          extraTiles: overlays.hillshade ? [HILLSHADE_TILE_LAYER] : [],
+          hazard: captureHazardLayers ? hazardShown : [],
+          polylines: [
+            ...(overlays.roads ? [{ label: 'OSM道路', lines: features.roads, color: '#B5701A', weight: 4, opacity: 0.8 }] : []),
+            ...(overlays.water ? [{ label: 'OSM/KSJ水路', lines: features.water, color: '#2E5AAC', weight: 5, opacity: 0.6 }] : []),
+          ],
+          range: overlays.range ? { lat: location.lat, lon: location.lon, radiusM: location.radius, color: '#2E5AAC', weight: 2 } : undefined,
+          markers: overlays.facilities ? features.facilities.map((f) => ({ lat: f.lat, lon: f.lon, label: f.label })) : [],
+          excluded: (!captureHazardLayers ? hazardShown : []).map((t) => ({ label: t.label, reason: HAZARD_EXCLUSION_REASON })),
+          site: { lat: location.lat, lon: location.lon },
+        },
+        { scale: 2, includeHazardLayers: captureHazardLayers },
+      );
+      setMapCapture(result);
+      const time = result.capturedAt.slice(11, 19);
+      setCaptureMsg(`✓ 取得済み ${time}（調査パックへ同梱されます）`);
+    } catch (e) {
+      setCaptureMsg(`✗ 取得失敗: ${e instanceof Error ? e.message : '不明なエラー'}`);
+    } finally {
+      setCaptureBusy(false);
+    }
+  };
+
+  const hazardDisplayed = HAZARD_TILE_LAYERS.some((t) => overlays[t.key as OverlayKey]);
 
   const allDec = useMemo(() => findings.map((f) => decorate(f, theme)), [findings, theme]);
   const counts = useMemo(() => countsOf(findings), [findings]);
@@ -161,7 +205,45 @@ export function AnalysisScreen() {
 
           {/* 地図 */}
           <div className="ocsrc-analysis-map" style={{ flex: 1, position: 'relative', minWidth: 0 }}>
-            <SiteMap />
+            <SiteMap mapRef={mapRef} />
+            {/* 地図キャプチャ（Issue #274） */}
+            <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 500, display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 240, pointerEvents: 'auto' }}>
+              <div style={{ background: 'var(--map-legend)', border: '1px solid var(--border-3)', borderRadius: 8, padding: '9px 10px', boxShadow: '0 1px 4px rgba(0,0,0,.18)', fontSize: 11, lineHeight: 1.6, color: 'var(--text-2)' }}>
+                <div style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text)' }}>📷 地図画像（調査パック用）</div>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, cursor: 'pointer', marginBottom: 7 }}>
+                  <input
+                    type="checkbox"
+                    checked={captureHazardLayers}
+                    onChange={(e) => setCaptureHazardLayers(e.target.checked)}
+                    style={{ marginTop: 2, accentColor: 'var(--accent)' }}
+                  />
+                  <span>
+                    ハザードレイヤも含める
+                    <span style={{ display: 'block', fontSize: 9.5, color: 'var(--text-3)' }}>
+                      （保存・再配布条件はレイヤごとに要確認: docs/data-license-ledger.md）
+                    </span>
+                  </span>
+                </label>
+                {hazardDisplayed && !captureHazardLayers && (
+                  <div style={{ fontSize: 9.5, color: 'var(--warn-text-2)', marginBottom: 6 }}>
+                    ⚠ 表示中のハザードレイヤは画像に含めません（利用条件確認が必要）。
+                  </div>
+                )}
+                <button
+                  onClick={() => void doCapture()}
+                  disabled={captureBusy}
+                  style={{ width: '100%', padding: '7px 10px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: captureBusy ? 'wait' : 'pointer' }}
+                >
+                  {captureBusy ? '画像化中…' : mapCapture ? '再取得' : '地図画像を取得'}
+                </button>
+                {captureMsg && <div style={{ fontSize: 9.5, marginTop: 6, color: 'var(--text-2)', wordBreak: 'break-all' }}>{captureMsg}</div>}
+                {mapCapture && (
+                  <div style={{ fontSize: 9.5, marginTop: 4, color: 'var(--text-3)' }}>
+                    出典・取得日時は画像キャプションと調査パックに出典明示されます。
+                  </div>
+                )}
+              </div>
+            </div>
             <div style={{ position: 'absolute', left: 10, bottom: 10, zIndex: 500, display: 'flex', flexDirection: 'column', gap: 5, pointerEvents: 'none' }}>
               {[
                 { color: 'var(--err-text)', label: '調査地点' },

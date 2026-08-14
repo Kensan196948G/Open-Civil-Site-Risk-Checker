@@ -5,6 +5,7 @@
 // 断定表現なし（安全/危険を言わない）方針をテンプレート文言でも維持する。
 
 import type { Finding, SiteLocation, SourceLedgerEntry } from '../types';
+import type { MapCaptureResult } from '../map/capture';
 import { CATEGORY_LABEL, SOURCE_SHORT, STATUS, distanceLabel } from '../data/constants';
 import { countsOf } from '../risk/memo';
 
@@ -15,6 +16,8 @@ export interface PackContext {
   visibility: 'internal' | 'public';
   fetchedAt: string;
   caseCode?: string;
+  /** 地図キャプチャ（Issue #274）。分析画面で取得した PNG を同梱する。 */
+  mapCapture?: MapCaptureResult | null;
 }
 
 /** 現地確認チェックリスト項目（架空のデモ用・断定しない）。 */
@@ -38,7 +41,7 @@ function esc(s: string): string {
 
 /** A4 印刷向けの自己完結 HTML 調査パックを生成する。 */
 export function buildPackHtml(ctx: PackContext): string {
-  const { location, findings, sources, visibility, fetchedAt, caseCode } = ctx;
+  const { location, findings, sources, visibility, fetchedAt, caseCode, mapCapture } = ctx;
   const counts = countsOf(findings);
   const visLabel = visibility === 'internal' ? '社外秘 / 社内限定' : '社外可';
 
@@ -68,6 +71,15 @@ export function buildPackHtml(ctx: PackContext): string {
     (c) => `<tr><td class="check">□</td><td>${esc(c.label)}</td><td class="check">□</td><td></td></tr>`,
   ).join('\n');
 
+  // 地図キャプチャセクション（Issue #274）。画像・出典キャプション・ライセンス注記を同梱する。
+  const mapCaptureHtml = mapCapture
+    ? `<figure>
+        <img src="${esc(mapCapture.dataUrl)}" alt="候補地周辺の地図キャプチャ（出典: ${esc(mapCapture.baseLayerLabel)}・${esc(mapCapture.center.lat.toFixed(5))}, ${esc(mapCapture.center.lon.toFixed(5))}）" style="width:100%;max-width:185mm;border:1px solid #ccd4de;border-radius:4px;"/>
+        <figcaption class="muted">${esc(mapCapture.attribution)}</figcaption>
+        ${mapCapture.notes.map((n) => `<p class="muted">※ ${esc(n)}</p>`).join('\n')}
+      </figure>`
+    : `<p class="muted">地図画像は未取得です。分析画面の「地図画像を取得」から取得すると、ここに表示されます。</p>`;
+
   return `<!doctype html>
 <html lang="ja">
 <head>
@@ -85,6 +97,8 @@ export function buildPackHtml(ctx: PackContext): string {
   th, td { border: 1px solid #ccd4de; padding: 5pt 7pt; text-align: left; vertical-align: top; font-size: 9.5pt; }
   th { background: #eef2f8; }
   .check { text-align: center; width: 22pt; }
+  figure { margin: 8pt 0; }
+  figcaption { margin-top: 4pt; }
   .notice { background: #fdf6e3; border: 1px solid #e8d9a0; padding: 8pt 10pt; font-size: 9.5pt; margin: 8pt 0; }
   .approval td { height: 34pt; }
   .footer { margin-top: 18pt; font-size: 8.5pt; color: #5a6678; text-align: center; }
@@ -104,25 +118,28 @@ export function buildPackHtml(ctx: PackContext): string {
     <tr><th>公開区分</th><td>${esc(visLabel)}</td></tr>
   </table>
 
-  <h2>2. 確認優先度サマリー</h2>
+  <h2>2. 位置関係・ハザード重ね合わせ図（地図キャプチャ）</h2>
+  ${mapCaptureHtml}
+
+  <h2>3. 確認優先度サマリー</h2>
   <table>
     <tr><th>A: 専門確認優先</th><th>B: 追加確認推奨</th><th>C: 参考情報あり</th><th>D: データ不足</th></tr>
     <tr><td>${counts.A}</td><td>${counts.B}</td><td>${counts.C}</td><td>${counts.D}</td></tr>
   </table>
 
-  <h2>3. カテゴリ別確認結果</h2>
+  <h2>4. カテゴリ別確認結果</h2>
   <table>
     <tr><th style="width:34%">項目</th><th style="width:16%">状態</th><th style="width:20%">出典</th><th>注意</th></tr>
     ${findingRows || '<tr><td colspan="4" class="muted">確認結果なし（データ未取得）</td></tr>'}
   </table>
 
-  <h2>4. 参照データ・出典一覧</h2>
+  <h2>5. 参照データ・出典一覧</h2>
   <table>
     <tr><th>データソース</th><th>ライセンス</th><th>状態 / 鮮度 / 利用条件</th></tr>
     ${sourceRows}
   </table>
 
-  <h2>5. 現地確認チェックリスト</h2>
+  <h2>6. 現地確認チェックリスト</h2>
   <table>
     <tr><th style="width:22pt">確認</th><th>項目</th><th style="width:22pt">確認</th><th>メモ</th></tr>
     ${checklistRows}
@@ -134,7 +151,7 @@ export function buildPackHtml(ctx: PackContext): string {
     公的資料（自治体公表のハザード区域図等）と現地確認による再確認が必要です。
   </div>
 
-  <h2>6. 承認欄</h2>
+  <h2>7. 承認欄</h2>
   <table class="approval">
     <tr><th style="width:16%">作成者</th><td></td><th style="width:16%">確認者</th><td></td><th style="width:16%">承認者</th><td></td></tr>
     <tr><th>日付</th><td></td><th>日付</th><td></td><th>日付</th><td></td></tr>

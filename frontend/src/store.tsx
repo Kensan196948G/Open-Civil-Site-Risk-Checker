@@ -26,6 +26,7 @@ import type {
   SourceLedgerEntry,
   Theme,
 } from './types';
+import type { MapCaptureResult } from './map/capture';
 import { SAMPLE } from './data/constants';
 import { cloneLedger } from './data/sources';
 import { loadAnalysisDefaults } from './settings/appSettings';
@@ -91,6 +92,10 @@ export interface AppState {
   currentSaved: boolean;
   /** 案件保存先（Issue #111）。server=案件台帳 API / local=localStorage フォールバック。 */
   caseSaveState: { kind: 'server' | 'local'; code?: string; id?: string } | null;
+  /** 地図キャプチャ結果（Issue #274）。分析画面で取得し、調査パックへ同梱する。 */
+  mapCapture: MapCaptureResult | null;
+  /** ハザードタイルをキャプチャ画像へ含めるか（ライセンス考慮・既定 false）。 */
+  captureHazardLayers: boolean;
 }
 
 function initialState(): AppState {
@@ -128,6 +133,8 @@ function initialState(): AppState {
     liveCases: loadLiveCases(),
     currentSaved: false,
     caseSaveState: null,
+    mapCapture: null,
+    captureHazardLayers: false,
   };
 }
 
@@ -168,6 +175,9 @@ export interface AppController {
   // report
   setFmt: (f: 'md' | 'csv') => void;
   setVis: (v: 'internal' | 'public') => void;
+  // map capture (Issue #274)
+  setMapCapture: (c: MapCaptureResult | null) => void;
+  setCaptureHazardLayers: (v: boolean) => void;
   // sources
   testSource: (key: SourceKey) => void;
 }
@@ -407,6 +417,9 @@ export function useAppController(): AppController {
   const setFmt = useCallback((f: 'md' | 'csv') => patch({ reportFormat: f }), [patch]);
   const setVis = useCallback((v: 'internal' | 'public') => patch({ reportVisibility: v }), [patch]);
 
+  const setMapCapture = useCallback((c: MapCaptureResult | null) => patch({ mapCapture: c }), [patch]);
+  const setCaptureHazardLayers = useCallback((v: boolean) => patch({ captureHazardLayers: v }), [patch]);
+
   const testSource = useCallback((key: SourceKey) => {
     setState((s) => ({ ...s, sources: s.sources.map((x) => (x.key === key ? { ...x, _testing: true } : x)) }));
     void pingSource(key).then((res) => {
@@ -447,6 +460,8 @@ export function useAppController(): AppController {
       memoTextOrDefault,
       setFmt,
       setVis,
+      setMapCapture,
+      setCaptureHazardLayers,
       testSource,
     }),
     [
@@ -478,6 +493,8 @@ export function useAppController(): AppController {
       memoTextOrDefault,
       setFmt,
       setVis,
+      setMapCapture,
+      setCaptureHazardLayers,
       testSource,
     ],
   );
