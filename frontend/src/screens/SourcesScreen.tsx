@@ -13,7 +13,7 @@ import type { SourceLedgerEntry } from '../types';
 const COLS = '2fr 1.2fr 0.8fr 1fr 0.7fr 1.1fr 1fr 0.9fr';
 
 export function SourcesScreen() {
-  const { state, testSource } = useApp();
+  const { state, testSource, testAllSources } = useApp();
   const { sources, theme } = state;
   const PRIO = getPrio(theme);
   const [openKey, setOpenKey] = useState<SourceLedgerEntry['key'] | null>(null);
@@ -56,9 +56,19 @@ export function SourcesScreen() {
     <div style={{ position: 'absolute', inset: 0, overflow: 'auto', padding: '26px 28px 50px' }}>
       <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--accent)', letterSpacing: '1px', fontWeight: 600 }}>SCR-006</div>
       <h1 style={{ margin: '3px 0 4px', fontSize: 21, fontWeight: 700 }}>データソース管理</h1>
-      <p style={{ margin: '0 0 18px', fontSize: 12.5, color: 'var(--text-2)' }}>
-        API・公開GISデータの接続状態と利用条件を管理します。出典不明データはリスク判定に使用しません。
-      </p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+        <p style={{ margin: 0, fontSize: 12.5, color: 'var(--text-2)' }}>
+          API・公開GISデータの接続状態と利用条件を管理します。出典不明データはリスク判定に使用しません。
+        </p>
+        <span style={{ flex: 1 }} />
+        <button
+          onClick={testAllSources}
+          title="有効化されている全ソースを一括で接続テスト（接続テストボタンと同じ実経路）"
+          style={{ padding: '7px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 7, fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}
+        >
+          全ソースを一括テスト
+        </button>
+      </div>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
         <div className="ocsrc-table-scroll" tabIndex={0} role="region" aria-label="データソース一覧">
         <div className="ocsrc-grid-sources" style={{ display: 'grid', gridTemplateColumns: COLS, gap: 0, padding: '11px 16px', background: 'var(--surface-3)', borderBottom: '1px solid var(--border-2)', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '.3px' }}>
