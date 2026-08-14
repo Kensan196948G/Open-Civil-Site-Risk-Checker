@@ -344,6 +344,36 @@ frontend/src/
 
 > データの出所は `isDummy` フラグで常に追跡可能で、集計（KPI・優先度分布）はダミー込みの全件を対象にしつつ件数の内訳（実データ / ダミー）を併記します。
 
+### 🧪 サーバー台帳のデモ・確認手順（Issue #111 / #174）
+
+案件台帳（サーバー保存）・データソース台帳は **feature flag 既定 off** のため、デモ確認するには backend を有効化して seed を投入します（本番には影響しません）。
+
+```bash
+# 1) backend を案件台帳 + データソース台帳を有効化して起動
+cd backend
+OCSRC_CASE_STORE_ENABLED=true \
+OCSRC_DATA_SOURCE_STORE_ENABLED=true \
+OCSRC_DATABASE_URL=postgresql://app:***@127.0.0.1:5432/site_risk_checker \
+OCSRC_CASE_ADMIN_USERS=admin@example.com \
+OCSRC_CASE_APPROVER_USERS=approver@example.com \
+OCSRC_CASE_EDITOR_USERS=editor@example.com \
+OCSRC_CASE_AUDITOR_USERS=auditor@example.com \
+  uvicorn app.main:app
+
+# 2) デモ用の架空データを投入（案件3件: draft/submitted/approved + 監査ログ + データソース台帳7件）
+python -m app.seed_demo_cases --with-sources --database-url "$OCSRC_DATABASE_URL"
+# （--reset で削除して再投入。すべて架空値・実在情報なし）
+
+# 3) ブラウザで確認
+#  - ダッシュボード（SCR-000）: 案件台帳セクション（状態サマリー・申請/承認/履歴/開く）
+#  - 監査ログ（SCR-009）: フィルタ・CSV エクスポート
+#  - 候補地比較（SCR-010）: サーバー案件が「【サーバー】」ラベルで比較候補に追加
+#  - データソース管理（SCR-006）: サーバー台帳 + 再取込履歴
+#  - システム設定（SCR-008）: RBAC 権限マトリクス
+```
+
+> デモ用の架空値はすべて「（架空）」「デモ」と明記し、実在情報・個人情報・会社実データは含みません。seed は再生成可能で、UI・API・DB で参照整合性が保たれます。
+
 ### 🎨 テーマ（ライト / ダーク）
 
 ヘッダーのトグルでライト/ダークを切り替えます。構造色は CSS 変数（`src/styles.css` の `:root` / `:root[data-ocsrc-theme='dark']`）、意味色（確認優先度 A〜D・状態・案件状態）は JS のテーマ別パレット（`getPrio(theme)` 等）で解決します。選択は `localStorage` に保存され、`data-ocsrc-theme` 属性で適用されます。
@@ -437,7 +467,7 @@ curl http://127.0.0.1:8000/readyz             # → {"status":"ok","db":"ok",...
 | -------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Phase 2  | ✅ KSJ 実装済み | 国土数値情報のローカルDB化（PostgreSQL + PostGIS）+ FastAPI 空間検索 API（稼働中）。**ハザード区域判定（Issue #112・A31/A33 相当・合成サンプルで動作検証済み）**。**データ鮮度・ライセンス台帳（Issue #174・台帳 UI + レポート自動埋め込み + サーバ側永続化 `data_sources`/`data_source_refreshes`・feature flag 有効時のみ）**。実データ調達は利用規約確認後に実施 |
 | Phase 3  | ✅ 一部実装 | 気象庁 警報・注意報連携（実装済み・Issue #22）。xROAD は利用規約上の理由（匿名アクセス 403）、PLATEAU は試験運用・SLA無しのため見送り |
-| Phase 4  | 🚧 一部実装（flag 無効でデフォルト稼働） | 複数候補地比較・案件管理・社内レビュー機能。**案件台帳 API + RBAC + 監査ログ + 承認WF（Issue #111）、候補地比較ビュー（Issue #175）、調査パック（Issue #113・A4 印刷向け HTML/PDF）を実装済み**。案件台帳は本番 `OCSRC_CASE_STORE_ENABLED=false` のまま（preview/dev 検証後に有効化判断）。地図キャプチャ・承認WF連動は未着手 |
+| Phase 4  | 🚧 一部実装（flag 無効でデフォルト稼働） | 複数候補地比較・案件管理・社内レビュー機能。**案件台帳 API + RBAC + 監査ログ + 承認WF（Issue #111）、候補地比較ビュー（Issue #175・A4印刷対応）、調査パック（Issue #113・A4 印刷向け HTML/PDF）、監査ログのフィルタ/CSV エクスポート、RBAC 権限マトリクス可視化を実装済み**。案件台帳は本番 `OCSRC_CASE_STORE_ENABLED=false` のまま（preview/dev 検証後に有効化判断）。地図キャプチャ（#274・依存評価済み・自前実装方針）は未着手 |
 | Phase 5  | ⏳ 未着手 | Civil Open Data Intelligence Platform への統合                                                                                        |
 
 詳細は `docs/requirements.md` / `docs/detailed-specification.md` を参照。
