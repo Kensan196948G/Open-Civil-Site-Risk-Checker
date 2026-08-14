@@ -436,6 +436,49 @@ try {
   check('access: jwt header not forwarded to backend', authSeen['cf-access-jwt-assertion'] === undefined, `got=${authSeen['cf-access-jwt-assertion']}`);
   check('access: cookie (CF_Authorization) not forwarded to backend', authSeen['cookie'] === undefined, `got=${authSeen['cookie']}`);
 
+  // 監査用のユーザー識別子は web 層が検証済み JWT から付与し、バックエンドへ内部ヘッダで伝える。
+  const aiAuthPost = await request(webAuthPort, '/api/v1/ai/memo', {
+    method: 'POST',
+    headers: { ...jwtHeader(validJwt), 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt: '監査テスト' }),
+  });
+  const aiAuthSeen = aiAuthPost.status === 200 ? JSON.parse(aiAuthPost.body).headers || {} : {};
+  check(
+    'access: backend receives X-OCSRC-User from verified JWT',
+    aiAuthPost.status === 200 && aiAuthSeen['x-ocsrc-user'] === 'tester@example.com',
+    `status=${aiAuthPost.status} got=${aiAuthSeen['x-ocsrc-user']}`,
+  );
+
+  // クライアントが直送した X-OCSRC-User は除去され、検証済み JWT の識別子で上書きされる。
+  const spoofPost = await request(webAuthPort, '/api/v1/ai/memo', {
+    method: 'POST',
+    headers: {
+      ...jwtHeader(validJwt),
+      'content-type': 'application/json',
+      'x-ocsrc-user': 'attacker@example.com',
+    },
+    body: JSON.stringify({ prompt: 'なりすましテスト' }),
+  });
+  const spoofSeen = spoofPost.status === 200 ? JSON.parse(spoofPost.body).headers || {} : {};
+  check(
+    'access: client-supplied x-ocsrc-user is dropped (verified identity wins)',
+    spoofPost.status === 200 && spoofSeen['x-ocsrc-user'] === 'tester@example.com',
+    `status=${spoofPost.status} got=${spoofSeen['x-ocsrc-user']}`,
+  );
+
+  // Access 未設定（開発モード）では内部識別子自体を付与しない。
+  const devSpoof = await request(webUpPort, '/api/v1/ai/memo', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-ocsrc-user': 'attacker@example.com' },
+    body: JSON.stringify({ prompt: '開発モード' }),
+  });
+  const devSeen = devSpoof.status === 200 ? JSON.parse(devSpoof.body).headers || {} : {};
+  check(
+    'access: dev mode does not forward client x-ocsrc-user',
+    devSpoof.status === 200 && devSeen['x-ocsrc-user'] === undefined,
+    `status=${devSpoof.status} got=${devSeen['x-ocsrc-user']}`,
+  );
+
   // 失敗レート制限: 同一 IP で 10 回失敗すると、以後は有効 JWT でも窓内は 429。
   const RL_IP = { 'CF-Connecting-IP': '203.0.113.99' };
   let last403 = 0;

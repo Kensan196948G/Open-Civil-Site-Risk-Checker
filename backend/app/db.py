@@ -51,7 +51,7 @@ def _categorize_error(exc: BaseException) -> str:
     return "unknown"
 
 
-async def check_database(database_url: str, timeout: float = 8.0) -> tuple[str, float, str | None]:
+async def check_database(database_url: str, timeout: float = 20.0) -> tuple[str, float, str | None]:
     """Check database reachability.
 
     Returns (status, check_ms, error_category):

@@ -75,6 +75,13 @@ Neon はブランチベースの PITR（Point-in-Time Restore）を標準提供�
 | クォータリセット | 毎月 1 日（`quota_reset_at`） |
 | スロークエリ監視 | ⚠️ **`pg_stat_statements` 拡張が未インストール**。`list_slow_queries` 実行時に `NotFoundError` を確認済み（2026-07-14） |
 
+### cold start と監視の関係（Issue #238）
+
+- 本プロジェクトの compute は既定の autosuspend（5 分の非アクティブで suspend）設定のまま運用している（`suspend_timeout_seconds=0` = 既定 300 秒）。
+- 稼働中は readyz が 5 分間隔で接続するため、autosuspend と watchdog の間隔が近く、復帰（cold start）が 8 秒を超えると一時的に 503 になることがあった（2026-08-05〜11 に 7 件検知・すべて数分で自動回復）。
+- 再発防止として `OCSRC_DB_CHECK_TIMEOUT_SECONDS` の既定を 20 秒へ引き上げ、watchdog は DB のみの一時障害を連続 2 回失敗するまで起票しない方式へ変更した（Issue #238 対応 PR）。
+- 常時接続のキープアライブや autosuspend 無効化は Compute 稼働時間（課金）が増えるため、ユーザー判断の改善提案として追跡する。
+
 ### 改善提案（未実施・要ユーザー判断）
 
 `pg_stat_statements` の導入はデータを破壊しない追加的な拡張だが、本番 DB へのスキーマ変更に変わりないため、CTO からは自律実行せず提案に留める。
