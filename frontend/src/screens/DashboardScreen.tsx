@@ -126,6 +126,22 @@ export function DashboardScreen() {
     }, 200);
   };
 
+  // サーバー案件台帳（Issue #111）の CSV エクスポート（UTF-8 BOM 付き）。
+  const onExportServerCasesCsv = () => {
+    const records = serverCases.map(serverCaseToRecord).filter((x): x is CaseRecord => x !== null);
+    const blob = new Blob(['\uFEFF' + buildCasesCsv(records)], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ocsrc-server-cases_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      a.remove();
+    }, 200);
+  };
+
   const { agg, aggTotal, kpiCards } = useMemo(() => {
     const a: Record<Priority, number> = { A: 0, B: 0, C: 0, D: 0 };
     cases.forEach((c) => GRADES.forEach((g) => (a[g] += c.counts[g])));
@@ -270,6 +286,13 @@ export function DashboardScreen() {
                 {serverCases.length} 件
               </span>
               <span style={{ flex: 1 }} />
+              <button
+                onClick={onExportServerCasesCsv}
+                title="サーバー案件台帳を CSV でダウンロード（UTF-8 BOM 付き）"
+                style={{ padding: '6px 12px', borderRadius: 7, fontSize: 11.5, border: '1px solid var(--accent-border)', background: 'var(--surface)', color: 'var(--accent)', cursor: 'pointer', fontWeight: 600 }}
+              >
+                ↓ CSV
+              </button>
               {/* 状態サマリー: 承認待ち（submitted）を強調表示（Issue #111 承認WF） */}
               {serverCases.length > 0 && (
                 <span style={{ display: 'inline-flex', gap: 6, fontSize: 10.5, fontWeight: 700 }}>
