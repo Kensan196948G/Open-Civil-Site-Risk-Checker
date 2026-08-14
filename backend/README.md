@@ -30,6 +30,7 @@ ruff check .                   # Lint
 | GET | `/api/v1/reverse-geocode?lat=&lon=` | Nominatim `/reverse` プロキシ |
 | GET | `/api/v1/ai/status` | AI ブローカー設定状態（`configured` / `model` のみ。API キーは返さない） |
 | POST | `/api/v1/ai/memo` | AI 調査メモ生成ブローカー。キーはサーバー側のみ。プロンプト本文は監査ログへ出力しない |
+| GET | `/api/v1/ai/usage?days=` | AI 利用実績の集計（評価書 #20）。`ai_usage` テーブルの合計・日別・ユーザー別・概算費用を返す。DB 未設定・未到達は 503（「0 件」と区別） |
 | GET | `/api/v1/cases` | 案件一覧（viewer 以上・案件台帳が有効な場合のみ） |
 | POST | `/api/v1/cases` | 案件作成（editor 以上） |
 | GET | `/api/v1/cases/{id}` | 案件詳細（viewer 以上） |
@@ -54,6 +55,8 @@ ruff check .                   # Lint
 | `OCSRC_ANTHROPIC_MAX_CONCURRENCY` | `2` | 同時実行上限 |
 
 応答にはサーバー側で免責文の付与・断定表現の検出（`warnings`）が入り、利用は監査ログ（`ai_audit`）へ記録される。監査ログは `X-OCSRC-User`（web 層が Access JWT 検証後に付与する内部ヘッダ）でユーザーを識別し、プロンプト本文は記録しない。
+
+AI 呼び出しは監査ログ（`ai_audit`・stdout）に加えて **`ai_usage` テーブル（additive migration・DB 設定時のみ best-effort）** へ記録され、`GET /api/v1/ai/usage` で直近 N 日の利用実績（呼び出し数・成功/失敗・文字数・概算費用・ユーザー別）を集計できる。プロンプト本文は記録しない。費用は概算（トークン≈文字数/4・入力/出力別単価は `app/ai_usage.py` の定数）。
 
 ## 案件台帳・RBAC・監査ログ（Issue #111）
 

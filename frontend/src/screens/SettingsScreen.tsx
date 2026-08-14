@@ -6,10 +6,12 @@ import { ACTION_LABEL, ALL_ROLES, ROLE_DESC, ROLE_LABEL, buildMatrix, type CaseR
 import {
   PROVIDER_NAME,
   fetchAiServerStatus,
+  fetchAiUsage,
   testAiServerConnection,
   type AiServerStatus,
   type AiTestVerdict,
 } from '../settings/aiSettings';
+import { isEmptyUsage, recentDaily, usageTotalsText, type AiUsageSummary } from '../settings/aiUsage';
 import {
   canSaveAnalysisDefaults,
   clearAnalysisDefaults,
@@ -39,6 +41,23 @@ const inputStyle: React.CSSProperties = {
   color: 'var(--text)',
   fontFamily: "'IBM Plex Mono', monospace",
   boxSizing: 'border-box',
+};
+
+// AI 利用状況テーブルのセルスタイル（評価書 #20）。
+const usageTh: React.CSSProperties = {
+  textAlign: 'left',
+  padding: '4px 8px',
+  borderBottom: '1px solid var(--border-2)',
+  color: 'var(--text-3)',
+  fontWeight: 600,
+  whiteSpace: 'nowrap',
+};
+const usageTd: React.CSSProperties = {
+  padding: '4px 8px',
+  borderBottom: '1px solid var(--border-3)',
+  color: 'var(--text-2)',
+  fontFamily: "'IBM Plex Mono', monospace",
+  fontSize: 10.5,
 };
 
 const labelStyle: React.CSSProperties = {
@@ -103,10 +122,33 @@ export function SettingsScreen() {
   const [testingAi, setTestingAi] = useState(false);
   const [aiVerdict, setAiVerdict] = useState<AiTestVerdict | null>(null);
 
+  // ---- AI 利用状況（評価書 #20） ----
+  const [aiUsage, setAiUsage] = useState<AiUsageSummary | null>(null);
+  const [aiUsageState, setAiUsageState] = useState<'idle' | 'loading' | 'ok' | 'error'>('loading');
+  const [aiUsageError, setAiUsageError] = useState('');
+
   useEffect(() => {
     let alive = true;
     void fetchAiServerStatus().then((s) => {
       if (alive) setAiStatus(s);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    void fetchAiUsage(30).then((res) => {
+      if (!alive) return;
+      if (res.ok && res.usage) {
+        setAiUsage(res.usage);
+        setAiUsageState('ok');
+      } else {
+        setAiUsage(null);
+        setAiUsageState('error');
+        setAiUsageError(res.error || '利用実績を取得できませんでした');
+      }
     });
     return () => {
       alive = false;
@@ -248,6 +290,71 @@ export function SettingsScreen() {
         </div>
 
         <VerdictBanner verdict={aiVerdict} />
+
+        {/* ---- AI 利用状況（評価書 #20・費用管理） ---- */}
+        <div style={{ marginTop: 16, padding: '12px 14px', background: 'var(--surface-3)', borderRadius: 8, fontSize: 11.5, lineHeight: 1.7 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text)' }}>AI 利用状況（直近30日・サーバー記録）</div>
+          {aiUsageState === 'loading' && <div style={{ color: 'var(--text-3)' }}>取得中…</div>}
+          {aiUsageState === 'error' && (
+            <div style={{ color: 'var(--warn-text-2)' }}>
+              利用実績を取得できませんでした（{aiUsageError}）。サーバー側 DB（ai_usage テーブル）が未設定・未到達の場合に発生します。
+            </div>
+          )}
+          {aiUsageState === 'ok' && aiUsage && (
+            <>
+              {isEmptyUsage(aiUsage) ? (
+                <div style={{ color: 'var(--text-3)' }}>
+                  記録はまだありません（ai_usage テーブル導入後の AI 生成から集計されます）。
+                </div>
+              ) : (
+                <>
+                  <div style={{ color: 'var(--text-2)', fontWeight: 600, marginBottom: 8 }}>{usageTotalsText(aiUsage.total)}</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginBottom: 6 }}>日別（新しい順・最大7日）</div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 10, fontSize: 10.5 }}>
+                    <thead>
+                      <tr>
+                        <th style={usageTh}>日付</th>
+                        <th style={usageTh}>呼び出し</th>
+                        <th style={usageTh}>成功/失敗</th>
+                        <th style={usageTh}>入力文字</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentDaily(aiUsage.daily, 7).map((d) => (
+                        <tr key={d.date}>
+                          <td style={usageTd}>{d.date}</td>
+                          <td style={usageTd}>{d.calls}</td>
+                          <td style={usageTd}>{d.ok_calls} / {d.error_calls}</td>
+                          <td style={usageTd}>{d.prompt_chars}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginBottom: 6 }}>ユーザー別（上位）</div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 8, fontSize: 10.5 }}>
+                    <thead>
+                      <tr>
+                        <th style={usageTh}>ユーザー</th>
+                        <th style={usageTh}>呼び出し</th>
+                        <th style={usageTh}>入力文字</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {aiUsage.users.slice(0, 10).map((u) => (
+                        <tr key={u.user}>
+                          <td style={usageTd}>{u.user}</td>
+                          <td style={usageTd}>{u.calls}</td>
+                          <td style={usageTd}>{u.prompt_chars}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+              <div style={{ fontSize: 9.5, color: 'var(--text-4)' }}>{aiUsage.note}（1 USD = 150 円換算の概算表示）</div>
+            </>
+          )}
+        </div>
       </section>
 
       {/* ---- バックエンド接続（KSJ 連携） ---- */}

@@ -10,6 +10,7 @@ Endpoints:
   GET /api/v1/reverse-geocode — Nominatim /reverse proxy (Issue #84)
   GET /api/v1/ai/status      — server-side AI configuration status (no secrets)
   POST /api/v1/ai/memo       — AI memo broker (Anthropic key stays server-side)
+  GET /api/v1/ai/usage       — AI usage summary (DB-backed, Issue #20 eval)
 """
 
 import asyncio
@@ -33,6 +34,7 @@ from .ai import (
     ensure_disclaimer,
     find_forbidden_expressions,
 )
+from .ai_usage import ensure_ai_usage_schema, record_ai_usage, summarize_ai_usage
 from .cases import (
     ACTIONS,
     can_transition,
@@ -357,21 +359,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ai_call_times.popleft()
         if len(ai_call_times) >= settings.anthropic_rate_limit_per_window:
             rate_message = "AI 利用量の上限に達しました。時間をおいて再試行してください。"
-            _log_ai_audit(audit, status="rate_limited", status_code=429)
+            await _audit_ai(settings, audit, status="rate_limited", status_code=429)
             return JSONResponse(
                 status_code=429,
                 content={"ok": False, "error": rate_message},
             )
         if ai_semaphore.locked():
             concurrency_message = "AI 生成の同時実行数が上限です。時間をおいて再試行してください。"
-            _log_ai_audit(audit, status="concurrency_limited", status_code=429)
+            await _audit_ai(settings, audit, status="concurrency_limited", status_code=429)
             return JSONResponse(
                 status_code=429,
                 content={"ok": False, "error": concurrency_message},
             )
         if not settings.anthropic_api_key:
             message = "AI はサーバー側で未設定です（OCSRC_ANTHROPIC_API_KEY 未設定）"
-            _log_ai_audit(audit, status="not_configured", status_code=503)
+            await _audit_ai(settings, audit, status="not_configured", status_code=503)
             return JSONResponse(
                 status_code=503,
                 content={"ok": False, "error": message},
@@ -382,7 +384,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 text = await call_anthropic(settings, req.prompt)
             except AiUpstreamError as exc:
                 status = exc.status if exc.status in (401, 429, 502, 503) else 502
-                _log_ai_audit(
+                await _audit_ai(
+                    settings,
                     audit,
                     status="upstream_error",
                     status_code=status,
@@ -391,12 +394,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 return JSONResponse(status_code=status, content={"ok": False, "error": exc.message})
         text = ensure_disclaimer(text)
         warnings = find_forbidden_expressions(text)
-        _log_ai_audit(
+        await _audit_ai(
+            settings,
             audit,
             status="ok",
             status_code=200,
             duration_ms=_elapsed_ms(started),
             warnings=len(warnings),
+            completion_chars=len(text),
         )
         return {
             "ok": True,
@@ -404,6 +409,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "model": settings.anthropic_model,
             "warnings": warnings,
         }
+
+    @app.get("/api/v1/ai/usage")
+    async def ai_usage(
+        settings: Annotated[Settings, Depends(get_settings)],
+        days: Annotated[int, Query(ge=1, le=90)] = 30,
+    ) -> dict:
+        """AI 利用実績の集計（評価書 #20・費用管理）。
+
+        直近 days 日の呼び出し数・成功/失敗・文字数・概算費用を返す。
+        DB 未設定・未到達は 503（「0 件（該当なし）」と「取得失敗」を区別・NFR-504）。
+        プロンプト本文は記録・返却しない。
+        """
+        if settings.database_url is None:
+            raise HTTPException(status_code=503, detail="database not configured")
+        try:
+            pool = await get_pool(settings.database_url)
+            async with pool.acquire() as conn:
+                await ensure_ai_usage_schema(conn)
+                return await summarize_ai_usage(conn, days=days)
+        except HTTPException:
+            raise
+        except Exception as exc:  # driver missing, connection refused, bad schema
+            logger.warning("ai usage summary unavailable: %s", type(exc).__name__)
+            raise HTTPException(status_code=503, detail="database unavailable") from exc
 
     # ------------------------------------------------------------------
     # 案件台帳 API（Issue #111）。feature flag（OCSRC_CASE_STORE_ENABLED）
@@ -742,6 +771,49 @@ def _log_ai_audit(
     if warnings is not None:
         entry["warnings"] = warnings
     logger.info("ai_audit %s", json.dumps(entry, ensure_ascii=False))
+
+
+async def _audit_ai(
+    settings: Settings,
+    audit: dict,
+    *,
+    status: str,
+    status_code: int,
+    duration_ms: int | None = None,
+    warnings: int | None = None,
+    completion_chars: int = 0,
+) -> None:
+    """AI 呼び出しの監査ログ出力 + DB 記録（評価書 #20）。
+
+    ログ出力は従来どおり（ai_audit）。DB 記録は best-effort で、DB 未設定・
+    未到達・失敗でも AI メモ生成フローは継続する。プロンプト本文は記録しない。
+    """
+    _log_ai_audit(
+        audit,
+        status=status,
+        status_code=status_code,
+        duration_ms=duration_ms,
+        warnings=warnings,
+    )
+    if settings.database_url is None:
+        return
+    try:
+        pool = await get_pool(settings.database_url)
+        async with pool.acquire() as conn:
+            await ensure_ai_usage_schema(conn)
+            await record_ai_usage(
+                conn,
+                user_id=str(audit.get("user", "anonymous")),
+                model=str(audit.get("model", "")),
+                status=status,
+                status_code=status_code,
+                prompt_chars=int(audit.get("prompt_chars", 0)),
+                completion_chars=completion_chars,
+                duration_ms=duration_ms,
+                warnings=warnings,
+            )
+    except Exception as exc:  # noqa: BLE001 — best-effort recording
+        logger.warning("ai_usage record skipped: %s", type(exc).__name__)
 
 
 app = create_app()
