@@ -378,3 +378,30 @@ Issue #174 の残課題だったサーバ側永続化（Neon テーブル + API 
 | #114 | オープン | 本番反映自動化（本番運用化は今回対象外・バックログ） |
 | #109 | オープン | TS7 は typescript-eslint の対応待ち（既知保留） |
 | #94 | オープン | /healthz bypass はユーザー判断（Cloudflare 権限） |
+
+## 17. 追記（2026-08-14・第10弾）: RBAC 権限マトリクスの可視化
+
+案件台帳（Issue #111）の5ロール（viewer/auditor/editor/approver/admin）の権限をユーザー自身が確認できる「アクセス権限（RBAC）」を実装。
+
+### 17.1 実装内容
+
+| # | 改善 | ファイル | 効果 |
+|---|---|---|---|
+| 1 | RBAC 権限マトリクスの純粋ロジック | `frontend/src/report/rbac.ts` | backend（app/cases.py）の ROLE_PRIORITY / role_has / 承認WF と整合する `can()`・`buildMatrix()`・ロール/操作ラベル |
+| 2 | 設定画面の RBAC セクション | `frontend/src/screens/SettingsScreen.tsx` | 5ロールの説明 + 7操作×5ロールの権限マトリクス表（✓/—）を表示。ロール割当はサーバー側 env（OCSRC_CASE_*_USERS）と明記 |
+
+### 17.2 検証証跡（2026-08-14 実測・第10弾）
+
+| 検証 | 結果 |
+|---|---:|
+| frontend vitest | **137 passed**（新規8件: 優先度・can() 権限境界・マトリクス） |
+| frontend smoke / server | 120/120 / 103 |
+| typecheck / lint / build | PASS |
+| 実データ検証（tsx） | 7操作×5ロール・admin 全権限・viewer 閲覧のみ・approver 承認可 |
+
+### 17.3 残課題（更新）
+
+1. A31/A33 実データ調達（#112）・全国カバレッジ投入
+2. 案件台帳・データソース台帳の本番有効化判断（ユーザー判断）
+3. 地図キャプチャ（新規 Issue 化推奨）・承認WF（#111）連動
+4. バックアップ復元演習・Cloudflare 側項目（ユーザー判断）
