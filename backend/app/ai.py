@@ -3,6 +3,14 @@
 The browser never holds or transmits an Anthropic API key. It calls our
 backend, which keeps the key in ``OCSRC_ANTHROPIC_API_KEY`` (server env only)
 and forwards a validated prompt to Anthropic Messages API.
+
+Defense in depth (external evaluation 2026-08):
+- A server-side system prompt enforces the output contract even when the API
+  is called directly (not via the Web UI).
+- Generated text is screened for definitive expressions; a ``warnings`` list
+  is returned alongside the text instead of silently passing them through.
+- AI usage is audited with a structured log entry (user, prompt size, model,
+  status). Prompt content is never written to logs.
 """
 
 from __future__ import annotations
@@ -28,6 +36,57 @@ class AiUpstreamError(Exception):
         self.message = message
 
 
+SYSTEM_PROMPT = (
+    "あなたは土木工事の候補地初期調査を支援するアシスタントです。"
+    "以下の厳守制約に従ってください。"
+    "1. 施工可否・安全性・法的適合性を断定しない（「安全」「危険」「施工可能」「施工不可」"
+    "「リスクなし」「問題なし」等の断定表現を使わない）。「要確認」「追加確認推奨」"
+    "「参考情報」「データ不足」で表現する。"
+    "2. 入力メモに含まれないデータ・数値・地名を創作しない。"
+    "3. 根拠データID・出典表記（（根拠：…）の部分）を必ず残す。"
+    "4. 出力末尾に、公開データに基づく初期調査支援であり施工可否・法的適合性・安全性を"
+    "断定するものではない旨の免責文を含める。"
+    "5. 前置きや説明なしにメモ本文のみを Markdown で出力する。"
+)
+
+# フロントエンドの FORBIDDEN_EXPRESSIONS と同じ判定語（drift 防止のため相互に更新する）。
+FORBIDDEN_EXPRESSIONS = (
+    "安全です",
+    "安全である",
+    "危険です",
+    "危険である",
+    "リスクなし",
+    "リスクはありません",
+    "リスクはない",
+    "施工可能",
+    "施工できます",
+    "施工不可",
+    "問題ありません",
+    "問題なし",
+    "問題はない",
+    "支障ありません",
+    "支障なし",
+)
+
+
+def find_forbidden_expressions(text: str) -> list[str]:
+    """Return definitive expressions found in the generated text (deduplicated)."""
+    return [w for w in FORBIDDEN_EXPRESSIONS if w in text]
+
+
+DISCLAIMER = (
+    "本メモは公開データに基づく初期調査支援であり、施工可否、法的適合性、安全性を"
+    "断定するものではありません。各要確認事項には根拠データIDを紐付けています。"
+)
+
+
+def ensure_disclaimer(text: str) -> str:
+    """Append the required disclaimer when it is missing (server-side guard)."""
+    if "断定するものではありません" in text:
+        return text
+    return f"{text.rstrip()}\n\n## 注意事項\n{DISCLAIMER}\n"
+
+
 async def call_anthropic(settings: Settings, prompt: str) -> str:
     """Forward one prompt to Anthropic Messages API and return the text.
 
@@ -46,6 +105,7 @@ async def call_anthropic(settings: Settings, prompt: str) -> str:
     payload = {
         "model": settings.anthropic_model,
         "max_tokens": 3000,
+        "system": SYSTEM_PROMPT,
         "messages": [{"role": "user", "content": prompt}],
     }
     try:
