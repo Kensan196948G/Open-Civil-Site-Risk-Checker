@@ -16,6 +16,8 @@ import {
 } from '../report/compare';
 import { openPackForPrint } from '../report/pack';
 import { CATEGORY_LABEL } from '../data/constants';
+import { CompareMap } from '../map/CompareMap';
+import { toCompareMapPoints } from '../map/compareMapPoints';
 import type { CaseRecord } from '../types';
 
 // SCR-010 候補地比較（Issue #175）。保存済み案件（実データ + サーバー台帳 + ダミー）から
@@ -84,6 +86,9 @@ export function CompareScreen() {
     return chosen.map(toCompareRow);
   }, [candidates, selected]);
 
+  // 比較地図（SCR-010・候補地の位置関係・検索範囲。選択順の番号つきマーカー）。
+  const mapPoints = useMemo(() => toCompareMapPoints(rows), [rows]);
+
   const onExport = (fmt: 'md' | 'csv') => {
     const target = rows.length ? rows : COMPARE_DEMO_ROWS;
     const content = fmt === 'md' ? buildCompareMd(target) : buildCompareCsv(target);
@@ -148,6 +153,15 @@ export function CompareScreen() {
           {msg}
         </div>
       )}
+
+      {/* 位置関係マップ（SCR-010・選択した候補地の位置・検索範囲） */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <b style={{ fontSize: 13 }}>候補地の位置関係</b>
+          <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>番号は比較表の並び順（選択順）です</span>
+        </div>
+        <CompareMap points={mapPoints} />
+      </div>
 
       {/* 比較表 */}
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
