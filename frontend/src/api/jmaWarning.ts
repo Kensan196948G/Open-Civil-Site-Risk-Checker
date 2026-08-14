@@ -228,7 +228,7 @@ async function resolvePrefecture(lat: number, lon: number): Promise<ResolvePrefe
   const params = new URLSearchParams({ lat: String(lat), lon: String(lon) });
   const out = await fetchJson<NominatimReverseResponse>(
     `${ksjBaseUrl()}/api/v1/reverse-geocode?${params.toString()}`,
-    { timeout: 8000 },
+    { timeout: 8000, maxRetries: 1 },
   );
   const prefecture = out.data?.address?.province ?? out.data?.address?.state;
   if (!out.ok || !prefecture) {
@@ -273,7 +273,7 @@ export async function fetchJmaWarning(input: AnalysisInput): Promise<AdapterResu
   }
 
   const endpoint = `/bosai/warning/data/warning/${jmaCode}.json`;
-  const out = await fetchJson<JmaWarningResponse>(`https://www.jma.go.jp${endpoint}`, { timeout: 10000 });
+  const out = await fetchJson<JmaWarningResponse>(`https://www.jma.go.jp${endpoint}`, { timeout: 10000, maxRetries: 1 });
   const log = {
     time: nowHMS(),
     source: 'jma_warning',

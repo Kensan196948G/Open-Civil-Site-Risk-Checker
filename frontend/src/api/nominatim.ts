@@ -56,7 +56,7 @@ export function shrinkAddressCandidates(address: string): string[] {
 async function searchOnce(query: string): Promise<{ item: NominatimItem | null; log: LogEntry; networkError: boolean }> {
   const params = new URLSearchParams({ q: query });
   const url = `${ksjBaseUrl()}/api/v1/geocode?${params.toString()}`;
-  const out = await fetchJson<NominatimItem[]>(url, { timeout: 8000 });
+  const out = await fetchJson<NominatimItem[]>(url, { timeout: 8000, maxRetries: 1 });
   const found = out.ok && !!out.data && out.data.length > 0;
   const log: LogEntry = {
     time: nowHMS(),

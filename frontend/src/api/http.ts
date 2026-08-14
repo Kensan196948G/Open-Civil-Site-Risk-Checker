@@ -18,6 +18,14 @@ export interface FetchOpts {
   init?: RequestInit;
   /** 非 2xx 応答の JSON ボディも data として保持する（readiness の detail 展開などに使う）。 */
   errorBody?: boolean;
+  /**
+   * 一時的失敗（ネットワークエラー・タイムアウト・5xx）時の再試行回数（既定 0）。
+   * 読み取り専用アダプタのみで有効にする（評価書 #14）。ミューテーション（AI 生成・案件
+   * 作成/承認等）には指定しないこと（二重実行・二重課金を防ぐ）。
+   */
+  maxRetries?: number;
+  /** 再試行までの待機[ms]。既定 300。テストでは 0 を指定できる。 */
+  retryDelayMs?: number;
 }
 
 /** 現在時刻を HH:MM:SS（JST 表示前提のローカル時刻）で返す。 */
@@ -35,41 +43,65 @@ export function nowStamp(): string {
 }
 
 export async function fetchJson<T = unknown>(url: string, opts: FetchOpts = {}): Promise<FetchOutcome<T>> {
-  const timeout = opts.timeout ?? 15000;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-  const start = performance.now();
-  try {
-    const res = await fetch(url, { ...opts.init, signal: controller.signal });
-    const ms = Math.round(performance.now() - start);
-    if (!res.ok) {
-      let data: T | null = null;
-      if (opts.errorBody) {
-        try {
-          data = (await res.json()) as T;
-        } catch {
-          data = null;
+  const maxRetries = opts.maxRetries ?? 0;
+  const retryDelayMs = opts.retryDelayMs ?? 300;
+  const startedAt = performance.now();
+
+  /** 1回の取得試行。失敗条件（ネットワーク/タイムアウト/5xx）は再試行対象になる。 */
+  async function attempt(): Promise<FetchOutcome<T> & { retryable: boolean }> {
+    const timeout = opts.timeout ?? 15000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    const attemptStart = performance.now();
+    try {
+      const res = await fetch(url, { ...opts.init, signal: controller.signal });
+      const ms = Math.round(performance.now() - attemptStart);
+      const retryable = res.status >= 500;
+      if (!res.ok) {
+        let data: T | null = null;
+        if (opts.errorBody) {
+          try {
+            data = (await res.json()) as T;
+          } catch {
+            data = null;
+          }
         }
+        return { ok: false, status: res.status, code: String(res.status), ms, data, error: `HTTP ${res.status}`, retryable };
       }
-      return { ok: false, status: res.status, code: String(res.status), ms, data, error: `HTTP ${res.status}` };
+      const data = (await res.json()) as T;
+      return { ok: true, status: res.status, code: String(res.status), ms, data, error: '—', retryable: false };
+    } catch (e) {
+      const ms = Math.round(performance.now() - attemptStart);
+      const err = e instanceof Error ? e : undefined;
+      const aborted = err?.name === 'AbortError';
+      return {
+        ok: false,
+        status: 0,
+        code: '—',
+        ms,
+        data: null,
+        error: aborted ? `Read timed out after ${Math.round(timeout / 1000)}s` : (err?.message || 'ネットワークエラー'),
+        // タイムアウト・ネットワークエラーは再試行対象（ミューテーションでは maxRetries を指定しない）。
+        retryable: true,
+      };
+    } finally {
+      clearTimeout(timer);
     }
-    const data = (await res.json()) as T;
-    return { ok: true, status: res.status, code: String(res.status), ms, data, error: '—' };
-  } catch (e) {
-    const ms = Math.round(performance.now() - start);
-    const err = e instanceof Error ? e : undefined;
-    const aborted = err?.name === 'AbortError';
-    return {
-      ok: false,
-      status: 0,
-      code: '—',
-      ms,
-      data: null,
-      error: aborted ? `Read timed out after ${Math.round(timeout / 1000)}s` : (err?.message || 'ネットワークエラー'),
-    };
-  } finally {
-    clearTimeout(timer);
   }
+
+  let outcome = await attempt();
+  let retried = false;
+  for (let i = 0; i < maxRetries && !outcome.ok && outcome.retryable; i += 1) {
+    retried = true;
+    if (retryDelayMs > 0) await new Promise((r) => setTimeout(r, retryDelayMs));
+    outcome = await attempt();
+  }
+
+  if (!retried) return outcome;
+  // 取得ログの誠実性: リトライしたことを error フィールドへ明記する（成功時も含む）。
+  const ms = Math.round(performance.now() - startedAt);
+  const note = outcome.ok ? '1回リトライ後成功' : '（1回リトライ後）';
+  return { ...outcome, ms, error: outcome.ok ? note : `${outcome.error}${note}` };
 }
 
 /** POST（Overpass 用、bodyは text/plain）。 */

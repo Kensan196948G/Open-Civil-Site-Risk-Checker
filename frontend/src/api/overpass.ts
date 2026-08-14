@@ -78,7 +78,7 @@ function pointOf(el: OverpassElement): { lat: number; lon: number } | null {
 
 export async function fetchOverpass(input: AnalysisInput): Promise<AdapterResult> {
   const { lat, lon } = input;
-  const out = await postForm<OverpassResponse>(ENDPOINT, buildQuery(input), { timeout: 25000 });
+  const out = await postForm<OverpassResponse>(ENDPOINT, buildQuery(input), { timeout: 25000, maxRetries: 1 });
   const fetchedAt = nowStamp();
   const log = {
     time: nowHMS(),
