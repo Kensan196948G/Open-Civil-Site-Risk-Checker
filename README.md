@@ -203,6 +203,7 @@ DOM 非依存の純粋関数を中心に検証します。とくに**「断定�
 - `src/api/geo.ts` — Haversine 距離・bbox（WGS84）
 - `src/api/jmaWarning.ts` — 都道府県→気象庁コード変換、警報コード→名称、発表中警報の抽出・確認項目化
 - `src/data/constants.ts` — ラベル辞書の網羅性・「該当なし／データ未取得」の区別
+- `src/data/fixtures.test.ts` — **ダミーデータ（fixture）の整合性**（案件の形式・制約・比較デモ行のカテゴリ網羅・ソース台帳キーの一意/網羅・実在情報らしき表記の不在）
 
 ### 🔁 二重ランナー構成（vitest + esbuild スモーク）
 

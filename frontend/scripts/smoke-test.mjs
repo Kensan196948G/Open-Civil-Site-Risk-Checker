@@ -93,6 +93,13 @@ try {
     logLevel: 'warning',
     // テストファイルの `from 'vitest'` を極小 shim へ差し替える。
     alias: { vitest: shimPath },
+    // Vite の import.meta.env 置換が効かない node バンドルでも、`src/data/cases.ts` 等の
+    // モジュール評価が落ちないよう明示定義する（CI の本物 vitest/vite には影響しない）。
+    define: {
+      'import.meta.env.VITE_SHOW_DUMMY': 'undefined',
+      'import.meta.env.DEV': 'false',
+      'import.meta.env.PROD': 'true',
+    },
   });
   console.log(`▶ smoke: bundled ${tests.length} test file(s)`);
   for (const t of tests) console.log(`  • ${relative(root, t)}`);

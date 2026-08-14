@@ -871,3 +871,31 @@ Issue #175（候補地比較）の実務利用（社内レビュー・紙配布�
 4. 案件台帳・データソース台帳の本番有効化判断（ユーザー判断）
 5. TS7（#109）・バックアップ復元演習・Cloudflare 側項目（ユーザー判断）
 6. AI 費用の概算単価調整（ユーザー判断）
+
+## 34. 追記（2026-08-15・第27弾）: ダミーデータ整合の自動検証（fixtures.test.ts）
+
+### 34.1 実施内容
+
+| # | 内容 | 変更ファイル |
+|---|---|---|
+| 1 | ダミーデータ（fixture）の整合性テストを新設。**ダッシュボードのダミー案件 6 件**（id 一意・isDummy・緯度経度範囲・半径∈選択肢・counts A〜D 数値・ステータス・コード形式・電話/メールらしき表記の不在）、**比較デモ行**（緯度経度・半径・比較カテゴリ網羅・架空明示）、**ソース台帳**（キー一意・SourceKey 全種網羅・ライセンス/種別/ランク有効）を機械的に検証 | `frontend/src/data/fixtures.test.ts`（新規） |
+| 2 | smoke ランナーの堅牢化: `import.meta.env`（VITE_SHOW_DUMMY/DEV/PROD）を esbuild define で明示定義し、`src/data/cases.ts` を import するテストが node バンドルでも評価可能に。shim に `toMatch` matcher を追加（CI の本物 vitest には影響なし） | `frontend/scripts/smoke-test.mjs`・`scripts/smoke/shim.mjs` |
+
+### 34.2 検証
+
+| 検証 | 結果 |
+|---|---:|
+| frontend typecheck / lint | PASS |
+| frontend vitest | **218 passed**（+7） |
+| frontend smoke | **194/194 passed**（+7・shim/toMatch 対応後） |
+| frontend build | PASS |
+| 本番影響 | なし（テスト + スクリプト + docs） |
+
+### 34.3 残課題（更新）
+
+1. #238 の7日間検証満了確認（2026-08-19 頃・満了時にクローズ判断）
+2. 地図キャプチャ・本番反映後の実ブラウザ目視確認（外部タイル CORS 応答に依存）
+3. A31/A33 実データ取得・投入（ユーザー判断・手順整備済み）
+4. 案件台帳・データソース台帳の本番有効化判断（ユーザー判断）
+5. TS7（#109）・バックアップ復元演習・Cloudflare 側項目（ユーザー判断）
+6. AI 費用の概算単価調整（ユーザー判断）
