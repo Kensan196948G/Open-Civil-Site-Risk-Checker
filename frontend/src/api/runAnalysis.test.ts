@@ -55,6 +55,32 @@ vi.mock('./jmaWarning', () => ({
     return mockAdapterResult('jma_warning');
   }),
 }));
+vi.mock('./hazard', () => ({
+  fetchHazardAssessment: vi.fn(async () => {
+    await delay(DELAY_MS);
+    return { status: 'ok', inside: [], nearby: [], meta: { lat: 0, lon: 0, radius_m: 0 } };
+  }),
+  hazardAssessmentFinding: vi.fn(() => ({
+    id: 'haz-auto-none',
+    category: 'hazard' as const,
+    priority: 'C' as const,
+    title: 'ハザード区域内判定',
+    summary: '対象なし',
+    status: 'no_data' as const,
+    distance_m: null,
+    caution: '',
+    evidence: [],
+  })),
+  hazardLogLine: vi.fn(() => ({
+    time: '00:00:00',
+    source: 'hazard_portal',
+    endpoint: '/api/v1/hazard-assess',
+    code: '200',
+    status: 'success' as const,
+    ms: String(DELAY_MS),
+    error: '',
+  })),
+}));
 
 describe('runAnalysis の並列実行性能特性（NFR-002: 30秒以内の設計的裏付け）', () => {
   it('8取得ステップを並列実行し、直列合計より大幅に短い時間で完了する', async () => {
@@ -104,8 +130,9 @@ describe('runAnalysis の並列実行性能特性（NFR-002: 30秒以内の設�
     // 実通信を行っていないソースに HTTP コード・応答時間を記録しない（疑似ログ廃止）。
     const logs = outcome.result!.logs;
     const hazard = logs.find((l) => l.source === 'hazard_portal');
-    expect(hazard?.status).toBe('visual_only');
-    expect(hazard?.code).toBe('—');
+    // Issue #112 で /api/v1/hazard-assess への実リクエストに昇格（モックは success）。
+    expect(hazard?.status).toBe('success');
+    expect(hazard?.code).toBe('200');
     for (const src of ['plateau', 'xroad'] as const) {
       const entry = logs.find((l) => l.source === src);
       expect(entry?.status).toBe('not_attempted');
