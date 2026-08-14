@@ -818,7 +818,7 @@ Issue #175（候補地比較）の実務利用（社内レビュー・紙配布�
 
 | # | 内容 | 変更ファイル |
 |---|---|---|
-| 1 | 工種別プリセット（標準調査・道路工事・河川/護岸工事・建築/造成工事）を定義。radius は RADIUS_OPTIONS 内・カテゴリ 6 種を網羅・少なくとも 1 カテゴリ有効（入力検証と整合） | `frontend/src/data/templates.ts`（新規） |
+| 1 | 工種別プリセット（標準調査・道路工事・河川・護岸工事・建築・造成工事）を定義。radius は RADIUS_OPTIONS 内・カテゴリ 6 種を網羅・少なくとも 1 カテゴリ有効（入力検証と整合） | `frontend/src/data/templates.ts`（新規） |
 | 2 | store に `applyTemplate`（radius + カテゴリ初期値を一括反映・formError クリア） | `frontend/src/store.tsx` |
 | 3 | InputScreen に「調査テンプレート」行を追加（aria-pressed で選択状態表示・ツールチップに説明） | `frontend/src/screens/InputScreen.tsx` |
 | 4 | テスト: 定義の妥当性（一意 id・radius・カテゴリ網羅・1 以上有効）と一致判定の 6 件 | `frontend/src/data/templates.test.ts`（新規） |

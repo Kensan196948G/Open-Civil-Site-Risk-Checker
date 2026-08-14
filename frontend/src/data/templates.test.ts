@@ -9,6 +9,11 @@ import { SURVEY_TEMPLATES, templateMatches, type TemplateCategories } from './te
 const ALL_KEYS: (keyof TemplateCategories)[] = ['roads', 'rivers', 'hazard', 'terrain', 'weather', 'facilities'];
 
 describe('SURVEY_TEMPLATES（定義の妥当性）', () => {
+  it('必須 4 テンプレート（general/road/river/building）を正確に持つ', () => {
+    const ids = SURVEY_TEMPLATES.map((t) => t.id);
+    expect([...ids].sort()).toEqual(['building', 'general', 'river', 'road']);
+  });
+
   it('id は一意・ラベル・説明を持つ', () => {
     const ids = SURVEY_TEMPLATES.map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
