@@ -1,6 +1,7 @@
 # 改善台帳・検証証跡・再評価（2026-08-12）
 
 > 追記（2026-08-14）: 依存更新PR整理と **Issue #111 案件台帳（サーバ側永続化・RBAC・監査ログ・承認WF）の垂直スライス**を実装。詳細は §8 に追記。
+> 追記（2026-08-14・第2弾）: **監査ログ閲覧画面（SCR-009）・案件別監査履歴・デモ seed CLI・ADR-001** を実装。詳細は §9 に追記。
 
 ## 1. 実装済み改善
 
@@ -147,4 +148,35 @@
 1. 案件台帳の**本番有効化判断**（ロール割当運用・監査ログ保全方針を定めてから `OCSRC_CASE_STORE_ENABLED=true`）
 2. Issue #112 ハザードポリゴン判定（データ調達・利用規約確認）
 3. 管理画面（監査ログ閲覧 UI・ロール管理 UI）
+4. バックアップ復元演習・Cloudflare 側項目（IdP・Alerting・/healthz bypass）はユーザー判断
+
+## 9. 追記（2026-08-14・第2弾）: 監査ログ閲覧 UI・デモ seed・ADR
+
+Issue #111 の完了条件残り（監査ログ閲覧・案件詳細の監査履歴・ADR）と、goal の「ダミーデータ投入・保持」要件を充足。
+
+### 9.1 実装内容
+
+| # | 改善 | ファイル | 効果 |
+|---|---|---|---|
+| 1 | **監査ログ閲覧画面（SCR-009）** | `frontend/src/screens/AuditScreen.tsx` | auditor ロール向けに `/api/v1/audit` を表示。API 未設定・未到達・権限不足時は**架空のダミー監査ログ**を表示（空画面を残さない） |
+| 2 | **案件別監査履歴** | `frontend/src/screens/DashboardScreen.tsx` | 台帳セクションの各案件に「履歴」ボタン → entity フィルタで監査エントリを表示 |
+| 3 | **デモ seed CLI** | `backend/app/seed_demo_cases.py` | 架空のデモ案件3件（draft/submitted/approved の各状態）+ 監査ログを投入。冪等・`--reset` で再投入。MVP 確認環境で直ちに操作可能 |
+| 4 | **ADR-001** | `docs/adr/ADR-001-case-registry-rbac-audit.md` | スキーマ設計・RBAC・承認WF・feature flag の決定と代替案・受入条件を記録 |
+
+### 9.2 検証証跡（2026-08-14 実測・第2弾）
+
+| 検証 | 結果 | 備考 |
+|---|---:|---|
+| backend pytest | **82 passed** | 新規3件（seed: 冪等・リセット・架空性） |
+| backend ruff | PASS | |
+| frontend vitest | **97 passed** | 新規5件（監査表示ロジック） |
+| frontend typecheck / lint / build | PASS | lint warning 0（定数を別ファイルへ分離） |
+| 実 API 動作（curl） | PASS | seed → 一覧に3件・103 が approved・監査ログに case_approved |
+| 本番影響 | なし | flag 既定 off・本番設定未変更 |
+
+### 9.3 残課題（更新）
+
+1. 案件台帳の**本番有効化判断**（ロール割当運用・監査ログ保全方針）
+2. Issue #112 ハザードポリゴン判定（データ調達・利用規約確認）
+3. ロール管理 UI（現在は env 割当）
 4. バックアップ復元演習・Cloudflare 側項目（IdP・Alerting・/healthz bypass）はユーザー判断

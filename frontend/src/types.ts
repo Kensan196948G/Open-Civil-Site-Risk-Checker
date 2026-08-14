@@ -121,7 +121,7 @@ export interface MapFeatures {
   facilities: { lat: number; lon: number; label: string }[];
 }
 
-export type Screen = 'dashboard' | 'input' | 'analysis' | 'aimemo' | 'report' | 'sources' | 'logs' | 'settings';
+export type Screen = 'dashboard' | 'input' | 'analysis' | 'aimemo' | 'report' | 'sources' | 'logs' | 'audit' | 'settings';
 export type InputType = 'address' | 'coord';
 
 /** 表示テーマ。'auto' は OS 設定に追従し、解決後は light/dark のいずれかになる。 */

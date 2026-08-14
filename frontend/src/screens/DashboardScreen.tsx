@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../store';
 import { DUMMY_CASES_VISIBLE, THIS_WEEK_SINCE } from '../data/cases';
 import { getCaseStatus, getPrio } from '../data/constants';
-import { approveCase, isCaseStoreEnabled, listCases, submitCase, type ServerCase } from '../api/cases';
+import { approveCase, isCaseStoreEnabled, listAudit, listCases, submitCase, type AuditEntry, type ServerCase } from '../api/cases';
 import type { CaseRecord, Priority } from '../types';
 
 // SCR-000 ダッシュボード。実取得（本番）データ案件 + ダミー（サンプル）案件を表示する。
@@ -17,6 +17,14 @@ const SERVER_STATUS_LABEL: Record<ServerCase['status'], string> = {
   approved: '承認済み',
 };
 
+const AUDIT_ACTION_LABEL: Record<string, string> = {
+  case_created: '案件作成',
+  case_updated: '案件更新',
+  case_submitted: '承認申請',
+  case_approved: '承認',
+  case_deleted: '案件削除',
+};
+
 export function DashboardScreen() {
   const { state, go, openCase, deleteCase, importCases, exportCases } = useApp();
   const PRIO = getPrio(state.theme);
@@ -27,6 +35,10 @@ export function DashboardScreen() {
   const [serverEnabled, setServerEnabled] = useState<boolean | null>(null);
   const [serverCases, setServerCases] = useState<ServerCase[]>([]);
   const [serverMsg, setServerMsg] = useState<string | null>(null);
+  // 監査履歴（Issue #111）。案件行の「履歴」で開く。
+  const [auditFor, setAuditFor] = useState<{ id: number; code: string } | null>(null);
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[] | null>(null);
+  const [auditMsg, setAuditMsg] = useState<string | null>(null);
 
   const reloadServerCases = useCallback(async () => {
     try {
@@ -35,6 +47,19 @@ export function DashboardScreen() {
       setServerMsg(null);
     } catch (err) {
       setServerMsg(err instanceof Error ? err.message : '案件台帳の取得に失敗しました');
+    }
+  }, []);
+
+  const openAudit = useCallback(async (id: number, code: string) => {
+    setAuditFor({ id, code });
+    setAuditEntries(null);
+    setAuditMsg(null);
+    try {
+      const items = await listAudit('case', String(id));
+      setAuditEntries(items);
+    } catch (err) {
+      setAuditMsg(err instanceof Error ? err.message : '監査履歴の取得に失敗しました');
+      setAuditEntries([]);
     }
   }, []);
 
@@ -255,6 +280,7 @@ export function DashboardScreen() {
                     </span>
                   </span>
                   <span style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                    <button onClick={() => void openAudit(sc.id, sc.code)} style={miniBtn} title="この案件の監査履歴を表示">履歴</button>
                     {sc.status === 'draft' && (
                       <button onClick={() => void onServerSubmit(sc.id)} style={miniBtn} title="承認申請へ提出（draft → submitted）">申請</button>
                     )}
@@ -267,6 +293,32 @@ export function DashboardScreen() {
                   </span>
                 </div>
               ))}
+              {auditFor && (
+                <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-2)', background: 'var(--surface-3)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                    <b style={{ fontSize: 12 }}>監査履歴: {auditFor.code}</b>
+                    <span style={{ flex: 1 }} />
+                    <button onClick={() => setAuditFor(null)} style={miniBtn} title="閉じる">✕</button>
+                  </div>
+                  {auditMsg && <div style={{ fontSize: 11.5, color: 'var(--err-text)', marginBottom: 8 }}>{auditMsg}</div>}
+                  {auditEntries === null ? (
+                    <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>読み込み中…</div>
+                  ) : auditEntries.length === 0 ? (
+                    <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>監査エントリはありません。</div>
+                  ) : (
+                    <div className="ocsrc-table-scroll" tabIndex={0} role="region" aria-label={`${auditFor.code} の監査履歴`}>
+                      {auditEntries.map((e) => (
+                        <div key={e.id} style={{ display: 'flex', gap: 14, padding: '6px 0', borderBottom: '1px solid var(--border-3)', fontSize: 11, alignItems: 'baseline' }}>
+                          <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--text-3)', width: 150, flex: 'none' }}>{e.ts.slice(0, 19).replace('T', ' ')}</span>
+                          <span style={{ color: 'var(--accent)', fontWeight: 700, width: 90, flex: 'none' }}>{AUDIT_ACTION_LABEL[e.action] ?? e.action}</span>
+                          <span style={{ color: 'var(--text-2)', width: 200, flex: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.actor}</span>
+                          <span style={{ color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{JSON.stringify(e.detail)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {serverCases.length === 0 && (
                 <div style={{ padding: '24px 20px', textAlign: 'center', fontSize: 12, color: 'var(--text-3)' }}>
                   サーバー案件はまだありません。地点確認の結果を「ダッシュボードに保存」すると、サーバー案件台帳へ登録されます。
