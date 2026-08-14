@@ -48,6 +48,11 @@ from .cases import (
     transition_case,
     update_case,
 )
+from .data_sources import (
+    ensure_data_source_schema,
+    list_data_sources,
+    list_refreshes,
+)
 from .db import check_database, close_pools, get_pool
 from .geocode import GeocodeUnavailableError
 from .geocode import reverse as geocode_reverse
@@ -248,6 +253,45 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=503, detail="database unavailable") from exc
         result["meta"] = {"lat": lat, "lon": lon, "radius_m": radius_m}
         return result
+
+    @app.get("/api/v1/data-sources")
+    async def data_sources_list(
+        settings: Annotated[Settings, Depends(get_settings)],
+    ) -> dict:
+        """データソース台帳一覧（Issue #174・サーバ側永続化）。
+
+        data_sources / data_source_refreshes テーブルから、各データソースのメタ情報と
+        再取込履歴を返す。feature flag（OCSRC_DATA_SOURCE_STORE_ENABLED）が無効のときは
+        503 を返し、本番に無影響のまま preview/dev で検証できる。デモ用の架空データは
+        seed で投入される（実在情報を含まない）。
+        """
+        if not settings.data_source_store_enabled:
+            raise HTTPException(
+                status_code=503,
+                detail="data source store is not enabled (OCSRC_DATA_SOURCE_STORE_ENABLED=false)",
+            )
+        if settings.database_url is None:
+            raise HTTPException(status_code=503, detail="database not configured")
+        try:
+            pool = await get_pool(settings.database_url)
+            async with pool.acquire() as conn:
+                await ensure_data_source_schema(conn)
+                items = await list_data_sources(conn)
+                refreshes = await list_refreshes(conn)
+        except HTTPException:
+            raise
+        except Exception as exc:  # driver missing, connection refused, bad schema
+            raise HTTPException(status_code=503, detail="database unavailable") from exc
+        # 再取込履歴をソースごとにまとめて返す（フロントは台帳 + 履歴を一括表示できる）。
+        refreshes_by_source: dict[str, list[dict]] = {}
+        for r in refreshes:
+            refreshes_by_source.setdefault(r.source_id, []).append(r.to_dict())
+        return {
+            "status": "ok",
+            "count": len(items),
+            "items": [s.to_dict() for s in items],
+            "refreshes": refreshes_by_source,
+        }
 
     @app.get("/api/v1/geocode")
     async def geocode(

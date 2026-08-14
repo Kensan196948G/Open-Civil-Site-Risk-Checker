@@ -91,6 +91,11 @@ DEMO_CASES = [
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Seed demo (fictional) cases and audit entries")
     p.add_argument("--reset", action="store_true", help="delete existing demo cases first")
+    p.add_argument(
+        "--with-sources",
+        action="store_true",
+        help="also seed the demo data-source ledger (Issue #174)",
+    )
     p.add_argument("--database-url", default=None, help="overrides OCSRC_DATABASE_URL")
     return p
 
@@ -109,6 +114,12 @@ async def run(args: argparse.Namespace) -> int:
     conn = await asyncpg.connect(dsn=database_url)
     try:
         await ensure_case_schema(conn)
+        if args.with_sources:
+            from .data_sources import ensure_data_source_schema, seed_demo_data_sources
+
+            await ensure_data_source_schema(conn)
+            inserted_sources = await seed_demo_data_sources(conn)
+            print(f"sources: seeded {inserted_sources} demo data source(s)")
         if args.reset:
             await conn.execute(
                 "DELETE FROM cases WHERE code LIKE $1", DEMO_CODE_PREFIX + "%"
