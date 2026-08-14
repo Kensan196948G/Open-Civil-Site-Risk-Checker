@@ -21,6 +21,8 @@ import { CompareMap } from '../map/CompareMap';
 import { toCompareMapPoints } from '../map/compareMapPoints';
 import { BASE_TILE_LAYERS } from '../map/capture';
 import { captureMap } from '../map/captureMap';
+import { fetchJmaWarning } from '../api/jmaWarning';
+import { summarizeJmaFinding, warningColor, type WarningSummary } from '../report/warningSummary';
 import type { MapCaptureResult } from '../map/capture';
 import type { CaseRecord } from '../types';
 
@@ -98,6 +100,28 @@ export function CompareScreen() {
   const [compareCapture, setCompareCapture] = useState<MapCaptureResult | null>(null);
   const [compareCaptureBusy, setCompareCaptureBusy] = useState(false);
   const [compareCaptureMsg, setCompareCaptureMsg] = useState('');
+
+  // 気象警報（現在）チェック（評価書 #18 の MVP・安全管理）。
+  const [warningBusy, setWarningBusy] = useState(false);
+  const [warnings, setWarnings] = useState<Record<string, WarningSummary>>({});
+
+  const doCheckWarnings = async () => {
+    if (mapPoints.length === 0 || warningBusy) return;
+    setWarningBusy(true);
+    const result: Record<string, WarningSummary> = {};
+    for (const p of mapPoints) {
+      try {
+        const res = await fetchJmaWarning({ lat: p.lat, lon: p.lon, radius: p.radius });
+        result[p.id] = summarizeJmaFinding(res.findings[0]);
+      } catch {
+        result[p.id] = { level: 'failed', label: '取得失敗' };
+      }
+      // バックエンドの reverse-geocode レート制限（1 req/s）を尊重して間隔を空ける。
+      await new Promise((r) => setTimeout(r, 1100));
+    }
+    setWarnings(result);
+    setWarningBusy(false);
+  };
 
   const doCaptureCompareMap = async () => {
     const map = compareMapRef.current;
@@ -205,6 +229,55 @@ export function CompareScreen() {
           {compareCaptureMsg && <span style={{ fontSize: 10.5, color: 'var(--text-2)' }}>{compareCaptureMsg}</span>}
         </div>
         <CompareMap points={mapPoints} mapRef={compareMapRef} />
+
+        {/* 気象警報（現在）チェック（評価書 #18 MVP） */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 8, fontSize: 11, color: 'var(--text-2)' }}>
+          <button
+            onClick={() => void doCheckWarnings()}
+            disabled={warningBusy || mapPoints.length === 0}
+            style={{
+              ...miniBtn,
+              color: 'var(--accent)',
+              borderColor: 'var(--accent-border)',
+              cursor: warningBusy || mapPoints.length === 0 ? 'default' : 'pointer',
+            }}
+            title="各候補地の都道府県で現在発表中の気象警報・注意報を取得（気象庁）"
+          >
+            {warningBusy ? '確認中…' : '⚠ 気象警報（現在）をチェック'}
+          </button>
+          {mapPoints.length > 0 && (
+            <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
+              都道府県（気象庁発表単位）の現在の発表状況です。地点そのものが対象地域と一致するとは限りません。
+            </span>
+          )}
+        </div>
+        {Object.keys(warnings).length > 0 && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+            {mapPoints.map((p) => {
+              const w = warnings[p.id];
+              if (!w) return null;
+              return (
+                <span
+                  key={p.id}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: '4px 10px',
+                    borderRadius: 12,
+                    fontSize: 10.5,
+                    fontWeight: 600,
+                    background: 'var(--surface-3)',
+                    border: '1px solid var(--border-3)',
+                    color: warningColor(w.level),
+                  }}
+                >
+                  {p.rank}. {p.name}: {w.label}
+                </span>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* 比較表 */}
