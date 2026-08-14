@@ -3,6 +3,7 @@ import { useApp } from '../store';
 import { DUMMY_CASES_VISIBLE, THIS_WEEK_SINCE } from '../data/cases';
 import { getCaseStatus, getPrio } from '../data/constants';
 import { approveCase, isCaseStoreEnabled, listAudit, listCases, serverCaseToRecord, submitCase, type AuditEntry, type ServerCase } from '../api/cases';
+import { CASE_STATUS_OPTIONS, EMPTY_CASE_FILTER, filterCases, isCaseFilterActive } from '../report/caseFilter';
 import type { CaseRecord, Priority } from '../types';
 
 // SCR-000 ダッシュボード。実取得（本番）データ案件 + ダミー（サンプル）案件を表示する。
@@ -104,6 +105,10 @@ export function DashboardScreen() {
   const cases: CaseRecord[] = useMemo(() => [...state.liveCases, ...DUMMY_CASES_VISIBLE], [state.liveCases]);
   const liveCount = state.liveCases.length;
   const dummyCount = DUMMY_CASES_VISIBLE.length;
+
+  // 案件一覧の検索・絞り込み（キーワード + 状態。KPI は全件ベースのまま）。
+  const [caseFilter, setCaseFilter] = useState(EMPTY_CASE_FILTER);
+  const visibleCases = useMemo(() => filterCases(cases, caseFilter), [cases, caseFilter]);
 
   const { agg, aggTotal, kpiCards } = useMemo(() => {
     const a: Record<Priority, number> = { A: 0, B: 0, C: 0, D: 0 };
@@ -345,11 +350,54 @@ export function DashboardScreen() {
 
         {/* 案件一覧 */}
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 11, overflow: 'hidden', boxShadow: '0 1px 3px var(--shadow)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '15px 20px', borderBottom: '1px solid var(--border-2)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '15px 20px', borderBottom: '1px solid var(--border-2)', flexWrap: 'wrap' }}>
             <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>調査案件一覧</h2>
             <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'var(--text-3)' }}>
-              {cases.length} 件（実データ {liveCount}{dummyCount ? ` / ダミー ${dummyCount}` : ''}）
+              {visibleCases.length} / {cases.length} 件（実データ {liveCount}{dummyCount ? ` / ダミー ${dummyCount}` : ''}）
             </span>
+            <span style={{ flex: 1 }} />
+            <input
+              value={caseFilter.keyword}
+              onChange={(e) => setCaseFilter((f) => ({ ...f, keyword: e.target.value }))}
+              placeholder="案件名・コード・所在地で検索"
+              aria-label="案件をキーワードで検索"
+              style={{
+                padding: '7px 11px',
+                background: 'var(--surface-3)',
+                border: '1px solid var(--border-3)',
+                borderRadius: 7,
+                fontSize: 11.5,
+                color: 'var(--text)',
+                width: 220,
+              }}
+            />
+            <select
+              value={caseFilter.status}
+              onChange={(e) => setCaseFilter((f) => ({ ...f, status: e.target.value }))}
+              aria-label="状態で絞り込み"
+              style={{
+                padding: '7px 11px',
+                background: 'var(--surface-3)',
+                border: '1px solid var(--border-3)',
+                borderRadius: 7,
+                fontSize: 11.5,
+                color: 'var(--text)',
+              }}
+            >
+              {CASE_STATUS_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            {isCaseFilterActive(caseFilter) && (
+              <button
+                onClick={() => setCaseFilter(EMPTY_CASE_FILTER)}
+                style={{ padding: '6px 12px', borderRadius: 7, fontSize: 11.5, border: '1px solid var(--border-3)', background: 'var(--surface)', color: 'var(--text-2)', cursor: 'pointer' }}
+              >
+                クリア
+              </button>
+            )}
           </div>
           <div className="ocsrc-table-scroll" tabIndex={0} role="region" aria-label="調査案件一覧">
           <div className="ocsrc-grid-cases" style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.6fr 1fr 1.8fr 1fr 1fr', gap: 0, padding: '10px 20px', background: 'var(--surface-3)', borderBottom: '1px solid var(--border-2)', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '.3px' }}>
@@ -360,7 +408,12 @@ export function DashboardScreen() {
             <span>状態</span>
             <span style={{ textAlign: 'right' }}>操作</span>
           </div>
-          {cases.map((c) => {
+          {visibleCases.length === 0 && cases.length > 0 ? (
+            <div style={{ padding: '26px 20px', textAlign: 'center', fontSize: 12, color: 'var(--text-3)' }}>
+              条件に一致する案件がありません。フィルタを変更してください。
+            </div>
+          ) : (
+          visibleCases.map((c) => {
             const sp = CASE_STATUS[c.status];
             return (
               <div key={c.id} className="ocsrc-grid-cases" style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.6fr 1fr 1.8fr 1fr 1fr', gap: 0, padding: '13px 20px', borderBottom: '1px solid var(--border-2)', alignItems: 'center' }}>
@@ -404,7 +457,8 @@ export function DashboardScreen() {
                 </span>
               </div>
             );
-          })}
+          })
+          )}
           </div>
           {cases.length === 0 && (
             <div style={{ padding: '32px 20px', textAlign: 'center', fontSize: 12.5, color: 'var(--text-3)', lineHeight: 1.7 }}>
