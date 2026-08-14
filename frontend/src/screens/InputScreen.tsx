@@ -1,10 +1,11 @@
 import { useApp } from '../store';
 import { CATEGORY_OPTIONS, RADIUS_OPTIONS, radiusLabel } from '../data/constants';
+import { SURVEY_TEMPLATES, templateMatches } from '../data/templates';
 import { cssToStyle } from '../cssToStyle';
 
 // SCR-001 地点入力。住所 / 緯度経度・検索半径・確認カテゴリを入力する（要件 FR-001〜006）。
 export function InputScreen() {
-  const { state, setType, onAddress, onLat, onLon, setRadius, toggleCat, runAnalysisAction, runSample } = useApp();
+  const { state, setType, onAddress, onLat, onLon, setRadius, toggleCat, applyTemplate, runAnalysisAction, runSample } = useApp();
   const { form, formError } = state;
 
   const tabBase = 'padding:9px 16px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid ';
@@ -62,6 +63,33 @@ export function InputScreen() {
               </div>
             </div>
           )}
+
+          {/* 調査テンプレート（評価書 #21・工種別の初期値） */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ ...labelStyle, marginBottom: 8 }}>調査テンプレート（初期値の一括適用）</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {SURVEY_TEMPLATES.map((t) => {
+                const active = templateMatches(form.radius, form.categories, t);
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => applyTemplate(t)}
+                    aria-pressed={active}
+                    title={t.description}
+                    style={cssToStyle(
+                      'padding:8px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid ' +
+                        (active ? 'var(--accent);background:var(--accent);color:#fff' : 'var(--border);background:var(--surface);color:var(--text-2)'),
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p style={{ margin: '7px 0 0', fontSize: 11, color: 'var(--text-3)' }}>
+              テンプレートは検索半径・確認カテゴリの初期値をまとめて適用します（適用後も個別に調整できます）。
+            </p>
+          </div>
 
           <div style={{ marginBottom: 20 }}>
             <label style={{ ...labelStyle, marginBottom: 8 }}>検索半径</label>
