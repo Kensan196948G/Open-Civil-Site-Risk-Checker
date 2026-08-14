@@ -53,6 +53,8 @@ ruff check .                   # Lint
 | `OCSRC_ANTHROPIC_RATE_LIMIT_PER_WINDOW` | `10` | 固定窓あたりの最大呼出数 |
 | `OCSRC_ANTHROPIC_RATE_LIMIT_WINDOW_SECONDS` | `60.0` | レート制限窓（秒） |
 | `OCSRC_ANTHROPIC_MAX_CONCURRENCY` | `2` | 同時実行上限 |
+| `OCSRC_AI_COST_INPUT_USD` | `3.0` | AI 利用状況の概算単価（入力・USD/100万トークン・コード変更不要で調整可） |
+| `OCSRC_AI_COST_OUTPUT_USD` | `15.0` | AI 利用状況の概算単価（出力・USD/100万トークン・コード変更不要で調整可） |
 
 応答にはサーバー側で免責文の付与・断定表現の検出（`warnings`）が入り、利用は監査ログ（`ai_audit`）へ記録される。監査ログは `X-OCSRC-User`（web 層が Access JWT 検証後に付与する内部ヘッダ）でユーザーを識別し、プロンプト本文は記録しない。
 

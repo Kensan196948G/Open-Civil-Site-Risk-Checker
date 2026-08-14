@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     anthropic_rate_limit_per_window: int = 10
     anthropic_rate_limit_window_seconds: float = 60.0
     anthropic_max_concurrency: int = 2
+    # AI 利用状況（/api/v1/ai/usage）の概算単価（USD / 100 万トークン）。
+    # 実契約・モデルに応じて環境変数 OCSRC_AI_COST_INPUT_USD / OCSRC_AI_COST_OUTPUT_USD
+    # で調整できる（コード変更不要・評価書 #20・§30 の残課題対応）。
+    ai_cost_input_usd_per_1m_tokens: float = 3.0
+    ai_cost_output_usd_per_1m_tokens: float = 15.0
 
     # 案件台帳（Issue #111）。本番は既定で無効（false）のままにし、有効化は
     # preview/dev 環境での検証後に判断する。有効時のみ cases/audit_log テーブルを
