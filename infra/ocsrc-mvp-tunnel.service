@@ -1,0 +1,22 @@
+[Unit]
+# Open Civil Site Risk Checker — MVP Cloudflare Tunnel (cloudflared).
+# Publishes riskchecker-mvp.mirai-dx-platform.com -> local ocsrc-mvp-web (:8701).
+# 前提: Cloudflare Zero Trust ダッシュボードで riskchecker-mvp.mirai-dx-platform.com の
+# Access アプリを作成済みであること（未作成のまま起動すると無認証公開になるため不可）。
+# 参照: docs/deploy-backend.md（MVP セクション）・README（MVP URL）
+Description=Open Civil Site Risk Checker MVP Cloudflare Tunnel (cloudflared)
+Documentation=https://github.com/Kensan196948G/Open-Civil-Site-Risk-Checker/blob/main/docs/deploy-backend.md
+After=network-online.target ocsrc-mvp-web.service
+Wants=network-online.target
+Requires=ocsrc-mvp-web.service
+
+[Service]
+Type=simple
+User=kensan
+Restart=always
+RestartSec=5
+ExecStart=/usr/local/bin/cloudflared tunnel --config /home/kensan/.cloudflared/ocsrc-mvp-config.yml run
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

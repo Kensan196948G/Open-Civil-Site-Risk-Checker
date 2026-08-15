@@ -48,17 +48,24 @@ npm run test:smoke   # スモークテスト（esbuild ランナー / 制約環�
 | ローカル                   | `http://127.0.0.1:8700/`               | Cloudflare Access JWT（本番設定時・外部評価 #240） |
 | ヘルスチェック             | `http://127.0.0.1:8700/healthz` → `ok` | なし（LAN/ローカルのみ。インターネット経由は Issue #94 対応まで Access 保護下） |
 
-> **MVP / 関係者レビュー用 URL**: 本番とは分離した MVP/Prototype 確認用サブドメイン
-> として **`https://riskchecker-mvp.mirai-dx-platform.com/`**（規定ドメイン `*.mirai-dx-platform.com`
-> 配下・本番と同構成の Cloudflare Tunnel + Access を別 Tunnel として作成）を使用します。
-> DNS・Tunnel・Access の作成は Cloudflare 権限が必要なため、ユーザー側で作成後に本 README へ反映してください。
-> 本番は `https://riskchecker.mirai-dx-platform.com/`（既存・稼働中）です。
+> **MVP / 関係者レビュー用 URL**: **`https://riskchecker-mvp.mirai-dx-platform.com/`**
+> （本番とは分離・別 Tunnel `ocsrc-mvp`）。本番は `https://riskchecker.mirai-dx-platform.com/`（稼働中）。
 >
-> **MVP は全てダミーデータ**: MVP/関係者レビュー環境は**実データを一切使用せず、架空のダミーデータのみ**で構成します。
-> - フロント: `VITE_SHOW_DUMMY=true` でビルド（ダッシュボードのダミー案件 6 件・比較デモ行を表示。本番ビルドでは既定で非表示）
-> - バックエンド: `python -m app.seed_demo_cases --with-sources` で**架空の案件台帳 3 件・監査ログ・データソース台帳 7 件**を投入（実データ投入・本番案件は使用しない）
-> - ハザード判定: 合成サンプル（`backend/data/sample/sample-hazards.geojson`・架空）のみ
-> - 出所は `isDummy` フラグと「ダミーデータ」タグで常に明示（実データと混在させない）
+> **MVP は全てダミーデータ**（実データは一切使用しない）:
+> - フロント: `VITE_SHOW_DUMMY=true` ビルド（`frontend/dist-mvp`・ダミー案件 6 件・比較デモ行を表示）
+> - バックエンド: `python -m app.seed_demo_cases --with-sources`（架空案件台帳 3 件・監査ログ・データソース台帳 7 件）
+> - ハザード判定: 合成サンプルのみ・出所は `isDummy` フラグと「ダミーデータ」タグで常に明示
+>
+> **セットアップ状況（2026-08-15）**:
+> - ✅ 完了: トンネル `ocsrc-mvp` 作成・DNS ルート設定・ダミーデータビルド（`dist-mvp`）・ローカル検証
+> - ✅ 準備済み: systemd ユニット（`infra/ocsrc-mvp-web.service` :8701・`infra/ocsrc-mvp-tunnel.service`）・
+>   tunnel 設定（`~/.cloudflared/ocsrc-mvp-config.yml`）
+> - ⛔ **要ユーザー操作（公開前に必須・未実施のまま公開しない）**:
+>   1) Cloudflare Zero Trust ダッシュボードで `riskchecker-mvp.mirai-dx-platform.com` の **Access アプリ**を作成
+>      （本番 `riskchecker` と同様・ID ベース認証。手順は docs/deploy-backend.md）
+>   2) `/etc/ocsrc/mvp-web.env` に `OCSRC_ACCESS_TEAM_DOMAIN` / `OCSRC_ACCESS_AUD`（本番と同じ値）を設定
+>   3) 上記完了後に `sudo systemctl enable --now ocsrc-mvp-web ocsrc-mvp-tunnel` で起動
+>   → 起動後、CTO が外部から curl で動作検証します
 
 > **インターネット公開**（`riskchecker.mirai-dx-platform.com`）は Cloudflare Tunnel（TLS 終端）+ Cloudflare Access（ID ベース認証・Issue #70）で保護しています。本番（`OCSRC_ACCESS_TEAM_DOMAIN` / `OCSRC_ACCESS_AUD` 設定時）は `/healthz` を除き **LAN 直アクセスにも Access JWT を要求**し、未認証は 403 を返します（外部評価 #240 対応）。通常のブラウザ利用は公開 URL 経由の Access セッションに集約されます。Access 未設定の開発モードのみ、LAN 直アクセスを認証なしで許可します。公開の詳細手順・セキュリティ境界は [`docs/deploy-backend.md`](docs/deploy-backend.md) を参照。
 >
